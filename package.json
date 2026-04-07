@@ -1,0 +1,48 @@
+{
+  "name": "sabre-rest",
+  "version": "0.1.0",
+  "description": "A Sabre REST API client for Node.js",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE", "CHANGELOG.md"],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "generate": "node scripts/generate-types.mjs",
+    "prepublishOnly": "npm run clean && npm run lint && npm run typecheck && npm test && npm run build"
+  },
+  "keywords": ["sabre", "sabre-rest", "travel", "gds", "api-client"],
+  "author": "Dave Jensen",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/djensen47/sabre-rest.git"
+  },
+  "bugs": {
+    "url": "https://github.com/djensen47/sabre-rest/issues"
+  },
+  "homepage": "https://github.com/djensen47/sabre-rest#readme",
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^20.14.0",
+    "openapi-typescript": "^7.4.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.0"
+  }
+}
