@@ -1,10 +1,37 @@
 /**
  * Public entry point for `sabre-rest`.
  *
- * Service factories, error classes, and the SabreClient interface will be
- * exported from here as they are implemented. See AGENTS.md and
- * docs/architecture.md for the architectural conventions this package
- * follows.
+ * Service factories will be added here as services are implemented. See
+ * AGENTS.md and docs/architecture.md for the architectural conventions
+ * this package follows.
  */
 
+// Constants
 export { SabreBaseUrls } from './constants.js';
+
+// Client
+export { createSabreClient } from './client.js';
+export type { SabreClient, SabreClientOptions } from './client.js';
+
+// Auth
+export { createOAuthV2 } from './auth/oauth-v2.js';
+export type { OAuthV2Options } from './auth/oauth-v2.js';
+export { createMemoryTokenStore } from './auth/memory-store.js';
+export type { StoredToken, TokenProvider, TokenStore } from './auth/types.js';
+
+// HTTP / middleware types (consumers writing their own middleware need these)
+export type { Middleware, SabreHttpMethod, SabreRequest, SabreResponse } from './http/types.js';
+
+// Building blocks for consumers using `overrideMiddleware: true`
+export { createAuthMiddleware } from './middleware/auth.js';
+export { createErrorMappingMiddleware } from './middleware/error-mapping.js';
+
+// Errors
+export {
+  SabreApiResponseError,
+  SabreAuthenticationError,
+  SabreError,
+  SabreNetworkError,
+  SabreParseError,
+  SabreTimeoutError,
+} from './errors/index.js';
