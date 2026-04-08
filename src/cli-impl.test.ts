@@ -1,0 +1,570 @@
+import { describe, expect, it } from 'vitest';
+import {
+  COMMANDS,
+  CliUsageError,
+  airlinesToTableRows,
+  alliancesToTableRows,
+  bfmToTableRows,
+  buildAirlineAllianceLookupInput,
+  buildAirlineLookupInput,
+  buildBfmInput,
+  formatJson,
+  formatTotalFare,
+  parseCabin,
+  parseOutputFormat,
+  parsePassenger,
+  readEnvConfig,
+  renderTable,
+  resolveClientConfig,
+  splitCommaList,
+  summarizeLeg,
+} from './cli-impl.js';
+
+describe('readEnvConfig', () => {
+  it('extracts only the supported keys and ignores everything else', () => {
+    const out = readEnvConfig({
+      SABRE_CLIENT_ID: 'id',
+      SABRE_CLIENT_SECRET: 'secret',
+      SABRE_BASE_URL: 'https://api.cert.platform.sabre.com',
+      SABRE_COMPANY_CODE: 'TN',
+      SABRE_PCC: 'ABCD',
+      UNRELATED: 'ignored',
+    });
+    expect(out).toEqual({
+      clientId: 'id',
+      clientSecret: 'secret',
+      baseUrl: 'https://api.cert.platform.sabre.com',
+      companyCode: 'TN',
+      pcc: 'ABCD',
+    });
+  });
+
+  it('returns an empty config when no Sabre vars are set', () => {
+    expect(readEnvConfig({})).toEqual({});
+  });
+});
+
+describe('resolveClientConfig', () => {
+  it('returns the resolved settings when everything is present', () => {
+    const out = resolveClientConfig(
+      {
+        clientId: 'id',
+        clientSecret: 'secret',
+        baseUrl: 'https://env-base',
+      },
+      {},
+    );
+    expect(out).toEqual({
+      clientId: 'id',
+      clientSecret: 'secret',
+      baseUrl: 'https://env-base',
+    });
+  });
+
+  it('lets --base-url override SABRE_BASE_URL', () => {
+    const out = resolveClientConfig(
+      { clientId: 'id', clientSecret: 'secret', baseUrl: 'https://env-base' },
+      { baseUrl: 'https://override' },
+    );
+    expect(out.baseUrl).toBe('https://override');
+  });
+
+  it('throws CliUsageError listing every missing field at once', () => {
+    expect(() => resolveClientConfig({}, {})).toThrowError(CliUsageError);
+    try {
+      resolveClientConfig({}, {});
+    } catch (err) {
+      const message = (err as Error).message;
+      expect(message).toContain('SABRE_CLIENT_ID');
+      expect(message).toContain('SABRE_CLIENT_SECRET');
+      expect(message).toContain('SABRE_BASE_URL');
+    }
+  });
+});
+
+describe('parseOutputFormat', () => {
+  it('defaults to json when undefined', () => {
+    expect(parseOutputFormat(undefined)).toBe('json');
+  });
+
+  it('accepts json and table', () => {
+    expect(parseOutputFormat('json')).toBe('json');
+    expect(parseOutputFormat('table')).toBe('table');
+  });
+
+  it('throws CliUsageError for unknown values', () => {
+    expect(() => parseOutputFormat('xml')).toThrowError(CliUsageError);
+  });
+});
+
+describe('formatJson', () => {
+  it('pretty-prints with two-space indent', () => {
+    expect(formatJson({ a: 1, b: [2, 3] })).toBe('{\n  "a": 1,\n  "b": [\n    2,\n    3\n  ]\n}');
+  });
+});
+
+describe('renderTable', () => {
+  it('renders headers, separator, and rows aligned to the widest cell per column', () => {
+    const out = renderTable(
+      ['code', 'name'],
+      [
+        ['AA', 'American'],
+        ['BA', 'British Airways'],
+      ],
+    );
+    expect(out).toBe(
+      [
+        'code  name           ',
+        '----  ---------------',
+        'AA    American       ',
+        'BA    British Airways',
+      ]
+        .map((l) => l.trimEnd())
+        .join('\n'),
+    );
+  });
+
+  it('handles empty rows', () => {
+    const out = renderTable(['col'], []);
+    expect(out).toBe('col\n---');
+  });
+});
+
+describe('airlinesToTableRows', () => {
+  it('emits one row per airline with empty strings for missing fields', () => {
+    const out = airlinesToTableRows({
+      airlines: [
+        { code: 'AI', name: 'Air India Limited', alternativeName: 'Air India' },
+        { code: 'X1' },
+        {},
+      ],
+    });
+    expect(out.headers).toEqual(['code', 'name', 'alternativeName']);
+    expect(out.rows).toEqual([
+      ['AI', 'Air India Limited', 'Air India'],
+      ['X1', '', ''],
+      ['', '', ''],
+    ]);
+  });
+});
+
+describe('alliancesToTableRows', () => {
+  it('joins members into a comma-separated cell with ? for missing codes', () => {
+    const out = alliancesToTableRows({
+      alliances: [
+        {
+          code: '*O',
+          name: 'oneworld',
+          members: [{ code: 'AA' }, { code: 'BA' }, {}],
+        },
+      ],
+    });
+    expect(out.rows).toEqual([['*O', 'oneworld', 'AA, BA, ?']]);
+  });
+});
+
+describe('summarizeLeg', () => {
+  it('renders a non-stop leg as FROM→TO (nonstop)', () => {
+    expect(
+      summarizeLeg({
+        segments: [
+          {
+            departure: { airport: 'JFK', time: '21:00:00' },
+            arrival: { airport: 'LHR', time: '09:00:00' },
+          },
+        ],
+      }),
+    ).toBe('JFK→LHR (nonstop)');
+  });
+
+  it('renders a one-stop leg as FROM→TO (1 stop) using first/last segment airports', () => {
+    expect(
+      summarizeLeg({
+        segments: [
+          {
+            departure: { airport: 'JFK', time: '21:00:00' },
+            arrival: { airport: 'CDG', time: '10:00:00' },
+          },
+          {
+            departure: { airport: 'CDG', time: '11:30:00' },
+            arrival: { airport: 'LHR', time: '12:30:00' },
+          },
+        ],
+      }),
+    ).toBe('JFK→LHR (1 stop)');
+  });
+
+  it('renders multiple connections as FROM→TO (N stops)', () => {
+    expect(
+      summarizeLeg({
+        segments: [
+          { departure: { airport: 'A', time: '01:00' }, arrival: { airport: 'B', time: '02:00' } },
+          { departure: { airport: 'B', time: '03:00' }, arrival: { airport: 'C', time: '04:00' } },
+          { departure: { airport: 'C', time: '05:00' }, arrival: { airport: 'D', time: '06:00' } },
+        ],
+      }),
+    ).toBe('A→D (2 stops)');
+  });
+
+  it('renders ? for missing endpoints rather than dropping the leg', () => {
+    expect(
+      summarizeLeg({
+        segments: [
+          {
+            // departure missing entirely
+            arrival: { airport: 'LHR', time: '09:00:00' },
+          },
+        ],
+      }),
+    ).toBe('?→LHR (nonstop)');
+  });
+
+  it('renders an empty leg with the unresolved ref when present', () => {
+    expect(summarizeLeg({ ref: 999, segments: [] })).toBe('[unresolved leg ref 999]');
+    expect(summarizeLeg({ segments: [] })).toBe('[empty leg]');
+  });
+});
+
+describe('formatTotalFare', () => {
+  it('renders amount and currency to two decimal places', () => {
+    expect(
+      formatTotalFare({
+        legs: [],
+        totalFare: { totalAmount: 1806.62, currency: 'USD' },
+      }),
+    ).toBe('1806.62 USD');
+  });
+
+  it('renders ? when total fare is missing or has missing fields', () => {
+    expect(formatTotalFare({ legs: [] })).toBe('?');
+    expect(formatTotalFare({ legs: [], totalFare: { totalAmount: 100 } })).toBe('?');
+    expect(formatTotalFare({ legs: [], totalFare: { currency: 'USD' } })).toBe('?');
+  });
+});
+
+describe('bfmToTableRows', () => {
+  it('renders one row per priced itinerary with id, legs, total, carrier, model', () => {
+    const out = bfmToTableRows({
+      itineraries: [
+        {
+          id: 1,
+          legs: [
+            {
+              segments: [
+                {
+                  marketingCarrier: 'BA',
+                  marketingFlightNumber: 178,
+                  departure: { airport: 'JFK', time: '21:00:00' },
+                  arrival: { airport: 'LHR', time: '09:00:00' },
+                },
+              ],
+            },
+            {
+              segments: [
+                {
+                  marketingCarrier: 'BA',
+                  marketingFlightNumber: 179,
+                  departure: { airport: 'LHR', time: '12:00:00' },
+                  arrival: { airport: 'CDG', time: '13:00:00' },
+                },
+                {
+                  marketingCarrier: 'BA',
+                  marketingFlightNumber: 180,
+                  departure: { airport: 'CDG', time: '14:00:00' },
+                  arrival: { airport: 'JFK', time: '17:00:00' },
+                },
+              ],
+            },
+          ],
+          totalFare: { totalAmount: 1806.62, currency: 'USD' },
+          validatingCarrierCode: 'BA',
+          distributionModel: 'ATPCO',
+        },
+      ],
+      messages: [],
+    });
+    expect(out.headers).toEqual(['id', 'legs', 'total', 'carrier', 'model']);
+    expect(out.rows).toEqual([
+      ['1', 'JFK→LHR (nonstop) | LHR→JFK (1 stop)', '1806.62 USD', 'BA', 'ATPCO'],
+    ]);
+  });
+
+  it('preserves itineraries with missing fields by rendering ? / empty cells', () => {
+    const out = bfmToTableRows({
+      itineraries: [{ legs: [] }, { id: 2, legs: [], totalFare: { totalAmount: 100 } }],
+      messages: [],
+    });
+    expect(out.rows).toEqual([
+      ['?', '', '?', '', ''],
+      ['2', '', '?', '', ''],
+    ]);
+  });
+
+  it('returns an empty rows array for an empty itineraries list', () => {
+    const out = bfmToTableRows({ itineraries: [], messages: [] });
+    expect(out.rows).toEqual([]);
+  });
+});
+
+describe('splitCommaList', () => {
+  it('returns undefined for undefined input', () => {
+    expect(splitCommaList(undefined)).toBeUndefined();
+  });
+
+  it('returns undefined for an empty / whitespace-only list', () => {
+    expect(splitCommaList('')).toBeUndefined();
+    expect(splitCommaList(' , , ')).toBeUndefined();
+  });
+
+  it('trims and filters empty entries', () => {
+    expect(splitCommaList(' AA , BA ,, DL ')).toEqual(['AA', 'BA', 'DL']);
+  });
+});
+
+describe('parsePassenger', () => {
+  it('parses TYPE:COUNT', () => {
+    expect(parsePassenger('ADT:1')).toEqual({ type: 'ADT', quantity: 1 });
+    expect(parsePassenger('CHD:2')).toEqual({ type: 'CHD', quantity: 2 });
+  });
+
+  it('throws on missing colon', () => {
+    expect(() => parsePassenger('ADT')).toThrowError(CliUsageError);
+  });
+
+  it('throws on non-positive quantity', () => {
+    expect(() => parsePassenger('ADT:0')).toThrowError(CliUsageError);
+    expect(() => parsePassenger('ADT:-1')).toThrowError(CliUsageError);
+    expect(() => parsePassenger('ADT:abc')).toThrowError(CliUsageError);
+  });
+
+  it('throws on extra colons', () => {
+    expect(() => parsePassenger('ADT:1:2')).toThrowError(CliUsageError);
+  });
+});
+
+describe('parseCabin', () => {
+  it('returns undefined for undefined', () => {
+    expect(parseCabin(undefined)).toBeUndefined();
+  });
+
+  it('accepts the long-form cabin names', () => {
+    expect(parseCabin('Economy')).toBe('Economy');
+    expect(parseCabin('Business')).toBe('Business');
+    expect(parseCabin('PremiumFirst')).toBe('PremiumFirst');
+  });
+
+  it('rejects single-letter shortcuts', () => {
+    expect(() => parseCabin('Y')).toThrowError(CliUsageError);
+    expect(() => parseCabin('C')).toThrowError(CliUsageError);
+  });
+
+  it('rejects unknown values', () => {
+    expect(() => parseCabin('SuperFirst')).toThrowError(CliUsageError);
+  });
+});
+
+describe('buildAirlineLookupInput', () => {
+  it('returns undefined when no flags are supplied', () => {
+    expect(buildAirlineLookupInput({})).toBeUndefined();
+  });
+
+  it('parses --codes into a list', () => {
+    expect(buildAirlineLookupInput({ codes: 'AA,BA' })).toEqual({ codes: ['AA', 'BA'] });
+  });
+
+  it('returns undefined when --codes is empty', () => {
+    expect(buildAirlineLookupInput({ codes: '' })).toBeUndefined();
+  });
+
+  it('parses --body as raw JSON, ignoring --codes', () => {
+    const out = buildAirlineLookupInput({
+      codes: 'AA',
+      body: '{"codes":["DL","UA"]}',
+    });
+    expect(out).toEqual({ codes: ['DL', 'UA'] });
+  });
+});
+
+describe('buildAirlineAllianceLookupInput', () => {
+  it('parses --codes', () => {
+    expect(buildAirlineAllianceLookupInput({ codes: '*A,*O' })).toEqual({
+      codes: ['*A', '*O'],
+    });
+  });
+
+  it('honours --body over --codes', () => {
+    const out = buildAirlineAllianceLookupInput({
+      codes: '*A',
+      body: '{"codes":["*S"]}',
+    });
+    expect(out).toEqual({ codes: ['*S'] });
+  });
+});
+
+describe('buildBfmInput', () => {
+  it('builds a minimal one-way input from --from / --to / --departure-date', () => {
+    // Per the BFM v5 spec, only origin/destination, departure date, and a
+    // passenger group are required. CompanyName and PseudoCityCode are
+    // optional in the OTA POS structure, so the CLI never demands them.
+    const out = buildBfmInput({ from: 'JFK', to: 'LHR', 'departure-date': '2025-12-25' }, {});
+    expect(out).toEqual({
+      originDestinations: [{ from: 'JFK', to: 'LHR', departureDateTime: '2025-12-25' }],
+      passengers: [{ type: 'ADT', quantity: 1 }],
+      pointOfSale: {},
+    });
+  });
+
+  it('adds a return leg when --return-date is supplied', () => {
+    const out = buildBfmInput(
+      {
+        from: 'JFK',
+        to: 'LHR',
+        'departure-date': '2025-12-25',
+        'return-date': '2026-01-05',
+      },
+      {},
+    );
+    expect(out.originDestinations).toEqual([
+      { from: 'JFK', to: 'LHR', departureDateTime: '2025-12-25' },
+      { from: 'LHR', to: 'JFK', departureDateTime: '2026-01-05' },
+    ]);
+  });
+
+  it('parses repeated --pax flags', () => {
+    const out = buildBfmInput(
+      {
+        from: 'JFK',
+        to: 'LHR',
+        'departure-date': '2025-12-25',
+        pax: ['ADT:2', 'CHD:1', 'INF:1'],
+      },
+      {},
+    );
+    expect(out.passengers).toEqual([
+      { type: 'ADT', quantity: 2 },
+      { type: 'CHD', quantity: 1 },
+      { type: 'INF', quantity: 1 },
+    ]);
+  });
+
+  it('translates travel preferences flags into the input', () => {
+    const out = buildBfmInput(
+      {
+        from: 'JFK',
+        to: 'LHR',
+        'departure-date': '2025-12-25',
+        cabin: 'Business',
+        carriers: 'BA,AA',
+        'non-stop': true,
+      },
+      {},
+    );
+    expect(out.travelPreferences).toEqual({
+      cabin: 'Business',
+      preferredCarriers: ['BA', 'AA'],
+      nonStopOnly: true,
+    });
+  });
+
+  it('parses --max-stops as a non-negative integer', () => {
+    const out = buildBfmInput(
+      {
+        from: 'JFK',
+        to: 'LHR',
+        'departure-date': '2025-12-25',
+        'max-stops': '2',
+      },
+      {},
+    );
+    expect(out.travelPreferences).toEqual({ maxStopsPerLeg: 2 });
+  });
+
+  it('rejects negative or non-integer --max-stops', () => {
+    const args = { from: 'JFK', to: 'LHR', 'departure-date': '2025-12-25' };
+    expect(() => buildBfmInput({ ...args, 'max-stops': '-1' }, {})).toThrowError(CliUsageError);
+    expect(() => buildBfmInput({ ...args, 'max-stops': '1.5' }, {})).toThrowError(CliUsageError);
+  });
+
+  it('attaches companyCode from SABRE_COMPANY_CODE env when present', () => {
+    const out = buildBfmInput(
+      { from: 'JFK', to: 'LHR', 'departure-date': '2025-12-25' },
+      { companyCode: 'TN' },
+    );
+    expect(out.pointOfSale).toEqual({ companyCode: 'TN' });
+  });
+
+  it('lets --company-code override SABRE_COMPANY_CODE', () => {
+    const out = buildBfmInput(
+      {
+        from: 'JFK',
+        to: 'LHR',
+        'departure-date': '2025-12-25',
+        'company-code': 'XX',
+      },
+      { companyCode: 'TN' },
+    );
+    expect(out.pointOfSale).toEqual({ companyCode: 'XX' });
+  });
+
+  it('attaches the pseudo city code on the pointOfSale when supplied', () => {
+    const out = buildBfmInput(
+      {
+        from: 'JFK',
+        to: 'LHR',
+        'departure-date': '2025-12-25',
+        pcc: 'ABCD',
+      },
+      {},
+    );
+    expect(out.pointOfSale).toEqual({ pseudoCityCode: 'ABCD' });
+  });
+
+  it('attaches both companyCode and pcc when both are present', () => {
+    const out = buildBfmInput(
+      {
+        from: 'JFK',
+        to: 'LHR',
+        'departure-date': '2025-12-25',
+        'company-code': 'XX',
+        pcc: 'ABCD',
+      },
+      {},
+    );
+    expect(out.pointOfSale).toEqual({ companyCode: 'XX', pseudoCityCode: 'ABCD' });
+  });
+
+  it('throws CliUsageError listing the truly required flags only', () => {
+    expect(() => buildBfmInput({}, {})).toThrowError(CliUsageError);
+    try {
+      buildBfmInput({}, {});
+    } catch (err) {
+      const message = (err as Error).message;
+      expect(message).toContain('--from');
+      expect(message).toContain('--to');
+      expect(message).toContain('--departure-date');
+      // company-code is NOT required and must not appear in the missing list.
+      expect(message).not.toContain('--company-code');
+    }
+  });
+
+  it('honours --body and ignores other flags', () => {
+    const body = JSON.stringify({
+      originDestinations: [{ from: 'A', to: 'B', departureDateTime: '2025-12-25' }],
+      passengers: [{ type: 'ADT', quantity: 1 }],
+      pointOfSale: { companyCode: 'YY' },
+    });
+    const out = buildBfmInput({ from: 'JFK', to: 'LHR', 'departure-date': '2025-12-25', body }, {});
+    expect(out.pointOfSale.companyCode).toBe('YY');
+    expect(out.originDestinations[0]?.from).toBe('A');
+  });
+});
+
+describe('COMMANDS dispatch table', () => {
+  it('exposes a handler for every supported subcommand', () => {
+    expect(Object.keys(COMMANDS).sort()).toEqual([
+      'airline-alliance-lookup',
+      'airline-lookup',
+      'bargain-finder-max',
+    ]);
+  });
+});
