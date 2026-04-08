@@ -4,9 +4,14 @@ import type { Middleware, SabreRequest, SabreResponse } from './http/types.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { createErrorMappingMiddleware } from './middleware/error-mapping.js';
 import {
+  type AirlineAllianceLookupV1Service,
+  DefaultAirlineAllianceLookupV1Service,
+} from './services/airline-alliance-lookup-v1/service.js';
+import {
   type AirlineLookupV1Service,
   DefaultAirlineLookupV1Service,
 } from './services/airline-lookup-v1/service.js';
+import type { ServiceDeps } from './services/types.js';
 
 /**
  * The public Sabre REST client.
@@ -26,6 +31,15 @@ export interface SabreClient {
    * codes. With no codes supplied, returns every airline Sabre knows about.
    */
   readonly airlineLookupV1: AirlineLookupV1Service;
+
+  /**
+   * Sabre Airline Alliance Lookup v1.
+   *
+   * Returns the airline alliance group(s) and member airlines for one or
+   * more alliance codes (`*A`, `*O`, `*S`). With no codes supplied,
+   * returns every alliance.
+   */
+  readonly airlineAllianceLookupV1: AirlineAllianceLookupV1Service;
 
   /**
    * Send a request through the configured middleware chain. Used by
@@ -100,15 +114,17 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
   }
 
   const chain = buildChain(middlewares);
-  const deps = { baseUrl: opts.baseUrl, request: chain };
+  const deps: ServiceDeps = { baseUrl: opts.baseUrl, request: chain };
 
   const airlineLookupV1 = new DefaultAirlineLookupV1Service(deps);
+  const airlineAllianceLookupV1 = new DefaultAirlineAllianceLookupV1Service(deps);
 
-  return new DefaultSabreClient(chain, { airlineLookupV1 });
+  return new DefaultSabreClient(chain, { airlineLookupV1, airlineAllianceLookupV1 });
 }
 
 interface SabreClientServices {
   airlineLookupV1: AirlineLookupV1Service;
+  airlineAllianceLookupV1: AirlineAllianceLookupV1Service;
 }
 
 /**
@@ -119,10 +135,12 @@ interface SabreClientServices {
 class DefaultSabreClient implements SabreClient {
   readonly #run: (req: SabreRequest) => Promise<SabreResponse>;
   readonly airlineLookupV1: AirlineLookupV1Service;
+  readonly airlineAllianceLookupV1: AirlineAllianceLookupV1Service;
 
   constructor(run: (req: SabreRequest) => Promise<SabreResponse>, services: SabreClientServices) {
     this.#run = run;
     this.airlineLookupV1 = services.airlineLookupV1;
+    this.airlineAllianceLookupV1 = services.airlineAllianceLookupV1;
   }
 
   request(req: SabreRequest): Promise<SabreResponse> {

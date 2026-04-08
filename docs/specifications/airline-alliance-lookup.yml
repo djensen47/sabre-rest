@@ -1,0 +1,141 @@
+openapi: 3.0.0
+info:
+  title: Airline Alliance Lookup
+  version: v1
+  description: The Airline Alliance Lookup API returns the airline alliance member
+    information associated with a specified airline alliance 'group code'. If no
+    code is specified, the API returns all airline alliance groups and their
+    corresponding member information.
+paths:
+  /v1/lists/utilities/airlines/alliances:
+    get:
+      operationId: airlinesAlliancesLookup
+      parameters:
+        - name: alliancecode
+          in: query
+          description: >
+            2-character airline alliance group code.
+
+
+            Multiple values are accepted. 
+
+            Default: All airline alliance groups and their corresponding member information.
+
+            *A (Star Alliance™), *O (oneworld®), *S (SkyTeam).
+          example:
+            - "*A"
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - "*A"
+                - "*O"
+                - "*S"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AirlinesAlliancesLookupResponse"
+        "400":
+          description: |
+            Bad Request
+            - Parameter 'alliancecode' must be a valid value.
+security:
+  - oauth2_authentication: []
+servers:
+  - url: https://api.cert.platform.sabre.com
+components:
+  securitySchemes:
+    oauth2_authentication:
+      type: oauth2
+      x-base64-encode-client-credentials: true
+      flows:
+        clientCredentials:
+          tokenUrl: https://api.cert.platform.sabre.com/v2/auth/token
+          scopes: {}
+  schemas:
+    AirlinesAlliancesLookupResponse:
+      type: object
+      properties:
+        AllianceInfo:
+          type: array
+          description: Repeats associated airline alliance group information.
+          items:
+            type: object
+            properties:
+              AllianceCode:
+                type: string
+                example: "*O"
+                description: Returns the specified airline alliance group code(s).
+              AllianceName:
+                type: string
+                example: oneworld
+                description: The name that corresponds to the specified airline alliance group
+                  code(s).
+              AirlineInfo:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    AirlineCode:
+                      type: string
+                      example: 4M
+                      description: The 2-character code of the alliance member airline.
+                    Links:
+                      allOf:
+                        - $ref: "#/components/schemas/CommonLinks"
+                      items:
+                        properties:
+                          rel:
+                            enum:
+                              - airlineInfo
+                            example: airlineInfo
+                          href:
+                            example: https://api.cert.platform.sabre.com/v1/lists/utilities/airlines?airlinecode=AY
+        Links:
+          allOf:
+            - $ref: "#/components/schemas/CommonLinks"
+          items:
+            properties:
+              rel:
+                enum:
+                  - self
+                  - linkTemplate
+              href:
+                example: https://api.cert.platform.sabre.com/v1/lists/utilities/airlines/alliances?alliancecode=*O
+    CommonLinks:
+      discriminator:
+        propertyName: type
+      type: array
+      description: Array of links for different types of relations, e.g. self,
+        linkTemplate, shop
+      items:
+        type: object
+        properties:
+          rel:
+            type: string
+            enum:
+              - self
+              - shop
+              - forecast
+              - airportsInCity
+              - airlineInfo
+              - destinations
+              - view
+              - nextResults
+              - prevResults
+              - linkTemplate
+              - shopTemplate
+              - tagLookupLinkTemplate
+              - paginatedRequestLinkTemplate
+            example: self
+            description: Describes relationship between href and current request.
+          href:
+            type: string
+            example: https://api.cert.platform.sabre.com/v1/lists/utilities/airlines?airlinecode=AI
+            description: Link to related API request.

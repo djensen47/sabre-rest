@@ -1,4 +1,5 @@
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
+import type { ServiceDeps } from '../types.js';
 import * as mappers from './mappers.js';
 import type { LookupAirlinesInput, LookupAirlinesOutput } from './types.js';
 
@@ -29,17 +30,6 @@ export interface AirlineLookupV1Service {
 }
 
 /**
- * Dependencies a service needs from the constructing client.
- *
- * Lives here for now; will move to a shared `src/services/types.ts` once
- * a second service exists and the shape is proven.
- */
-export interface AirlineLookupV1ServiceDeps {
-  baseUrl: string;
-  request: (req: SabreRequest) => Promise<SabreResponse>;
-}
-
-/**
  * Internal implementation of {@link AirlineLookupV1Service}. Not exported
  * from the package; consumers obtain instances exclusively via
  * {@link createSabreClient}.
@@ -48,7 +38,7 @@ export class DefaultAirlineLookupV1Service implements AirlineLookupV1Service {
   readonly #baseUrl: string;
   readonly #request: (req: SabreRequest) => Promise<SabreResponse>;
 
-  constructor(deps: AirlineLookupV1ServiceDeps) {
+  constructor(deps: ServiceDeps) {
     this.#baseUrl = deps.baseUrl;
     this.#request = deps.request;
   }
