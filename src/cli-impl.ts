@@ -801,10 +801,46 @@ export const COMMANDS: Record<
 // ---------------------------------------------------------------------------
 
 /**
+ * Headers worth surfacing in CLI error output for a non-2xx response.
+ * Sabre's REST APIs use lower-case header names through `fetch`-style
+ * runners, but consumers and proxies can normalize differently, so we
+ * compare case-insensitively. Order in this list determines display
+ * order in the error output.
+ */
+const NOTABLE_RESPONSE_HEADERS: readonly string[] = [
+  'retry-after',
+  'x-ratelimit-limit',
+  'x-ratelimit-remaining',
+  'x-ratelimit-reset',
+];
+
+/**
+ * Picks the rate-limit / retry-related headers out of a response header
+ * map and returns them in canonical display order. Header lookup is
+ * case-insensitive. Returns an empty array when none of the notable
+ * headers are present.
+ */
+export function pickNotableResponseHeaders(
+  headers: Record<string, string> | undefined,
+): readonly { name: string; value: string }[] {
+  if (!headers) return [];
+  const lowered = new Map<string, { name: string; value: string }>();
+  for (const [name, value] of Object.entries(headers)) {
+    lowered.set(name.toLowerCase(), { name, value });
+  }
+  const out: { name: string; value: string }[] = [];
+  for (const key of NOTABLE_RESPONSE_HEADERS) {
+    const hit = lowered.get(key);
+    if (hit !== undefined) out.push(hit);
+  }
+  return out;
+}
+
+/**
  * Renders an error to stderr in a user-friendly form. CLI usage errors
  * print just the message; library errors print the class name, message,
- * and (for {@link SabreApiResponseError}) the status code and response
- * body.
+ * and (for {@link SabreApiResponseError}) the status code, any
+ * rate-limit / retry headers from the response, and the response body.
  */
 export function renderError(err: unknown, io: CliIo): void {
   if (err instanceof CliUsageError) {
@@ -814,6 +850,9 @@ export function renderError(err: unknown, io: CliIo): void {
   if (err instanceof SabreApiResponseError) {
     io.stderr.write(`error: ${err.name}: ${err.message}\n`);
     io.stderr.write(`status: ${err.statusCode}\n`);
+    for (const { name, value } of pickNotableResponseHeaders(err.responseHeaders)) {
+      io.stderr.write(`${name}: ${value}\n`);
+    }
     if (err.responseBody !== undefined) {
       const body =
         typeof err.responseBody === 'string' ? err.responseBody : formatJson(err.responseBody);

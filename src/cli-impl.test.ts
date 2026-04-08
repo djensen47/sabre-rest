@@ -14,12 +14,15 @@ import {
   parseCabin,
   parseOutputFormat,
   parsePassenger,
+  pickNotableResponseHeaders,
   readEnvConfig,
+  renderError,
   renderTable,
   resolveClientConfig,
   splitCommaList,
   summarizeLeg,
 } from './cli-impl.js';
+import { SabreApiResponseError } from './errors/sabre-api-response-error.js';
 
 describe('readEnvConfig', () => {
   it('extracts only the supported keys and ignores everything else', () => {
@@ -627,6 +630,121 @@ describe('buildBfmInput', () => {
     const out = buildBfmInput({ from: 'JFK', to: 'LHR', 'departure-date': '2025-12-25', body }, {});
     expect(out.pointOfSale.companyCode).toBe('YY');
     expect(out.originDestinations[0]?.from).toBe('A');
+  });
+});
+
+describe('pickNotableResponseHeaders', () => {
+  it('returns an empty array when headers is undefined', () => {
+    expect(pickNotableResponseHeaders(undefined)).toEqual([]);
+  });
+
+  it('returns an empty array when no notable headers are present', () => {
+    expect(pickNotableResponseHeaders({ 'content-type': 'application/json' })).toEqual([]);
+  });
+
+  it('picks Retry-After regardless of header name casing', () => {
+    expect(pickNotableResponseHeaders({ 'Retry-After': '60' })).toEqual([
+      { name: 'Retry-After', value: '60' },
+    ]);
+    expect(pickNotableResponseHeaders({ 'retry-after': '60' })).toEqual([
+      { name: 'retry-after', value: '60' },
+    ]);
+    expect(pickNotableResponseHeaders({ 'RETRY-AFTER': '60' })).toEqual([
+      { name: 'RETRY-AFTER', value: '60' },
+    ]);
+  });
+
+  it('returns notable headers in canonical display order, not source order', () => {
+    const out = pickNotableResponseHeaders({
+      'x-ratelimit-reset': '1775690000',
+      'x-ratelimit-limit': '60',
+      'retry-after': '120',
+      'x-ratelimit-remaining': '0',
+    });
+    expect(out.map((h) => h.name.toLowerCase())).toEqual([
+      'retry-after',
+      'x-ratelimit-limit',
+      'x-ratelimit-remaining',
+      'x-ratelimit-reset',
+    ]);
+  });
+
+  it('ignores non-notable headers like content-type and correlation ids', () => {
+    const out = pickNotableResponseHeaders({
+      'content-type': 'application/json',
+      'x-correlation-id': 'abc-123',
+      'retry-after': '30',
+    });
+    expect(out).toEqual([{ name: 'retry-after', value: '30' }]);
+  });
+});
+
+describe('renderError for SabreApiResponseError', () => {
+  // The CLI's renderError surfaces rate-limit / retry headers from
+  // SabreApiResponseError when present, alongside the existing status
+  // and body output. These tests use a tiny in-memory CliIo to capture
+  // stderr/stdout writes.
+  function makeIo(): {
+    io: { stdout: { write(s: string): void }; stderr: { write(s: string): void } };
+    out: string[];
+    err: string[];
+  } {
+    const out: string[] = [];
+    const err: string[] = [];
+    return {
+      io: {
+        stdout: { write: (s: string) => out.push(s) },
+        stderr: { write: (s: string) => err.push(s) },
+      },
+      out,
+      err,
+    };
+  }
+
+  it('writes status, retry-after, and body when all are present', () => {
+    const { io, err } = makeIo();
+    const apiErr = new SabreApiResponseError(
+      'Sabre returned 429 Too Many Requests for POST https://example/v5/offers/shop',
+      429,
+      { error: 'rate_limited' },
+      { 'retry-after': '120', 'x-ratelimit-remaining': '0' },
+    );
+    renderError(apiErr, io);
+    const text = err.join('');
+    expect(text).toContain('error: SabreApiResponseError:');
+    expect(text).toContain('status: 429');
+    expect(text).toContain('retry-after: 120');
+    expect(text).toContain('x-ratelimit-remaining: 0');
+    expect(text).toContain('rate_limited');
+  });
+
+  it('does not print any header line when none of the notable headers are present', () => {
+    const { io, err } = makeIo();
+    const apiErr = new SabreApiResponseError(
+      'Sabre returned 400 Bad Request for POST https://example/v5/offers/shop',
+      400,
+      { error: 'invalid' },
+      { 'content-type': 'application/json' },
+    );
+    renderError(apiErr, io);
+    const text = err.join('');
+    expect(text).toContain('status: 400');
+    expect(text).not.toMatch(/retry-after/i);
+    expect(text).not.toMatch(/x-ratelimit/i);
+  });
+
+  it('still works when responseHeaders is undefined', () => {
+    const { io, err } = makeIo();
+    const apiErr = new SabreApiResponseError(
+      'Sabre returned 500 Server Error for POST https://example/v5/offers/shop',
+      500,
+      'oops',
+      undefined,
+    );
+    renderError(apiErr, io);
+    const text = err.join('');
+    expect(text).toContain('status: 500');
+    expect(text).toContain('body: oops');
   });
 });
 

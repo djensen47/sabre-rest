@@ -34,6 +34,7 @@ export function createErrorMappingMiddleware(): Middleware {
       `Sabre returned ${res.status} ${res.statusText} for ${req.method} ${req.url}`,
       res.status,
       parsedBody ?? res.body,
+      res.headers,
     );
   };
 }
