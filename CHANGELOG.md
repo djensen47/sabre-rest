@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/djensen47/sabre-rest/compare/v0.6.1...v0.6.2) (2026-04-08)
+
+
+### Bug Fixes
+
+* make bargain-finder-max pointOfSale.companyCode optional ([#27](https://github.com/djensen47/sabre-rest/issues/27)) ([f3aaadb](https://github.com/djensen47/sabre-rest/commit/f3aaadbc1b18570dd1c524906e5d72d3bb0ab69b))
+
 ## [0.6.1](https://github.com/djensen47/sabre-rest/compare/v0.6.0...v0.6.1) (2026-04-08)
 
 
