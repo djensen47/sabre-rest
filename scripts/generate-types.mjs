@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Regenerate TypeScript types from OpenAPI specs in docs/specs/.
+ * Regenerate TypeScript types from OpenAPI specs in docs/specifications/.
  *
  * Usage:
  *   node scripts/generate-types.mjs                       # all specs
@@ -17,7 +17,7 @@ import { basename, dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-const specsDir = join(repoRoot, 'docs', 'specs');
+const specsDir = join(repoRoot, 'docs', 'specifications');
 const outDir = join(repoRoot, 'src', 'generated');
 
 async function main() {
@@ -40,7 +40,7 @@ async function main() {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   if (allSpecs.length === 0) {
-    console.log('No specs found in docs/specs/. Nothing to generate.');
+    console.log('No specs found in docs/specifications/. Nothing to generate.');
     return;
   }
 

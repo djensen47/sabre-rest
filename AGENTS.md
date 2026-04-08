@@ -181,7 +181,7 @@ until it reaches `1.0.0`.
 | `npm run typecheck`                      | Run `tsc --noEmit`                                          |
 | `npm run build`                          | Compile to `dist/` with `tsc`                               |
 | `npm run clean`                          | Remove `dist/`                                              |
-| `npm run generate`                       | Regenerate all types from `docs/specs/*`                    |
+| `npm run generate`                       | Regenerate all types from `docs/specifications/*`           |
 | `npm run generate -- air-booking-v3`     | Regenerate one spec by basename                             |
 
 ## Don'ts
