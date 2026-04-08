@@ -46,13 +46,15 @@ export function toSearchRequest(baseUrl: string, input: SearchBargainFinderMaxIn
     Quantity: p.quantity,
   }));
 
-  const sourceEntry: Record<string, unknown> = {
-    RequestorID: {
-      Type: '1',
-      ID: '1',
-      CompanyName: { Code: input.pointOfSale.companyCode },
-    },
-  };
+  // Sabre's spec marks RequestorID.required = [ID, Type], with CompanyName
+  // optional. ID and Type are documented as "Not used for processing. Use a
+  // value of '1'", so the library hardcodes them and only attaches
+  // CompanyName when the consumer provided a companyCode.
+  const requestorID: Record<string, unknown> = { Type: '1', ID: '1' };
+  if (input.pointOfSale.companyCode !== undefined) {
+    requestorID.CompanyName = { Code: input.pointOfSale.companyCode };
+  }
+  const sourceEntry: Record<string, unknown> = { RequestorID: requestorID };
   if (input.pointOfSale.pseudoCityCode !== undefined) {
     sourceEntry.PseudoCityCode = input.pointOfSale.pseudoCityCode;
   }

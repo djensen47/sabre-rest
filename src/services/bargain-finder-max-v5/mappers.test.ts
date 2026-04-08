@@ -122,6 +122,42 @@ describe('toSearchRequest', () => {
     });
   });
 
+  it('omits CompanyName from RequestorID when companyCode is not supplied', () => {
+    // Sabre's spec marks RequestorID.required = [ID, Type], with CompanyName
+    // optional. The mapper hardcodes ID and Type per Sabre's "use a value of
+    // '1'" doc and only attaches CompanyName when the consumer asked for it.
+    const req = toSearchRequest('https://api.cert.platform.sabre.com', {
+      ...minimalInput,
+      pointOfSale: {},
+    });
+    const ota = (JSON.parse(req.body ?? '{}') as Record<string, unknown>)
+      .OTA_AirLowFareSearchRQ as Record<string, unknown>;
+    expect(ota.POS).toEqual({
+      Source: [
+        {
+          RequestorID: { Type: '1', ID: '1' },
+        },
+      ],
+    });
+  });
+
+  it('attaches PseudoCityCode without CompanyName when only pseudoCityCode is supplied', () => {
+    const req = toSearchRequest('https://api.cert.platform.sabre.com', {
+      ...minimalInput,
+      pointOfSale: { pseudoCityCode: 'ABCD' },
+    });
+    const ota = (JSON.parse(req.body ?? '{}') as Record<string, unknown>)
+      .OTA_AirLowFareSearchRQ as Record<string, unknown>;
+    expect(ota.POS).toEqual({
+      Source: [
+        {
+          RequestorID: { Type: '1', ID: '1' },
+          PseudoCityCode: 'ABCD',
+        },
+      ],
+    });
+  });
+
   it('translates travel preferences into the OTA TravelPreferences sub-tree', () => {
     const req = toSearchRequest('https://api.cert.platform.sabre.com', {
       ...minimalInput,
