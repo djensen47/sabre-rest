@@ -43,11 +43,20 @@ interface SabreV2TokenResponse {
  * Returns a {@link TokenProvider} that obtains and refreshes a Sabre OAuth
  * v2 bearer token via the `/v2/auth/token` endpoint.
  *
- * The token is requested with `grant_type=client_credentials` and HTTP
- * Basic authentication where the username:password pair is the
- * base64-encoded `clientId:clientSecret`. Refreshes are gated through the
- * store's lock so concurrent callers don't all hit the token endpoint at
- * once.
+ * The token is requested with `grant_type=client_credentials` and an
+ * Authorization header that uses Sabre's **non-standard double base64
+ * encoding** for the credentials. Specifically, the value is
+ * `Basic base64( base64(clientId) + ':' + base64(clientSecret) )`, not
+ * the standard HTTP Basic single base64 of `clientId:clientSecret`. This
+ * is what Sabre's documentation and official Node sample do; standard
+ * HTTP Basic returns 401 from the v2 token endpoint. Consumers of this
+ * factory pass raw `clientId` and `clientSecret`; the encoding is
+ * computed internally.
+ *
+ * See: https://developer.sabre.com/guides/travel-agency/developer-guides/rest-apis-token-credentials
+ *
+ * Refreshes are gated through the store's lock so concurrent callers
+ * don't all hit the token endpoint at once.
  */
 export function createOAuthV2(opts: OAuthV2Options): TokenProvider {
   const store = opts.store ?? createMemoryTokenStore();
@@ -88,8 +97,19 @@ export function createOAuthV2(opts: OAuthV2Options): TokenProvider {
     const bodyText = await response.text().catch(() => '');
 
     if (!response.ok) {
+      // Surface the response body in the error message. Sabre's token
+      // endpoint usually returns a JSON envelope like
+      // `{"error":"invalid_client","error_description":"..."}` on a
+      // failure, and that's exactly the information consumers need to
+      // debug bad credentials, expired secrets, wrong base URL, etc. The
+      // body is preserved verbatim and the message is left small enough
+      // to display in a CLI without overwhelming the user; if Sabre
+      // returns an unexpectedly large body we still surface it here
+      // because losing it would be worse than a long error message.
+      const trimmedBody = bodyText.trim();
+      const suffix = trimmedBody.length > 0 ? `: ${trimmedBody}` : '';
       throw new SabreAuthenticationError(
-        `Sabre v2 token endpoint returned ${response.status} ${response.statusText}`,
+        `Sabre v2 token endpoint returned ${response.status} ${response.statusText}${suffix}`,
         response.status,
       );
     }
@@ -146,8 +166,19 @@ export function createOAuthV2(opts: OAuthV2Options): TokenProvider {
   };
 }
 
+/**
+ * Builds the Authorization header value Sabre's REST OAuth v2 token
+ * endpoint expects.
+ *
+ * Sabre uses a non-standard double base64 encoding: each credential is
+ * base64-encoded individually, joined with a colon, then base64-encoded
+ * again. Standard HTTP Basic (single base64 of `id:secret`) returns 401
+ * from the v2 token endpoint.
+ */
 function encodeBasicCredentials(clientId: string, clientSecret: string): string {
-  return Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const encodedId = Buffer.from(clientId).toString('base64');
+  const encodedSecret = Buffer.from(clientSecret).toString('base64');
+  return Buffer.from(`${encodedId}:${encodedSecret}`).toString('base64');
 }
 
 function joinUrl(baseUrl: string, path: string): string {
