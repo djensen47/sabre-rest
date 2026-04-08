@@ -80,6 +80,16 @@ describe('toSearchRequest', () => {
       ],
     });
 
+    // TPA_Extensions.IntelliSellTransaction.RequestType.Name is the
+    // protocol-level discriminator Sabre's runtime uses to pick which GIR
+    // response schema version to return. Without it, Sabre rejects the
+    // request with "Incorrect GIR response schema version used". The
+    // library hardcodes "50ITINS" because the public input/output shape
+    // is designed around that request flavor.
+    expect(ota.TPA_Extensions).toEqual({
+      IntelliSellTransaction: { RequestType: { Name: '50ITINS' } },
+    });
+
     // No travel preferences supplied → key should not be present.
     expect('TravelPreferences' in ota).toBe(false);
   });

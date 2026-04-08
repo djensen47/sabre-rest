@@ -74,6 +74,27 @@ export function toSearchRequest(baseUrl: string, input: SearchBargainFinderMaxIn
     TravelerInfoSummary: {
       AirTravelerAvail: [{ PassengerTypeQuantity: passengerTypeQuantity }],
     },
+    // TPA_Extensions.IntelliSellTransaction.RequestType.Name is the
+    // protocol-level discriminator Sabre's runtime uses to pick which GIR
+    // response schema version to return. Without it, Sabre rejects the
+    // request with "Incorrect GIR response schema version used" — the
+    // schema marks it as not required, but every canonical example body
+    // in the spec includes it and runtime testing confirms it is
+    // load-bearing. The library hardcodes "50ITINS" (the standard
+    // "give me up to 50 priced itineraries" flavor) because that's the
+    // request flavor the public input/output shape is designed around.
+    // Other flavors (alternate dates: AD1/AD3/AD7, larger result sets:
+    // 200ITINS, etc.) would warrant their own public surface; consumers
+    // who need to send a different value today can use the CLI's `--body`
+    // escape hatch or construct the request body themselves.
+    //
+    // This is a *protocol* default, not user data — the same category
+    // as the hardcoded `RequestorID.Type: '1'` and `RequestorID.ID: '1'`
+    // above. The library is allowed to pick sensible protocol defaults;
+    // it is not allowed to invent user-data requirements.
+    TPA_Extensions: {
+      IntelliSellTransaction: { RequestType: { Name: '50ITINS' } },
+    },
   };
 
   const travelPreferences = buildTravelPreferences(input.travelPreferences);
