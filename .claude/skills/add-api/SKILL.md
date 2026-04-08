@@ -5,6 +5,8 @@ description: Add a new Sabre service to the sabre-rest package end-to-end. Gener
 
 # Add a new Sabre API service
 
+> **First action when this skill is invoked: enter plan mode (`EnterPlanMode`), draft a plan for the work below, and wait for the user to approve it before writing any files.**
+
 This skill walks through adding a new Sabre service to `sabre-rest` end-to-end. It assumes the foundation in `src/` is already in place (see `docs/architecture.md`).
 
 ## Required reading first
@@ -76,7 +78,7 @@ For each operation, define:
 
 - An **input type** named `<MethodName>Input` (e.g., `LookupAirlinesInput`). Always a single object — no positional parameters, even if there's only one field. This makes future additions non-breaking.
 - An **output type** named `<MethodName>Output` (e.g., `LookupAirlinesOutput`). When the result is a list, wrap it in a property name (`{ airlines: Airline[] }`) so adding sibling fields later is non-breaking.
-- **Domain types** (e.g., `Airline`, `AirlineAlliance`). Plain interfaces, idiomatic camelCase. **Mirror Sabre's optionality** — if a field is optional in the OAS, it must be optional in the public type. The public type renames and reshapes Sabre's response, but it does not invent stricter required-field rules. Inventing required fields is the root cause of the silent-data-loss bug pattern (see "Don't drop data" below).
+- **Domain types** (e.g., `Airline`, `AirlineAlliance`). Plain interfaces, idiomatic camelCase. **Mirror Sabre's optionality** — if a field is optional in the OAS, it must be optional in the public type. The public type renames and reshapes Sabre's response, but it does not invent stricter required-field rules. Inventing required fields is the root cause of the silent-data-loss bug pattern (see "Don't drop data" below). Note: this rule is about *user-data* fields. Spec-defined defaults (`default:` keyword) are a separate category — see "Request body: read the whole spec, not just `required:`" in step 6 for how those interact with the request side.
 
 **Critical**: do not import anything from `src/generated/` here. This file is the public contract. Generated types are an implementation detail of the mapper.
 
@@ -115,6 +117,22 @@ Helpful facts about Node's URL behavior:
 
 - `new URL(PATH, base)` requires `base` to end with `/` for `PATH` to resolve correctly. Use a small `ensureTrailingSlash` helper.
 - `URLSearchParams` leaves `*` raw in query strings (it's a sub-delimiter, not a reserved character). Comma is percent-encoded as `%2C`. The resulting URL matches what Sabre's docs show — don't fight it.
+
+#### Request body: read the whole spec, not just `required:`
+
+When building an outgoing request body for a `POST`/`PUT`/`PATCH` operation, the rule is **send what the spec tells you to send**, where "the spec" means three different things in three different categories of field:
+
+1. **Field is in `required:`** → must send a value. Either the consumer supplied one, or the library hardcodes a fixed value (e.g., `RequestorID.Type: '1'` per Sabre's "use a value of '1'" instruction). Either way, the field is always present in the wire body.
+
+2. **Field has `default:` in the spec** → send the documented default if the consumer didn't override. **This is the rule that's easy to miss.** A `default:` value is part of the spec — the schema authors explicitly told you what value applies when the field is unspecified, and at runtime Sabre's dispatcher often *reads* these fields to pick an internal code path. Omitting them entirely (rather than sending the documented default) can produce confusing rejection errors like "Incorrect GIR response schema version used" because Sabre's runtime can't decide which response shape applies. Sending `Fixed: false` for an `OriginDestinationInformation` entry isn't inventing data — `default: false` is in the spec, you're following it.
+
+3. **Field has neither `required:` nor `default:`** → don't invent a value. If the consumer supplied one, send it; otherwise omit the field entirely. This includes user-data fields like `PseudoCityCode`, `CompanyName.Code`, etc. The library is **not** allowed to make up sensible-looking defaults for fields the spec doesn't define defaults for.
+
+The `openapi-typescript` generator helps detect category 2 by emitting defaulted-but-not-required fields as **non-optional** in the generated TS type. If you find yourself sidestepping the generated type by building the body as a plain object literal (which is sometimes legitimate to avoid awkward generated shapes), the cost is that you lose this safety net — and it becomes much easier to silently omit defaulted fields. When you take that path, **read the spec for every defaulted field you might be skipping** and make sure the mapper sends each one with its documented default.
+
+Canonical example bodies in the spec (the request bodies under `examples:` blocks at the top of the YAML) are **load-bearing**, not decoration. They're the ground truth for what Sabre's runtime actually accepts. When a field appears in every canonical example body but isn't in any `required:` list, that's a strong signal the runtime treats it as effectively required — usually because Sabre's request dispatcher uses it to pick a response variant. Treat unanimous example-body presence as if it were a `default:` declaration.
+
+The easy way to test this: build the wire body, dump it as JSON, and diff it against the spec's first canonical example for the same operation. The two should differ only in user-supplied values (origins, dates, passenger counts), not in protocol fields.
 
 #### Response parsing
 

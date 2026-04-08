@@ -98,7 +98,7 @@ loads a `.env` file from the current working directory if one exists
 | `SABRE_CLIENT_ID`     | yes (every command)                     | OAuth v2 client id                          |
 | `SABRE_CLIENT_SECRET` | yes (every command)                     | OAuth v2 client secret                      |
 | `SABRE_BASE_URL`      | yes (every command)                     | e.g. `https://api.cert.platform.sabre.com`  |
-| `SABRE_COMPANY_CODE`  | no (optional for `bargain-finder-max`)  | Agency company code; supply only if your account requires it |
+| `SABRE_COMPANY_CODE`  | no (defaults to `TN`, optional for `bargain-finder-max`) | Agency company code. CLI defaults to `TN` (Sabre's Travel Network channel) — set explicitly only if your account needs a different value. |
 | `SABRE_PCC`           | no (optional for `bargain-finder-max`)  | Pseudo city code                            |
 
 ## License

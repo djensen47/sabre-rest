@@ -71,4 +71,28 @@ describe('createErrorMappingMiddleware', () => {
       expect(sErr.responseBody).toBe('oops');
     }
   });
+
+  it('preserves response headers on the SabreApiResponseError', async () => {
+    // Headers carry rate-limit metadata (Retry-After, X-RateLimit-*) and
+    // correlation ids that consumers need to debug 4xx/5xx responses.
+    // The middleware must propagate them, not drop them on the floor.
+    const headers = {
+      'retry-after': '120',
+      'x-ratelimit-limit': '60',
+      'x-ratelimit-remaining': '0',
+      'x-ratelimit-reset': '1775690000',
+      'x-correlation-id': 'abc-123',
+    };
+    const mw = createErrorMappingMiddleware();
+    try {
+      await mw(req, async () =>
+        respond({ status: 429, statusText: 'Too Many Requests', headers, body: '' }),
+      );
+      expect.fail('expected throw');
+    } catch (err) {
+      const sErr = err as SabreApiResponseError;
+      expect(sErr.statusCode).toBe(429);
+      expect(sErr.responseHeaders).toEqual(headers);
+    }
+  });
 });

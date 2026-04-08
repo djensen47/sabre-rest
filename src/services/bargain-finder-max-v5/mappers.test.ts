@@ -40,20 +40,36 @@ describe('toSearchRequest', () => {
     const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
     const ota = body.OTA_AirLowFareSearchRQ as Record<string, unknown>;
 
-    expect(ota.Version).toBe('V5');
-    expect(ota.ResponseType).toBe('GIR-JSON');
-    expect(ota.ResponseVersion).toBe('V5');
+    // The OTA Version field uses the major-version digit only — matches
+    // every canonical example body in the spec for v5. Sending 'V5' here
+    // produces "Incorrect GIR response schema version used" at runtime.
+    expect(ota.Version).toBe('5');
+    // `AvailableFlightsOnly` has `default: true` in the spec — sending
+    // the documented default is following the spec, not inventing data.
+    expect(ota.AvailableFlightsOnly).toBe(true);
+    // ResponseType and ResponseVersion are deliberately not sent: neither
+    // is in the spec's required list, none of the canonical example bodies
+    // include them, and Sabre's runtime rejected the values that looked
+    // plausible. Regression guard so we don't accidentally re-add them.
+    expect('ResponseType' in ota).toBe(false);
+    expect('ResponseVersion' in ota).toBe(false);
 
+    // `Fixed: false` on each OriginDestinationInformation entry comes from
+    // the spec's `default: false` keyword — it's the documented default,
+    // not an invented value. Sabre's runtime rejects requests that omit
+    // the spec defaults entirely.
     expect(ota.OriginDestinationInformation).toEqual([
       {
         OriginLocation: { LocationCode: 'JFK' },
         DestinationLocation: { LocationCode: 'LHR' },
         DepartureDateTime: '2025-12-25T10:00:00',
+        Fixed: false,
       },
       {
         OriginLocation: { LocationCode: 'LHR' },
         DestinationLocation: { LocationCode: 'JFK' },
         DepartureDateTime: '2026-01-05T12:00:00',
+        Fixed: false,
       },
     ]);
 
@@ -61,6 +77,8 @@ describe('toSearchRequest', () => {
       AirTravelerAvail: [{ PassengerTypeQuantity: [{ Code: 'ADT', Quantity: 1 }] }],
     });
 
+    // `FixedPCC: false` on each Source entry comes from the spec's
+    // `default: false` keyword — same rule as `Fixed` above.
     expect(ota.POS).toEqual({
       Source: [
         {
@@ -69,8 +87,19 @@ describe('toSearchRequest', () => {
             ID: '1',
             CompanyName: { Code: 'TN' },
           },
+          FixedPCC: false,
         },
       ],
+    });
+
+    // TPA_Extensions.IntelliSellTransaction.RequestType.Name is the
+    // protocol-level discriminator Sabre's runtime uses to pick which GIR
+    // response schema version to return. Without it, Sabre rejects the
+    // request with "Incorrect GIR response schema version used". The
+    // library hardcodes "50ITINS" because the public input/output shape
+    // is designed around that request flavor.
+    expect(ota.TPA_Extensions).toEqual({
+      IntelliSellTransaction: { RequestType: { Name: '50ITINS' } },
     });
 
     // No travel preferences supplied → key should not be present.
@@ -97,6 +126,7 @@ describe('toSearchRequest', () => {
         DestinationLocation: { LocationCode: 'LHR' },
         DepartureDateTime: '2025-12-25T10:00:00',
         ArrivalDateTime: '2025-12-26T06:00:00',
+        Fixed: false,
       },
     ]);
   });
@@ -116,6 +146,7 @@ describe('toSearchRequest', () => {
             ID: '1',
             CompanyName: { Code: 'TN' },
           },
+          FixedPCC: false,
           PseudoCityCode: 'ABCD',
         },
       ],
@@ -136,6 +167,7 @@ describe('toSearchRequest', () => {
       Source: [
         {
           RequestorID: { Type: '1', ID: '1' },
+          FixedPCC: false,
         },
       ],
     });
@@ -152,6 +184,7 @@ describe('toSearchRequest', () => {
       Source: [
         {
           RequestorID: { Type: '1', ID: '1' },
+          FixedPCC: false,
           PseudoCityCode: 'ABCD',
         },
       ],

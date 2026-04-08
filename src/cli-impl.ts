@@ -309,6 +309,21 @@ const KNOWN_CABINS: ReadonlySet<CabinClass> = new Set([
 ]);
 
 /**
+ * Default value the CLI uses for `RequestorID.CompanyName.Code` when the
+ * caller doesn't supply one via `--company-code` or `SABRE_COMPANY_CODE`.
+ *
+ * Sabre's `'TN'` (Travel Network) channel is the right default for a
+ * testing tool because it's what every canonical example body in the
+ * BFM v5 spec uses, and it's what the working reference implementation
+ * at `the-ai-travel-company/monorepo/tools/sabre-cli` hardcodes. The
+ * library deliberately does not hardcode this — `CompanyName.Code` has
+ * no `default:` keyword in the spec, so the library passes it through
+ * verbatim — but the CLI is allowed to be opinionated about ergonomic
+ * defaults at its boundary.
+ */
+const DEFAULT_BFM_COMPANY_CODE = 'TN';
+
+/**
  * Validates a cabin class name. Accepts only the long-form names from
  * {@link CabinClass}; the single-letter Sabre shortcuts (`Y`, `C`, etc.)
  * are deliberately not exposed because they're harder to read at the
@@ -322,6 +337,52 @@ export function parseCabin(value: string | undefined): CabinClass | undefined {
     );
   }
   return value as CabinClass;
+}
+
+/**
+ * Normalizes a user-supplied date or date-time into the form
+ * `YYYY-MM-DDTHH:MM:SS` that Sabre's BFM v5 schema requires. Used by
+ * the CLI at the boundary; the library itself never normalizes.
+ *
+ * Three transformation paths in order:
+ *
+ * 1. Already in canonical form → pass through unchanged.
+ * 2. ISO date-only (`YYYY-MM-DD`) → append `T00:00:00`. This case is
+ *    handled with string manipulation rather than going through
+ *    `Date`, because `new Date('2025-12-25')` is parsed as **UTC**
+ *    midnight per the ISO 8601 spec, which would collapse to the
+ *    wrong day when extracted as local-time components in any
+ *    non-UTC timezone.
+ * 3. Anything else → constructed via `new Date(value)` and emitted
+ *    using the user's local wall-clock components. This handles
+ *    space-separated forms (`2025-12-25 06:00:00`), missing seconds
+ *    (`2025-12-25T06:00`), US-locale forms (`12/25/2025`,
+ *    `Dec 25 2025`), and any other shape `Date.parse` accepts.
+ *    Garbage input produces an `Invalid Date` and the helper throws.
+ *
+ * Throws {@link CliUsageError} when the input cannot be parsed at
+ * all. There is no pre-flight format check — the principle is "try
+ * to transform; crash on garbage", not "validate against an allow
+ * list".
+ */
+export function normalizeBfmDateTime(value: string): string {
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(value)) {
+    return value;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return `${value}T00:00:00`;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new CliUsageError(
+      `Could not parse '${value}' as a date. Try YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS.`,
+    );
+  }
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return (
+    `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}` +
+    `T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:${pad(parsed.getSeconds())}`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -382,18 +443,25 @@ export interface BfmFlagValues {
  * Builds the input for `bargainFinderMaxV5.search` from the CLI flags.
  *
  * - When `--body` is supplied, it is parsed as JSON and returned
- *   verbatim; flags are ignored.
+ *   verbatim; flags are ignored. (Dates inside `--body` are also not
+ *   normalized — that path assumes the caller knows what they're doing
+ *   and is supplying canonical Sabre format.)
  * - Otherwise `--from`, `--to`, and `--departure-date` are required to
  *   assemble a single one-way leg (or a round trip if `--return-date`
  *   is supplied). Passenger groups default to one adult (`ADT:1`) when
  *   no `--pax` is given.
+ * - `--departure-date` and `--return-date` are run through
+ *   {@link normalizeBfmDateTime} so friendly forms (`2025-12-25`,
+ *   `2025-12-25 06:00:00`, `12/25/2025`, etc.) are accepted and
+ *   converted to the `YYYY-MM-DDTHH:MM:SS` form Sabre's schema
+ *   requires.
  * - `--company-code` and `--pcc` are both optional, matching the BFM v5
  *   spec which marks `RequestorID.CompanyName` and `Source.PseudoCityCode`
  *   as not required. They override the corresponding env vars when
  *   present.
  *
- * Throws {@link CliUsageError} on missing required flags or malformed
- * values.
+ * Throws {@link CliUsageError} on missing required flags, malformed
+ * values, or unparseable dates.
  */
 export function buildBfmInput(
   values: BfmFlagValues,
@@ -421,22 +489,37 @@ export function buildBfmInput(
     {
       from: values.from as string,
       to: values.to as string,
-      departureDateTime: values['departure-date'] as string,
+      // Sabre's BFM v5 schema requires the canonical
+      // YYYY-MM-DDTHH:MM:SS form with no timezone. The CLI normalizes
+      // friendlier user input (date-only, US-locale forms, etc.) at
+      // the boundary; the library itself never normalizes.
+      departureDateTime: normalizeBfmDateTime(values['departure-date'] as string),
     },
   ];
   if (values['return-date']) {
     originDestinations.push({
       from: values.to as string,
       to: values.from as string,
-      departureDateTime: values['return-date'],
+      departureDateTime: normalizeBfmDateTime(values['return-date']),
     });
   }
 
   const passengers: PassengerCount[] = (values.pax ?? ['ADT:1']).map(parsePassenger);
 
+  // Sabre's BFM v5 spec marks `RequestorID.CompanyName.Code` as not
+  // required, but real-world testing has shown the runtime rejects
+  // requests without it (with the generic "Incorrect GIR response schema
+  // version used" error). The library deliberately stays spec-faithful
+  // and does not hardcode this — but the CLI is allowed to be opinionated
+  // about ergonomic defaults, and `'TN'` (Sabre's "Travel Network" code,
+  // which every canonical example body in the spec uses and which the
+  // working reference at /Users/djensen/code/the-ai-travel-company/
+  // monorepo/tools/sabre-cli/src/commands/bfm-shop.ts also hardcodes)
+  // is the right default for a testing tool. Override per-call with
+  // `--company-code` or per-environment with `SABRE_COMPANY_CODE`.
   const pointOfSale: SearchBargainFinderMaxInput['pointOfSale'] = {};
-  const companyCode = values['company-code'] ?? env.companyCode;
-  if (companyCode) pointOfSale.companyCode = companyCode;
+  const companyCode = values['company-code'] ?? env.companyCode ?? DEFAULT_BFM_COMPANY_CODE;
+  pointOfSale.companyCode = companyCode;
   const pcc = values.pcc ?? env.pcc;
   if (pcc) pointOfSale.pseudoCityCode = pcc;
 
@@ -578,7 +661,7 @@ Flags:
   --carriers <list>         Comma-separated preferred marketing carriers
   --non-stop                Only return non-stop itineraries
   --max-stops <n>           Maximum stops per leg
-  --company-code <code>     Optional agency company code (RequestorID/CompanyName)
+  --company-code <code>     Agency company code (RequestorID/CompanyName). Defaults to TN.
   --pcc <code>              Optional pseudo city code (Source/PseudoCityCode)
   --body <json>             Override input with raw JSON (ignores other flags)
   --base-url <url>          Override SABRE_BASE_URL
@@ -718,10 +801,46 @@ export const COMMANDS: Record<
 // ---------------------------------------------------------------------------
 
 /**
+ * Headers worth surfacing in CLI error output for a non-2xx response.
+ * Sabre's REST APIs use lower-case header names through `fetch`-style
+ * runners, but consumers and proxies can normalize differently, so we
+ * compare case-insensitively. Order in this list determines display
+ * order in the error output.
+ */
+const NOTABLE_RESPONSE_HEADERS: readonly string[] = [
+  'retry-after',
+  'x-ratelimit-limit',
+  'x-ratelimit-remaining',
+  'x-ratelimit-reset',
+];
+
+/**
+ * Picks the rate-limit / retry-related headers out of a response header
+ * map and returns them in canonical display order. Header lookup is
+ * case-insensitive. Returns an empty array when none of the notable
+ * headers are present.
+ */
+export function pickNotableResponseHeaders(
+  headers: Record<string, string> | undefined,
+): readonly { name: string; value: string }[] {
+  if (!headers) return [];
+  const lowered = new Map<string, { name: string; value: string }>();
+  for (const [name, value] of Object.entries(headers)) {
+    lowered.set(name.toLowerCase(), { name, value });
+  }
+  const out: { name: string; value: string }[] = [];
+  for (const key of NOTABLE_RESPONSE_HEADERS) {
+    const hit = lowered.get(key);
+    if (hit !== undefined) out.push(hit);
+  }
+  return out;
+}
+
+/**
  * Renders an error to stderr in a user-friendly form. CLI usage errors
  * print just the message; library errors print the class name, message,
- * and (for {@link SabreApiResponseError}) the status code and response
- * body.
+ * and (for {@link SabreApiResponseError}) the status code, any
+ * rate-limit / retry headers from the response, and the response body.
  */
 export function renderError(err: unknown, io: CliIo): void {
   if (err instanceof CliUsageError) {
@@ -731,6 +850,9 @@ export function renderError(err: unknown, io: CliIo): void {
   if (err instanceof SabreApiResponseError) {
     io.stderr.write(`error: ${err.name}: ${err.message}\n`);
     io.stderr.write(`status: ${err.statusCode}\n`);
+    for (const { name, value } of pickNotableResponseHeaders(err.responseHeaders)) {
+      io.stderr.write(`${name}: ${value}\n`);
+    }
     if (err.responseBody !== undefined) {
       const body =
         typeof err.responseBody === 'string' ? err.responseBody : formatJson(err.responseBody);

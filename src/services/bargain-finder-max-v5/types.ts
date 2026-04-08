@@ -56,14 +56,20 @@ export interface OriginDestination {
   /** Three-character IATA code for the destination. */
   to: string;
   /**
-   * Local departure date or date-time in ISO 8601 form. The Sabre API
-   * accepts either `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`; the value is
-   * passed through verbatim.
+   * Local departure date and time in the form `YYYY-MM-DDTHH:MM:SS`,
+   * with no timezone. This is the canonical format Sabre's BFM v5
+   * schema accepts (`example: '2024-12-25T06:00:00'`); a date-only
+   * value like `'2025-12-25'` is rejected at the schema level. The
+   * library passes this string through verbatim — no normalization,
+   * no validation. Callers that want to accept friendlier shapes
+   * should normalize at their boundary; the `sabre-rest` CLI bundled
+   * with this package does that for command-line input.
    */
   departureDateTime: string;
   /**
-   * Optional arrival date-time. Mutually exclusive with
-   * {@link departureDateTime} on Sabre's side; supply only when you need
+   * Optional local arrival date and time, same `YYYY-MM-DDTHH:MM:SS`
+   * format as {@link departureDateTime}. Mutually exclusive with
+   * `departureDateTime` on Sabre's side — supply only when you need
    * to anchor on arrival rather than departure.
    */
   arrivalDateTime?: string;

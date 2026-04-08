@@ -14,9 +14,6 @@ import type {
 
 const PATH = '/v5/offers/shop';
 
-/** Sabre BFM service version, written into both `Version` and `ResponseVersion`. */
-const SERVICE_VERSION = 'V5';
-
 /**
  * Builds the outgoing {@link SabreRequest} for the `CreateBargainFinderMax`
  * operation.
@@ -34,6 +31,12 @@ export function toSearchRequest(baseUrl: string, input: SearchBargainFinderMaxIn
       OriginLocation: { LocationCode: od.from },
       DestinationLocation: { LocationCode: od.to },
       DepartureDateTime: od.departureDateTime,
+      // `Fixed` has `default: false` in the BFM v5 spec — sending the
+      // documented default is following the spec, not inventing a value.
+      // It controls Sabre's "Anchored Search" feature; we always send
+      // `false` because the public input shape doesn't expose the
+      // anchored-search flow.
+      Fixed: false,
     };
     if (od.arrivalDateTime !== undefined) {
       entry.ArrivalDateTime = od.arrivalDateTime;
@@ -54,19 +57,58 @@ export function toSearchRequest(baseUrl: string, input: SearchBargainFinderMaxIn
   if (input.pointOfSale.companyCode !== undefined) {
     requestorID.CompanyName = { Code: input.pointOfSale.companyCode };
   }
-  const sourceEntry: Record<string, unknown> = { RequestorID: requestorID };
+  // `FixedPCC` has `default: false` in the spec — we send the documented
+  // default. Controls whether Sabre's Global Shopping can replace the PCC
+  // with a recommended one; we always send `false` because the public
+  // input shape doesn't expose the multi-PCC flow.
+  const sourceEntry: Record<string, unknown> = { RequestorID: requestorID, FixedPCC: false };
   if (input.pointOfSale.pseudoCityCode !== undefined) {
     sourceEntry.PseudoCityCode = input.pointOfSale.pseudoCityCode;
   }
 
   const ota: Record<string, unknown> = {
-    Version: SERVICE_VERSION,
-    ResponseType: 'GIR-JSON',
-    ResponseVersion: SERVICE_VERSION,
+    // The OTA `Version` field is the major-version digit only — every
+    // canonical example body in `bargain-finder-max.yml` for v5 sends
+    // `"Version": "5"`. The schema property's `example: 'V4'` hint is
+    // stale doc from the v4 era, not the actual format Sabre's runtime
+    // accepts. Sending `"V5"` produces "Incorrect GIR response schema
+    // version used" at runtime.
+    Version: '5',
+    // `AvailableFlightsOnly` has `default: true` in the spec — sending
+    // the documented default is following the spec, not inventing a
+    // value. When `true`, Sabre considers seat availability when matching
+    // fares. The public input shape doesn't (yet) expose an override.
+    AvailableFlightsOnly: true,
+    // ResponseType and ResponseVersion are deliberately omitted: neither
+    // is in the spec's required list, none of the canonical example
+    // bodies include them, and Sabre's runtime rejects the values that
+    // looked plausible (`"GIR-JSON"` / `"V5"`) with the same "Incorrect
+    // GIR response schema version used" error. Let Sabre default both.
     POS: { Source: [sourceEntry] },
     OriginDestinationInformation: originDestinationInformation,
     TravelerInfoSummary: {
       AirTravelerAvail: [{ PassengerTypeQuantity: passengerTypeQuantity }],
+    },
+    // TPA_Extensions.IntelliSellTransaction.RequestType.Name is the
+    // protocol-level discriminator Sabre's runtime uses to pick which GIR
+    // response schema version to return. Without it, Sabre rejects the
+    // request with "Incorrect GIR response schema version used" — the
+    // schema marks it as not required, but every canonical example body
+    // in the spec includes it and runtime testing confirms it is
+    // load-bearing. The library hardcodes "50ITINS" (the standard
+    // "give me up to 50 priced itineraries" flavor) because that's the
+    // request flavor the public input/output shape is designed around.
+    // Other flavors (alternate dates: AD1/AD3/AD7, larger result sets:
+    // 200ITINS, etc.) would warrant their own public surface; consumers
+    // who need to send a different value today can use the CLI's `--body`
+    // escape hatch or construct the request body themselves.
+    //
+    // This is a *protocol* default, not user data — the same category
+    // as the hardcoded `RequestorID.Type: '1'` and `RequestorID.ID: '1'`
+    // above. The library is allowed to pick sensible protocol defaults;
+    // it is not allowed to invent user-data requirements.
+    TPA_Extensions: {
+      IntelliSellTransaction: { RequestType: { Name: '50ITINS' } },
     },
   };
 

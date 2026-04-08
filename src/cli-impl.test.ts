@@ -10,15 +10,19 @@ import {
   buildBfmInput,
   formatJson,
   formatTotalFare,
+  normalizeBfmDateTime,
   parseCabin,
   parseOutputFormat,
   parsePassenger,
+  pickNotableResponseHeaders,
   readEnvConfig,
+  renderError,
   renderTable,
   resolveClientConfig,
   splitCommaList,
   summarizeLeg,
 } from './cli-impl.js';
+import { SabreApiResponseError } from './errors/sabre-api-response-error.js';
 
 describe('readEnvConfig', () => {
   it('extracts only the supported keys and ignores everything else', () => {
@@ -363,6 +367,44 @@ describe('parseCabin', () => {
   });
 });
 
+describe('normalizeBfmDateTime', () => {
+  it('passes through the canonical YYYY-MM-DDTHH:MM:SS form unchanged', () => {
+    expect(normalizeBfmDateTime('2025-12-25T06:00:00')).toBe('2025-12-25T06:00:00');
+  });
+
+  it('appends T00:00:00 to an ISO date-only value via string ops', () => {
+    // String manipulation rather than going through Date — `new Date('2025-12-25')`
+    // is parsed as UTC midnight per the ISO 8601 spec, which would collapse to
+    // the wrong day in non-UTC timezones if we extracted local components.
+    expect(normalizeBfmDateTime('2025-12-25')).toBe('2025-12-25T00:00:00');
+  });
+
+  it('normalizes a space-separated date-time to the canonical form', () => {
+    expect(normalizeBfmDateTime('2025-12-25 06:00:00')).toBe('2025-12-25T06:00:00');
+  });
+
+  it('appends seconds to a HH:MM-only time component', () => {
+    expect(normalizeBfmDateTime('2025-12-25T06:00')).toBe('2025-12-25T06:00:00');
+  });
+
+  it('throws CliUsageError on garbage input', () => {
+    expect(() => normalizeBfmDateTime('blah 5A, R89WH')).toThrowError(CliUsageError);
+    expect(() => normalizeBfmDateTime('not-a-date')).toThrowError(CliUsageError);
+    expect(() => normalizeBfmDateTime('')).toThrowError(CliUsageError);
+  });
+
+  it('mentions both accepted forms in the error message for garbage', () => {
+    try {
+      normalizeBfmDateTime('not-a-date');
+      expect.fail('expected CliUsageError');
+    } catch (err) {
+      const message = (err as Error).message;
+      expect(message).toContain('YYYY-MM-DD');
+      expect(message).toContain('YYYY-MM-DDTHH:MM:SS');
+    }
+  });
+});
+
 describe('buildAirlineLookupInput', () => {
   it('returns undefined when no flags are supplied', () => {
     expect(buildAirlineLookupInput({})).toBeUndefined();
@@ -404,17 +446,34 @@ describe('buildAirlineAllianceLookupInput', () => {
 describe('buildBfmInput', () => {
   it('builds a minimal one-way input from --from / --to / --departure-date', () => {
     // Per the BFM v5 spec, only origin/destination, departure date, and a
-    // passenger group are required. CompanyName and PseudoCityCode are
-    // optional in the OTA POS structure, so the CLI never demands them.
+    // passenger group are required. PseudoCityCode is optional in the OTA
+    // POS structure and the CLI doesn't demand it. CompanyName.Code is
+    // also spec-optional, but real-world testing showed Sabre's runtime
+    // rejects requests without it, so the CLI defaults --company-code to
+    // 'TN' (Sabre's Travel Network channel — what every canonical example
+    // body in the spec uses, and what the working monorepo reference
+    // hardcodes). Override per-call with --company-code or per-environment
+    // with SABRE_COMPANY_CODE.
     const out = buildBfmInput({ from: 'JFK', to: 'LHR', 'departure-date': '2025-12-25' }, {});
     expect(out).toEqual({
-      originDestinations: [{ from: 'JFK', to: 'LHR', departureDateTime: '2025-12-25' }],
+      originDestinations: [{ from: 'JFK', to: 'LHR', departureDateTime: '2025-12-25T00:00:00' }],
       passengers: [{ type: 'ADT', quantity: 1 }],
-      pointOfSale: {},
+      pointOfSale: { companyCode: 'TN' },
     });
   });
 
-  it('adds a return leg when --return-date is supplied', () => {
+  it("defaults companyCode to 'TN' when neither --company-code nor SABRE_COMPANY_CODE is set", () => {
+    // The library does NOT hardcode this default — `CompanyName.Code` has
+    // no `default:` keyword in the spec, so the library passes it through
+    // verbatim. The 'TN' default lives in the CLI specifically, where
+    // ergonomic defaults are the right call. This test guards the CLI
+    // behavior; the library mapper's behavior is covered by the BFM
+    // mapper tests.
+    const out = buildBfmInput({ from: 'JFK', to: 'LHR', 'departure-date': '2026-09-25' }, {});
+    expect(out.pointOfSale.companyCode).toBe('TN');
+  });
+
+  it('adds a return leg when --return-date is supplied; both dates are normalized', () => {
     const out = buildBfmInput(
       {
         from: 'JFK',
@@ -425,9 +484,23 @@ describe('buildBfmInput', () => {
       {},
     );
     expect(out.originDestinations).toEqual([
-      { from: 'JFK', to: 'LHR', departureDateTime: '2025-12-25' },
-      { from: 'LHR', to: 'JFK', departureDateTime: '2026-01-05' },
+      { from: 'JFK', to: 'LHR', departureDateTime: '2025-12-25T00:00:00' },
+      { from: 'LHR', to: 'JFK', departureDateTime: '2026-01-05T00:00:00' },
     ]);
+  });
+
+  it('passes through a canonical date-time value unchanged', () => {
+    const out = buildBfmInput(
+      { from: 'JFK', to: 'LHR', 'departure-date': '2025-12-25T06:00:00' },
+      {},
+    );
+    expect(out.originDestinations[0]?.departureDateTime).toBe('2025-12-25T06:00:00');
+  });
+
+  it('throws CliUsageError when --departure-date is unparseable', () => {
+    expect(() =>
+      buildBfmInput({ from: 'JFK', to: 'LHR', 'departure-date': 'blah 5A, R89WH' }, {}),
+    ).toThrowError(CliUsageError);
   });
 
   it('parses repeated --pax flags', () => {
@@ -516,7 +589,8 @@ describe('buildBfmInput', () => {
       },
       {},
     );
-    expect(out.pointOfSale).toEqual({ pseudoCityCode: 'ABCD' });
+    // companyCode defaults to 'TN' when no value is supplied (CLI default).
+    expect(out.pointOfSale).toEqual({ companyCode: 'TN', pseudoCityCode: 'ABCD' });
   });
 
   it('attaches both companyCode and pcc when both are present', () => {
@@ -556,6 +630,121 @@ describe('buildBfmInput', () => {
     const out = buildBfmInput({ from: 'JFK', to: 'LHR', 'departure-date': '2025-12-25', body }, {});
     expect(out.pointOfSale.companyCode).toBe('YY');
     expect(out.originDestinations[0]?.from).toBe('A');
+  });
+});
+
+describe('pickNotableResponseHeaders', () => {
+  it('returns an empty array when headers is undefined', () => {
+    expect(pickNotableResponseHeaders(undefined)).toEqual([]);
+  });
+
+  it('returns an empty array when no notable headers are present', () => {
+    expect(pickNotableResponseHeaders({ 'content-type': 'application/json' })).toEqual([]);
+  });
+
+  it('picks Retry-After regardless of header name casing', () => {
+    expect(pickNotableResponseHeaders({ 'Retry-After': '60' })).toEqual([
+      { name: 'Retry-After', value: '60' },
+    ]);
+    expect(pickNotableResponseHeaders({ 'retry-after': '60' })).toEqual([
+      { name: 'retry-after', value: '60' },
+    ]);
+    expect(pickNotableResponseHeaders({ 'RETRY-AFTER': '60' })).toEqual([
+      { name: 'RETRY-AFTER', value: '60' },
+    ]);
+  });
+
+  it('returns notable headers in canonical display order, not source order', () => {
+    const out = pickNotableResponseHeaders({
+      'x-ratelimit-reset': '1775690000',
+      'x-ratelimit-limit': '60',
+      'retry-after': '120',
+      'x-ratelimit-remaining': '0',
+    });
+    expect(out.map((h) => h.name.toLowerCase())).toEqual([
+      'retry-after',
+      'x-ratelimit-limit',
+      'x-ratelimit-remaining',
+      'x-ratelimit-reset',
+    ]);
+  });
+
+  it('ignores non-notable headers like content-type and correlation ids', () => {
+    const out = pickNotableResponseHeaders({
+      'content-type': 'application/json',
+      'x-correlation-id': 'abc-123',
+      'retry-after': '30',
+    });
+    expect(out).toEqual([{ name: 'retry-after', value: '30' }]);
+  });
+});
+
+describe('renderError for SabreApiResponseError', () => {
+  // The CLI's renderError surfaces rate-limit / retry headers from
+  // SabreApiResponseError when present, alongside the existing status
+  // and body output. These tests use a tiny in-memory CliIo to capture
+  // stderr/stdout writes.
+  function makeIo(): {
+    io: { stdout: { write(s: string): void }; stderr: { write(s: string): void } };
+    out: string[];
+    err: string[];
+  } {
+    const out: string[] = [];
+    const err: string[] = [];
+    return {
+      io: {
+        stdout: { write: (s: string) => out.push(s) },
+        stderr: { write: (s: string) => err.push(s) },
+      },
+      out,
+      err,
+    };
+  }
+
+  it('writes status, retry-after, and body when all are present', () => {
+    const { io, err } = makeIo();
+    const apiErr = new SabreApiResponseError(
+      'Sabre returned 429 Too Many Requests for POST https://example/v5/offers/shop',
+      429,
+      { error: 'rate_limited' },
+      { 'retry-after': '120', 'x-ratelimit-remaining': '0' },
+    );
+    renderError(apiErr, io);
+    const text = err.join('');
+    expect(text).toContain('error: SabreApiResponseError:');
+    expect(text).toContain('status: 429');
+    expect(text).toContain('retry-after: 120');
+    expect(text).toContain('x-ratelimit-remaining: 0');
+    expect(text).toContain('rate_limited');
+  });
+
+  it('does not print any header line when none of the notable headers are present', () => {
+    const { io, err } = makeIo();
+    const apiErr = new SabreApiResponseError(
+      'Sabre returned 400 Bad Request for POST https://example/v5/offers/shop',
+      400,
+      { error: 'invalid' },
+      { 'content-type': 'application/json' },
+    );
+    renderError(apiErr, io);
+    const text = err.join('');
+    expect(text).toContain('status: 400');
+    expect(text).not.toMatch(/retry-after/i);
+    expect(text).not.toMatch(/x-ratelimit/i);
+  });
+
+  it('still works when responseHeaders is undefined', () => {
+    const { io, err } = makeIo();
+    const apiErr = new SabreApiResponseError(
+      'Sabre returned 500 Server Error for POST https://example/v5/offers/shop',
+      500,
+      'oops',
+      undefined,
+    );
+    renderError(apiErr, io);
+    const text = err.join('');
+    expect(text).toContain('status: 500');
+    expect(text).toContain('body: oops');
   });
 });
 
