@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/djensen47/sabre-rest/compare/v0.6.2...v0.7.0) (2026-04-08)
+
+
+### Features
+
+* add sabre-rest cli for testing the library against real servers ([#29](https://github.com/djensen47/sabre-rest/issues/29)) ([cbe3360](https://github.com/djensen47/sabre-rest/commit/cbe336024d5f91c868291b4d7a88ab6722b23b81))
+
 ## [0.6.2](https://github.com/djensen47/sabre-rest/compare/v0.6.1...v0.6.2) (2026-04-08)
 
 
