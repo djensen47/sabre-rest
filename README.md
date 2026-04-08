@@ -7,7 +7,7 @@ A Sabre REST API client for Node.js, written in TypeScript.
 
 ## Requirements
 
-- Node.js 20 or later
+- Node.js 22 or later
 
 ## Install
 
