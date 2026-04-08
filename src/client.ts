@@ -11,6 +11,10 @@ import {
   type AirlineLookupV1Service,
   DefaultAirlineLookupV1Service,
 } from './services/airline-lookup-v1/service.js';
+import {
+  type BargainFinderMaxV5Service,
+  DefaultBargainFinderMaxV5Service,
+} from './services/bargain-finder-max-v5/service.js';
 import type { ServiceDeps } from './services/types.js';
 
 /**
@@ -40,6 +44,15 @@ export interface SabreClient {
    * returns every alliance.
    */
   readonly airlineAllianceLookupV1: AirlineAllianceLookupV1Service;
+
+  /**
+   * Sabre Bargain Finder Max v5.
+   *
+   * BFM is Sabre's flagship low-fare search product. Returns priced
+   * itinerary options for one or more origin/destination legs and
+   * passenger groups, ranked by Sabre's shopping engine.
+   */
+  readonly bargainFinderMaxV5: BargainFinderMaxV5Service;
 
   /**
    * Send a request through the configured middleware chain. Used by
@@ -118,13 +131,19 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
 
   const airlineLookupV1 = new DefaultAirlineLookupV1Service(deps);
   const airlineAllianceLookupV1 = new DefaultAirlineAllianceLookupV1Service(deps);
+  const bargainFinderMaxV5 = new DefaultBargainFinderMaxV5Service(deps);
 
-  return new DefaultSabreClient(chain, { airlineLookupV1, airlineAllianceLookupV1 });
+  return new DefaultSabreClient(chain, {
+    airlineLookupV1,
+    airlineAllianceLookupV1,
+    bargainFinderMaxV5,
+  });
 }
 
 interface SabreClientServices {
   airlineLookupV1: AirlineLookupV1Service;
   airlineAllianceLookupV1: AirlineAllianceLookupV1Service;
+  bargainFinderMaxV5: BargainFinderMaxV5Service;
 }
 
 /**
@@ -136,11 +155,13 @@ class DefaultSabreClient implements SabreClient {
   readonly #run: (req: SabreRequest) => Promise<SabreResponse>;
   readonly airlineLookupV1: AirlineLookupV1Service;
   readonly airlineAllianceLookupV1: AirlineAllianceLookupV1Service;
+  readonly bargainFinderMaxV5: BargainFinderMaxV5Service;
 
   constructor(run: (req: SabreRequest) => Promise<SabreResponse>, services: SabreClientServices) {
     this.#run = run;
     this.airlineLookupV1 = services.airlineLookupV1;
     this.airlineAllianceLookupV1 = services.airlineAllianceLookupV1;
+    this.bargainFinderMaxV5 = services.bargainFinderMaxV5;
   }
 
   request(req: SabreRequest): Promise<SabreResponse> {
