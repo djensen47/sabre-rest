@@ -80,16 +80,27 @@ export interface PassengerCount {
   quantity: number;
 }
 
-/** Point-of-sale identification carried in the OTA `POS/Source` element. */
+/**
+ * Point-of-sale identification carried in the OTA `POS/Source` element.
+ *
+ * Both fields are optional because Sabre's BFM v5 spec marks every
+ * field of `RequestorID` other than `ID` and `Type` (which the library
+ * fills in with the documented "not used for processing" value of `1`)
+ * as optional. Supply only the fields your account actually requires.
+ */
 export interface PointOfSale {
   /**
    * Two-character ATA/IATA company code identifying the requesting
-   * agency (e.g., `TN`).
+   * agency (e.g., `TN`). Optional per the spec — the field maps to the
+   * OTA `RequestorID/CompanyName/Code` element, which Sabre marks as
+   * not required. Sabre's runtime may still demand it for some account
+   * types; supply it if your shop requests are rejected without it.
    */
-  companyCode: string;
+  companyCode?: string;
   /**
    * Optional four-character pseudo city code (PCC) for agencies that
-   * book through a specific Sabre office.
+   * book through a specific Sabre office. Maps to the OTA
+   * `Source/PseudoCityCode` element.
    */
   pseudoCityCode?: string;
 }
