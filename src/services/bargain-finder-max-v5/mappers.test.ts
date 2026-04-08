@@ -44,6 +44,9 @@ describe('toSearchRequest', () => {
     // every canonical example body in the spec for v5. Sending 'V5' here
     // produces "Incorrect GIR response schema version used" at runtime.
     expect(ota.Version).toBe('5');
+    // `AvailableFlightsOnly` has `default: true` in the spec — sending
+    // the documented default is following the spec, not inventing data.
+    expect(ota.AvailableFlightsOnly).toBe(true);
     // ResponseType and ResponseVersion are deliberately not sent: neither
     // is in the spec's required list, none of the canonical example bodies
     // include them, and Sabre's runtime rejected the values that looked
@@ -51,16 +54,22 @@ describe('toSearchRequest', () => {
     expect('ResponseType' in ota).toBe(false);
     expect('ResponseVersion' in ota).toBe(false);
 
+    // `Fixed: false` on each OriginDestinationInformation entry comes from
+    // the spec's `default: false` keyword — it's the documented default,
+    // not an invented value. Sabre's runtime rejects requests that omit
+    // the spec defaults entirely.
     expect(ota.OriginDestinationInformation).toEqual([
       {
         OriginLocation: { LocationCode: 'JFK' },
         DestinationLocation: { LocationCode: 'LHR' },
         DepartureDateTime: '2025-12-25T10:00:00',
+        Fixed: false,
       },
       {
         OriginLocation: { LocationCode: 'LHR' },
         DestinationLocation: { LocationCode: 'JFK' },
         DepartureDateTime: '2026-01-05T12:00:00',
+        Fixed: false,
       },
     ]);
 
@@ -68,6 +77,8 @@ describe('toSearchRequest', () => {
       AirTravelerAvail: [{ PassengerTypeQuantity: [{ Code: 'ADT', Quantity: 1 }] }],
     });
 
+    // `FixedPCC: false` on each Source entry comes from the spec's
+    // `default: false` keyword — same rule as `Fixed` above.
     expect(ota.POS).toEqual({
       Source: [
         {
@@ -76,6 +87,7 @@ describe('toSearchRequest', () => {
             ID: '1',
             CompanyName: { Code: 'TN' },
           },
+          FixedPCC: false,
         },
       ],
     });
@@ -114,6 +126,7 @@ describe('toSearchRequest', () => {
         DestinationLocation: { LocationCode: 'LHR' },
         DepartureDateTime: '2025-12-25T10:00:00',
         ArrivalDateTime: '2025-12-26T06:00:00',
+        Fixed: false,
       },
     ]);
   });
@@ -133,6 +146,7 @@ describe('toSearchRequest', () => {
             ID: '1',
             CompanyName: { Code: 'TN' },
           },
+          FixedPCC: false,
           PseudoCityCode: 'ABCD',
         },
       ],
@@ -153,6 +167,7 @@ describe('toSearchRequest', () => {
       Source: [
         {
           RequestorID: { Type: '1', ID: '1' },
+          FixedPCC: false,
         },
       ],
     });
@@ -169,6 +184,7 @@ describe('toSearchRequest', () => {
       Source: [
         {
           RequestorID: { Type: '1', ID: '1' },
+          FixedPCC: false,
           PseudoCityCode: 'ABCD',
         },
       ],

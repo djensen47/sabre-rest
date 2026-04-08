@@ -31,6 +31,12 @@ export function toSearchRequest(baseUrl: string, input: SearchBargainFinderMaxIn
       OriginLocation: { LocationCode: od.from },
       DestinationLocation: { LocationCode: od.to },
       DepartureDateTime: od.departureDateTime,
+      // `Fixed` has `default: false` in the BFM v5 spec — sending the
+      // documented default is following the spec, not inventing a value.
+      // It controls Sabre's "Anchored Search" feature; we always send
+      // `false` because the public input shape doesn't expose the
+      // anchored-search flow.
+      Fixed: false,
     };
     if (od.arrivalDateTime !== undefined) {
       entry.ArrivalDateTime = od.arrivalDateTime;
@@ -51,7 +57,11 @@ export function toSearchRequest(baseUrl: string, input: SearchBargainFinderMaxIn
   if (input.pointOfSale.companyCode !== undefined) {
     requestorID.CompanyName = { Code: input.pointOfSale.companyCode };
   }
-  const sourceEntry: Record<string, unknown> = { RequestorID: requestorID };
+  // `FixedPCC` has `default: false` in the spec — we send the documented
+  // default. Controls whether Sabre's Global Shopping can replace the PCC
+  // with a recommended one; we always send `false` because the public
+  // input shape doesn't expose the multi-PCC flow.
+  const sourceEntry: Record<string, unknown> = { RequestorID: requestorID, FixedPCC: false };
   if (input.pointOfSale.pseudoCityCode !== undefined) {
     sourceEntry.PseudoCityCode = input.pointOfSale.pseudoCityCode;
   }
@@ -64,6 +74,11 @@ export function toSearchRequest(baseUrl: string, input: SearchBargainFinderMaxIn
     // accepts. Sending `"V5"` produces "Incorrect GIR response schema
     // version used" at runtime.
     Version: '5',
+    // `AvailableFlightsOnly` has `default: true` in the spec — sending
+    // the documented default is following the spec, not inventing a
+    // value. When `true`, Sabre considers seat availability when matching
+    // fares. The public input shape doesn't (yet) expose an override.
+    AvailableFlightsOnly: true,
     // ResponseType and ResponseVersion are deliberately omitted: neither
     // is in the spec's required list, none of the canonical example
     // bodies include them, and Sabre's runtime rejects the values that
