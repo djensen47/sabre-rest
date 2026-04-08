@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.0](https://github.com/djensen47/sabre-rest/compare/v0.4.0...v0.5.0) (2026-04-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* AirlineAlliance.memberAirlineCodes (string[]) is replaced with AirlineAlliance.members (AirlineAllianceMember[], each { code?: string }). A flat string[] cannot honestly represent a member object whose AirlineCode is optional.
+
+### Bug Fixes
+
+* stop dropping records in lookup service mappers ([#20](https://github.com/djensen47/sabre-rest/issues/20)) ([0971e1b](https://github.com/djensen47/sabre-rest/commit/0971e1bbcc27db211492e1e174ce94a0390cc419))
+
 ## [0.4.0](https://github.com/djensen47/sabre-rest/compare/v0.3.0...v0.4.0) (2026-04-08)
 
 
