@@ -69,19 +69,26 @@ describe('fromLookupResponse', () => {
     expect(out.airlines).toEqual([]);
   });
 
-  it('skips items missing required code or name', () => {
+  it('preserves every airline Sabre returned, including ones with missing fields', () => {
     const out = fromLookupResponse(
       okResponse({
         AirlineInfo: [
           { AirlineCode: 'AI', AirlineName: 'Air India Limited' },
           { AirlineCode: 'X1' }, // missing name
           { AirlineName: 'No Code' }, // missing code
+          {}, // missing both
           { AirlineCode: 'BA', AirlineName: 'British Airways' },
         ],
       }),
     );
 
-    expect(out.airlines.map((a) => a.code)).toEqual(['AI', 'BA']);
+    expect(out.airlines).toEqual([
+      { code: 'AI', name: 'Air India Limited' },
+      { code: 'X1' },
+      { name: 'No Code' },
+      {},
+      { code: 'BA', name: 'British Airways' },
+    ]);
   });
 
   it('throws SabreParseError when the body is not valid JSON', () => {

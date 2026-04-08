@@ -3,6 +3,7 @@ import type { components } from '../../generated/airline-alliance-lookup.js';
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type {
   AirlineAlliance,
+  AirlineAllianceMember,
   LookupAirlineAlliancesInput,
   LookupAirlineAlliancesOutput,
 } from './types.js';
@@ -36,12 +37,14 @@ export function toLookupRequest(
 }
 
 /**
- * Parses the airlinesAlliancesLookup response into the public output shape.
+ * Parses the airlinesAlliancesLookup response into the public output
+ * shape.
  *
- * Throws {@link SabreParseError} if the body is not valid JSON or is not a
- * JSON object. Alliances missing the required `code` or `name` are
- * silently dropped, matching the lenient behavior of the airline lookup
- * service.
+ * Throws {@link SabreParseError} if the body is not valid JSON or is not
+ * a JSON object. Every alliance and every member Sabre returned is
+ * included in the output — the mapper does not drop records based on
+ * which fields are populated, because Sabre's spec marks every field
+ * optional. Consumers see the data as Sabre returned it.
  */
 export function fromLookupResponse(res: SabreResponse): LookupAirlineAlliancesOutput {
   let parsed: components['schemas']['AirlinesAlliancesLookupResponse'];
@@ -62,23 +65,17 @@ export function fromLookupResponse(res: SabreResponse): LookupAirlineAlliancesOu
   }
 
   const rawAlliances = parsed.AllianceInfo ?? [];
-  const alliances: AirlineAlliance[] = [];
-  for (const item of rawAlliances) {
-    if (!item.AllianceCode || !item.AllianceName) {
-      continue;
-    }
-    const memberAirlineCodes: string[] = [];
-    for (const member of item.AirlineInfo ?? []) {
-      if (member.AirlineCode) {
-        memberAirlineCodes.push(member.AirlineCode);
-      }
-    }
-    alliances.push({
-      code: item.AllianceCode,
-      name: item.AllianceName,
-      memberAirlineCodes,
+  const alliances: AirlineAlliance[] = rawAlliances.map((item) => {
+    const members: AirlineAllianceMember[] = (item.AirlineInfo ?? []).map((member) => {
+      const out: AirlineAllianceMember = {};
+      if (member.AirlineCode !== undefined) out.code = member.AirlineCode;
+      return out;
     });
-  }
+    const alliance: AirlineAlliance = { members };
+    if (item.AllianceCode !== undefined) alliance.code = item.AllianceCode;
+    if (item.AllianceName !== undefined) alliance.name = item.AllianceName;
+    return alliance;
+  });
 
   return { alliances };
 }

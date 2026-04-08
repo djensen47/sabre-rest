@@ -41,7 +41,7 @@ describe('AirlineAllianceLookupV1Service.lookup', () => {
     const result = await client.airlineAllianceLookupV1.lookup({ codes: ['*O'] });
 
     expect(result.alliances).toEqual([
-      { code: '*O', name: 'oneworld', memberAirlineCodes: ['AA', 'BA'] },
+      { code: '*O', name: 'oneworld', members: [{ code: 'AA' }, { code: 'BA' }] },
     ]);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);

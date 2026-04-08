@@ -30,10 +30,10 @@ export function toLookupRequest(baseUrl: string, input?: LookupAirlinesInput): S
  * Parses the airlinesLookup response into the public output shape.
  *
  * Throws {@link SabreParseError} if the body is not valid JSON or is not
- * shaped as Sabre's documented response. Airlines that are missing the
- * required `code` or `name` fields are silently dropped — Sabre's response
- * shape is permissive enough that we choose to return what we can rather
- * than fail the whole call.
+ * a JSON object. Every airline Sabre returned is included in the output —
+ * the mapper does not drop records based on which fields are populated,
+ * because Sabre's spec marks every airline field optional. Consumers see
+ * the data as Sabre returned it.
  */
 export function fromLookupResponse(res: SabreResponse): LookupAirlinesOutput {
   let parsed: components['schemas']['AirlinesLookupResponse'];
@@ -50,20 +50,15 @@ export function fromLookupResponse(res: SabreResponse): LookupAirlinesOutput {
   }
 
   const rawAirlines = parsed.AirlineInfo ?? [];
-  const airlines: Airline[] = [];
-  for (const item of rawAirlines) {
-    if (!item.AirlineCode || !item.AirlineName) {
-      continue;
-    }
-    const airline: Airline = {
-      code: item.AirlineCode,
-      name: item.AirlineName,
-    };
-    if (item.AlternativeBusinessName) {
+  const airlines: Airline[] = rawAirlines.map((item) => {
+    const airline: Airline = {};
+    if (item.AirlineCode !== undefined) airline.code = item.AirlineCode;
+    if (item.AirlineName !== undefined) airline.name = item.AirlineName;
+    if (item.AlternativeBusinessName !== undefined) {
       airline.alternativeName = item.AlternativeBusinessName;
     }
-    airlines.push(airline);
-  }
+    return airline;
+  });
 
   return { airlines };
 }

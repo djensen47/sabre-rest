@@ -67,8 +67,16 @@ describe('fromLookupResponse', () => {
     );
 
     expect(out.alliances).toEqual([
-      { code: '*O', name: 'oneworld', memberAirlineCodes: ['AA', 'BA', 'JL'] },
-      { code: '*A', name: 'Star Alliance', memberAirlineCodes: ['UA', 'LH'] },
+      {
+        code: '*O',
+        name: 'oneworld',
+        members: [{ code: 'AA' }, { code: 'BA' }, { code: 'JL' }],
+      },
+      {
+        code: '*A',
+        name: 'Star Alliance',
+        members: [{ code: 'UA' }, { code: 'LH' }],
+      },
     ]);
   });
 
@@ -77,29 +85,35 @@ describe('fromLookupResponse', () => {
     expect(out.alliances).toEqual([]);
   });
 
-  it('returns an empty memberAirlineCodes array when AirlineInfo is missing', () => {
+  it('returns an empty members array when AirlineInfo is missing', () => {
     const out = fromLookupResponse(
       okResponse({
         AllianceInfo: [{ AllianceCode: '*S', AllianceName: 'SkyTeam' }],
       }),
     );
-    expect(out.alliances).toEqual([{ code: '*S', name: 'SkyTeam', memberAirlineCodes: [] }]);
+    expect(out.alliances).toEqual([{ code: '*S', name: 'SkyTeam', members: [] }]);
   });
 
-  it('skips alliances missing required code or name', () => {
+  it('preserves alliances even when code or name are missing', () => {
     const out = fromLookupResponse(
       okResponse({
         AllianceInfo: [
           { AllianceCode: '*O', AllianceName: 'oneworld', AirlineInfo: [] },
           { AllianceCode: '*X' }, // missing name
           { AllianceName: 'Mystery' }, // missing code
+          {}, // missing both
         ],
       }),
     );
-    expect(out.alliances.map((a) => a.code)).toEqual(['*O']);
+    expect(out.alliances).toEqual([
+      { code: '*O', name: 'oneworld', members: [] },
+      { code: '*X', members: [] },
+      { name: 'Mystery', members: [] },
+      { members: [] },
+    ]);
   });
 
-  it('skips airline members missing AirlineCode', () => {
+  it('preserves member entries even when AirlineCode is missing', () => {
     const out = fromLookupResponse(
       okResponse({
         AllianceInfo: [
@@ -111,7 +125,7 @@ describe('fromLookupResponse', () => {
         ],
       }),
     );
-    expect(out.alliances[0]?.memberAirlineCodes).toEqual(['AA', 'BA']);
+    expect(out.alliances[0]?.members).toEqual([{ code: 'AA' }, {}, { code: 'BA' }]);
   });
 
   it('throws SabreParseError when the body is not valid JSON', () => {
