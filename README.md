@@ -37,8 +37,20 @@ The package ships a `sabre-rest` bin for testing the library against
 real Sabre servers. It is **provisional** — flag names and output shapes
 can change without notice while the library is at `0.x`.
 
+You can run the CLI either via `npx sabre-rest <command>` (works whether
+`sabre-rest` is installed locally in a project, installed globally, or
+not installed at all — `npx` will fetch it on demand), or by installing
+globally and dropping the prefix:
+
 ```bash
-# Run from a project that has sabre-rest installed
+npm install -g sabre-rest
+sabre-rest --help
+```
+
+Examples below use `npx`, but bare `sabre-rest …` works identically
+once you've installed globally.
+
+```bash
 npx sabre-rest --help
 npx sabre-rest airline-lookup --codes AA,BA
 npx sabre-rest airline-alliance-lookup --codes "*A,*O" --format table
