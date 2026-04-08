@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/djensen47/sabre-rest/compare/v0.1.2...v0.1.3) (2026-04-08)
+
+
+### Miscellaneous Chores
+
+* release as 0.1.3 to test end-to-end publish automation ([#9](https://github.com/djensen47/sabre-rest/issues/9)) ([e045bb1](https://github.com/djensen47/sabre-rest/commit/e045bb1028236361cc81ac979dbfc7c160aebd47))
+
 ## [0.1.2](https://github.com/djensen47/sabre-rest/compare/v0.1.1...v0.1.2) (2026-04-08)
 
 
