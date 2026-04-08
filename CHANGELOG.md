@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/djensen47/sabre-rest/compare/v0.1.4...v0.2.0) (2026-04-08)
+
+
+### Features
+
+* implement client foundation (errors, http, auth, middleware, client) ([#13](https://github.com/djensen47/sabre-rest/issues/13)) ([85417cb](https://github.com/djensen47/sabre-rest/commit/85417cb12d40340ce453d5265a9a574ce01ed893))
+
 ## [0.1.4](https://github.com/djensen47/sabre-rest/compare/v0.1.3...v0.1.4) (2026-04-08)
 
 
