@@ -3,23 +3,30 @@ import { buildChain } from './http/chain.js';
 import type { Middleware, SabreRequest, SabreResponse } from './http/types.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { createErrorMappingMiddleware } from './middleware/error-mapping.js';
+import {
+  type AirlineLookupV1Service,
+  DefaultAirlineLookupV1Service,
+} from './services/airline-lookup-v1/service.js';
 
 /**
  * The public Sabre REST client.
  *
  * Holds the configured HTTP transport and the constructed services. New
- * services will appear as readonly properties on this interface as they
- * are added.
+ * services appear as readonly properties on this interface as they are
+ * added.
  *
  * Construct via {@link createSabreClient}; do not implement this interface
  * yourself.
- *
- * Until any service has been added, the only thing exposed here is
- * {@link request}, the low-level escape hatch for issuing a raw request
- * through the configured chain. Most consumers will not call it directly —
- * services do.
  */
 export interface SabreClient {
+  /**
+   * Sabre Airline Lookup v1.
+   *
+   * Returns the airline name(s) associated with one or more IATA airline
+   * codes. With no codes supplied, returns every airline Sabre knows about.
+   */
+  readonly airlineLookupV1: AirlineLookupV1Service;
+
   /**
    * Send a request through the configured middleware chain. Used by
    * service implementations; rarely useful to call directly.
@@ -67,6 +74,8 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
     throw new Error('createSabreClient: baseUrl is required');
   }
 
+  let middlewares: readonly Middleware[];
+
   if (opts.overrideMiddleware) {
     if (opts.auth !== undefined) {
       throw new Error(
@@ -74,26 +83,32 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
           'When overriding middleware, install `createAuthMiddleware(provider)` yourself.',
       );
     }
-    const chain = buildChain(opts.middleware ?? []);
-    return new DefaultSabreClient(chain);
+    middlewares = opts.middleware ?? [];
+  } else {
+    if (!opts.auth) {
+      throw new Error(
+        'createSabreClient: `auth` is required unless `overrideMiddleware: true` is set',
+      );
+    }
+    // Default chain (outermost → innermost):
+    //   [...consumer middleware, errorMap, auth, fetch]
+    middlewares = [
+      ...(opts.middleware ?? []),
+      createErrorMappingMiddleware(),
+      createAuthMiddleware(opts.auth),
+    ];
   }
-
-  if (!opts.auth) {
-    throw new Error(
-      'createSabreClient: `auth` is required unless `overrideMiddleware: true` is set',
-    );
-  }
-
-  // Default chain (outermost → innermost):
-  //   [...consumer middleware, errorMap, auth, fetch]
-  const middlewares: Middleware[] = [
-    ...(opts.middleware ?? []),
-    createErrorMappingMiddleware(),
-    createAuthMiddleware(opts.auth),
-  ];
 
   const chain = buildChain(middlewares);
-  return new DefaultSabreClient(chain);
+  const deps = { baseUrl: opts.baseUrl, request: chain };
+
+  const airlineLookupV1 = new DefaultAirlineLookupV1Service(deps);
+
+  return new DefaultSabreClient(chain, { airlineLookupV1 });
+}
+
+interface SabreClientServices {
+  airlineLookupV1: AirlineLookupV1Service;
 }
 
 /**
@@ -103,9 +118,11 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
  */
 class DefaultSabreClient implements SabreClient {
   readonly #run: (req: SabreRequest) => Promise<SabreResponse>;
+  readonly airlineLookupV1: AirlineLookupV1Service;
 
-  constructor(run: (req: SabreRequest) => Promise<SabreResponse>) {
+  constructor(run: (req: SabreRequest) => Promise<SabreResponse>, services: SabreClientServices) {
     this.#run = run;
+    this.airlineLookupV1 = services.airlineLookupV1;
   }
 
   request(req: SabreRequest): Promise<SabreResponse> {

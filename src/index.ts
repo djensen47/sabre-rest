@@ -35,3 +35,11 @@ export {
   SabreParseError,
   SabreTimeoutError,
 } from './errors/index.js';
+
+// Services — interface types only (concrete classes are internal)
+export type { AirlineLookupV1Service } from './services/airline-lookup-v1/service.js';
+export type {
+  Airline,
+  LookupAirlinesInput,
+  LookupAirlinesOutput,
+} from './services/airline-lookup-v1/types.js';
