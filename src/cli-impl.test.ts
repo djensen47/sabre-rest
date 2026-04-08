@@ -10,6 +10,7 @@ import {
   buildBfmInput,
   formatJson,
   formatTotalFare,
+  normalizeBfmDateTime,
   parseCabin,
   parseOutputFormat,
   parsePassenger,
@@ -363,6 +364,44 @@ describe('parseCabin', () => {
   });
 });
 
+describe('normalizeBfmDateTime', () => {
+  it('passes through the canonical YYYY-MM-DDTHH:MM:SS form unchanged', () => {
+    expect(normalizeBfmDateTime('2025-12-25T06:00:00')).toBe('2025-12-25T06:00:00');
+  });
+
+  it('appends T00:00:00 to an ISO date-only value via string ops', () => {
+    // String manipulation rather than going through Date — `new Date('2025-12-25')`
+    // is parsed as UTC midnight per the ISO 8601 spec, which would collapse to
+    // the wrong day in non-UTC timezones if we extracted local components.
+    expect(normalizeBfmDateTime('2025-12-25')).toBe('2025-12-25T00:00:00');
+  });
+
+  it('normalizes a space-separated date-time to the canonical form', () => {
+    expect(normalizeBfmDateTime('2025-12-25 06:00:00')).toBe('2025-12-25T06:00:00');
+  });
+
+  it('appends seconds to a HH:MM-only time component', () => {
+    expect(normalizeBfmDateTime('2025-12-25T06:00')).toBe('2025-12-25T06:00:00');
+  });
+
+  it('throws CliUsageError on garbage input', () => {
+    expect(() => normalizeBfmDateTime('blah 5A, R89WH')).toThrowError(CliUsageError);
+    expect(() => normalizeBfmDateTime('not-a-date')).toThrowError(CliUsageError);
+    expect(() => normalizeBfmDateTime('')).toThrowError(CliUsageError);
+  });
+
+  it('mentions both accepted forms in the error message for garbage', () => {
+    try {
+      normalizeBfmDateTime('not-a-date');
+      expect.fail('expected CliUsageError');
+    } catch (err) {
+      const message = (err as Error).message;
+      expect(message).toContain('YYYY-MM-DD');
+      expect(message).toContain('YYYY-MM-DDTHH:MM:SS');
+    }
+  });
+});
+
 describe('buildAirlineLookupInput', () => {
   it('returns undefined when no flags are supplied', () => {
     expect(buildAirlineLookupInput({})).toBeUndefined();
@@ -406,15 +445,17 @@ describe('buildBfmInput', () => {
     // Per the BFM v5 spec, only origin/destination, departure date, and a
     // passenger group are required. CompanyName and PseudoCityCode are
     // optional in the OTA POS structure, so the CLI never demands them.
+    // The date-only --departure-date is normalized to the canonical
+    // YYYY-MM-DDTHH:MM:SS form Sabre's schema requires.
     const out = buildBfmInput({ from: 'JFK', to: 'LHR', 'departure-date': '2025-12-25' }, {});
     expect(out).toEqual({
-      originDestinations: [{ from: 'JFK', to: 'LHR', departureDateTime: '2025-12-25' }],
+      originDestinations: [{ from: 'JFK', to: 'LHR', departureDateTime: '2025-12-25T00:00:00' }],
       passengers: [{ type: 'ADT', quantity: 1 }],
       pointOfSale: {},
     });
   });
 
-  it('adds a return leg when --return-date is supplied', () => {
+  it('adds a return leg when --return-date is supplied; both dates are normalized', () => {
     const out = buildBfmInput(
       {
         from: 'JFK',
@@ -425,9 +466,23 @@ describe('buildBfmInput', () => {
       {},
     );
     expect(out.originDestinations).toEqual([
-      { from: 'JFK', to: 'LHR', departureDateTime: '2025-12-25' },
-      { from: 'LHR', to: 'JFK', departureDateTime: '2026-01-05' },
+      { from: 'JFK', to: 'LHR', departureDateTime: '2025-12-25T00:00:00' },
+      { from: 'LHR', to: 'JFK', departureDateTime: '2026-01-05T00:00:00' },
     ]);
+  });
+
+  it('passes through a canonical date-time value unchanged', () => {
+    const out = buildBfmInput(
+      { from: 'JFK', to: 'LHR', 'departure-date': '2025-12-25T06:00:00' },
+      {},
+    );
+    expect(out.originDestinations[0]?.departureDateTime).toBe('2025-12-25T06:00:00');
+  });
+
+  it('throws CliUsageError when --departure-date is unparseable', () => {
+    expect(() =>
+      buildBfmInput({ from: 'JFK', to: 'LHR', 'departure-date': 'blah 5A, R89WH' }, {}),
+    ).toThrowError(CliUsageError);
   });
 
   it('parses repeated --pax flags', () => {

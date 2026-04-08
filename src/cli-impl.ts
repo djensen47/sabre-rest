@@ -324,6 +324,52 @@ export function parseCabin(value: string | undefined): CabinClass | undefined {
   return value as CabinClass;
 }
 
+/**
+ * Normalizes a user-supplied date or date-time into the form
+ * `YYYY-MM-DDTHH:MM:SS` that Sabre's BFM v5 schema requires. Used by
+ * the CLI at the boundary; the library itself never normalizes.
+ *
+ * Three transformation paths in order:
+ *
+ * 1. Already in canonical form → pass through unchanged.
+ * 2. ISO date-only (`YYYY-MM-DD`) → append `T00:00:00`. This case is
+ *    handled with string manipulation rather than going through
+ *    `Date`, because `new Date('2025-12-25')` is parsed as **UTC**
+ *    midnight per the ISO 8601 spec, which would collapse to the
+ *    wrong day when extracted as local-time components in any
+ *    non-UTC timezone.
+ * 3. Anything else → constructed via `new Date(value)` and emitted
+ *    using the user's local wall-clock components. This handles
+ *    space-separated forms (`2025-12-25 06:00:00`), missing seconds
+ *    (`2025-12-25T06:00`), US-locale forms (`12/25/2025`,
+ *    `Dec 25 2025`), and any other shape `Date.parse` accepts.
+ *    Garbage input produces an `Invalid Date` and the helper throws.
+ *
+ * Throws {@link CliUsageError} when the input cannot be parsed at
+ * all. There is no pre-flight format check — the principle is "try
+ * to transform; crash on garbage", not "validate against an allow
+ * list".
+ */
+export function normalizeBfmDateTime(value: string): string {
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(value)) {
+    return value;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return `${value}T00:00:00`;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new CliUsageError(
+      `Could not parse '${value}' as a date. Try YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS.`,
+    );
+  }
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return (
+    `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}` +
+    `T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:${pad(parsed.getSeconds())}`
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Per-operation flag → input mappers
 // ---------------------------------------------------------------------------
@@ -382,18 +428,25 @@ export interface BfmFlagValues {
  * Builds the input for `bargainFinderMaxV5.search` from the CLI flags.
  *
  * - When `--body` is supplied, it is parsed as JSON and returned
- *   verbatim; flags are ignored.
+ *   verbatim; flags are ignored. (Dates inside `--body` are also not
+ *   normalized — that path assumes the caller knows what they're doing
+ *   and is supplying canonical Sabre format.)
  * - Otherwise `--from`, `--to`, and `--departure-date` are required to
  *   assemble a single one-way leg (or a round trip if `--return-date`
  *   is supplied). Passenger groups default to one adult (`ADT:1`) when
  *   no `--pax` is given.
+ * - `--departure-date` and `--return-date` are run through
+ *   {@link normalizeBfmDateTime} so friendly forms (`2025-12-25`,
+ *   `2025-12-25 06:00:00`, `12/25/2025`, etc.) are accepted and
+ *   converted to the `YYYY-MM-DDTHH:MM:SS` form Sabre's schema
+ *   requires.
  * - `--company-code` and `--pcc` are both optional, matching the BFM v5
  *   spec which marks `RequestorID.CompanyName` and `Source.PseudoCityCode`
  *   as not required. They override the corresponding env vars when
  *   present.
  *
- * Throws {@link CliUsageError} on missing required flags or malformed
- * values.
+ * Throws {@link CliUsageError} on missing required flags, malformed
+ * values, or unparseable dates.
  */
 export function buildBfmInput(
   values: BfmFlagValues,
@@ -421,14 +474,18 @@ export function buildBfmInput(
     {
       from: values.from as string,
       to: values.to as string,
-      departureDateTime: values['departure-date'] as string,
+      // Sabre's BFM v5 schema requires the canonical
+      // YYYY-MM-DDTHH:MM:SS form with no timezone. The CLI normalizes
+      // friendlier user input (date-only, US-locale forms, etc.) at
+      // the boundary; the library itself never normalizes.
+      departureDateTime: normalizeBfmDateTime(values['departure-date'] as string),
     },
   ];
   if (values['return-date']) {
     originDestinations.push({
       from: values.to as string,
       to: values.from as string,
-      departureDateTime: values['return-date'],
+      departureDateTime: normalizeBfmDateTime(values['return-date']),
     });
   }
 
