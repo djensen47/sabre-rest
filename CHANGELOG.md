@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/djensen47/sabre-rest/compare/v0.6.0...v0.6.1) (2026-04-08)
+
+
+### Bug Fixes
+
+* correct sabre v2 oauth encoding and surface error body ([#25](https://github.com/djensen47/sabre-rest/issues/25)) ([c30332b](https://github.com/djensen47/sabre-rest/commit/c30332b30a27f3c4212c57981eb47511a805d83f))
+
 ## [0.6.0](https://github.com/djensen47/sabre-rest/compare/v0.5.0...v0.6.0) (2026-04-08)
 
 
