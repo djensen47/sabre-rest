@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/djensen47/sabre-rest/compare/v0.3.0...v0.4.0) (2026-04-08)
+
+
+### Features
+
+* add Airline Alliance Lookup v1 service ([#17](https://github.com/djensen47/sabre-rest/issues/17)) ([c3e923b](https://github.com/djensen47/sabre-rest/commit/c3e923b01eaf826bc1fa42b8dd36fac6e8584b31))
+
 ## [0.3.0](https://github.com/djensen47/sabre-rest/compare/v0.2.0...v0.3.0) (2026-04-08)
 
 
