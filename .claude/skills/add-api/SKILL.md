@@ -5,6 +5,8 @@ description: Add a new Sabre service to the sabre-rest package end-to-end. Gener
 
 # Add a new Sabre API service
 
+> **First action when this skill is invoked: enter plan mode (`EnterPlanMode`), draft a plan for the work below, and wait for the user to approve it before writing any files.**
+
 This skill walks through adding a new Sabre service to `sabre-rest` end-to-end. It assumes the foundation in `src/` is already in place (see `docs/architecture.md`).
 
 ## Required reading first
