@@ -1,0 +1,110 @@
+openapi: 3.0.0
+info:
+  title: Airline Lookup
+  version: v1
+  description: The Airline Lookup API returns the airline name associated with a
+    specified IATA airline code. If no code is specified, the API returns all
+    codes and their corresponding names.
+paths:
+  /v1/lists/utilities/airlines:
+    get:
+      operationId: airlinesLookup
+      parameters:
+        - name: airlinecode
+          in: query
+          description: |
+            2-character IATA airline code.
+
+            Multiple values accepted in csv format.
+            Example: A5,C8,E4
+          example: A9
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AirlinesLookupResponse"
+        "400":
+          description: |
+            Bad Request
+             - Parameter 'airlinecode' must be a valid value.
+security:
+  - oauth2_authentication: []
+servers:
+  - url: https://api.cert.platform.sabre.com
+components:
+  securitySchemes:
+    oauth2_authentication:
+      type: oauth2
+      x-base64-encode-client-credentials: true
+      flows:
+        clientCredentials:
+          tokenUrl: https://api.cert.platform.sabre.com/v2/auth/token
+          scopes: {}
+  schemas:
+    AirlinesLookupResponse:
+      type: object
+      properties:
+        AirlineInfo:
+          type: array
+          description: Repeats associated airline information.
+          items:
+            type: object
+            properties:
+              AirlineCode:
+                type: string
+                example: AI
+                description: Returns the specified airline code(s).
+              AirlineName:
+                type: string
+                example: Air India Limited
+                description: The proper business name of the specified airline code.
+              AlternativeBusinessName:
+                type: string
+                example: Air India
+                description: The common business name of the specified airline code
+        Links:
+          allOf:
+            - $ref: "#/components/schemas/CommonLinks"
+          items:
+            properties:
+              rel:
+                enum:
+                  - self
+                  - linkTemplate
+              href:
+                example: https://api.cert.platform.sabre.com/v1/lists/utilities/airlines?airlinecode=AI
+    CommonLinks:
+      discriminator:
+        propertyName: type
+      type: array
+      description: Array of links for different types of relations, e.g. self,
+        linkTemplate, shop
+      items:
+        type: object
+        properties:
+          rel:
+            type: string
+            enum:
+              - self
+              - shop
+              - forecast
+              - airportsInCity
+              - airlineInfo
+              - destinations
+              - view
+              - nextResults
+              - prevResults
+              - linkTemplate
+              - shopTemplate
+              - tagLookupLinkTemplate
+              - paginatedRequestLinkTemplate
+            example: self
+            description: Describes relationship between href and current request.
+          href:
+            type: string
+            example: https://api.cert.platform.sabre.com/v1/lists/utilities/airlines?airlinecode=AI
+            description: Link to related API request.

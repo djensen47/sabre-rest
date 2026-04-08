@@ -225,20 +225,24 @@ services, we can add a normalized `errors[]` field non-breakingly.
 
 ---
 
-## OpenAPI specs live in `docs/specs/`
+## OpenAPI specs live in `docs/specifications/`
 
 ### Decision
 
-Sabre's OAS spec files are committed under `docs/specs/`, one file per API,
-named with the kebab-case service name:
+Sabre's OAS spec files are committed under `docs/specifications/`, one file
+per API, named with the kebab-case service name:
 
 ```
-docs/specs/air-booking-v3.yaml
-docs/specs/bargain-finder-max-v4.yaml
+docs/specifications/air-booking-v3.yaml
+docs/specifications/bargain-finder-max-v4.yaml
 ```
 
-The generation script reads from `docs/specs/` and writes to
+The generation script reads from `docs/specifications/` and writes to
 `src/generated/<same-name>.ts`. It accepts both YAML and JSON inputs.
+
+The directory is named `specifications` rather than `specs` to avoid
+overloading "spec" with the testing convention used in some ecosystems
+(e.g., RSpec's `spec/` directory).
 
 ### Why
 
@@ -252,11 +256,11 @@ The generation script reads from `docs/specs/` and writes to
 
 ### Alternatives rejected
 
-- **`specs/` at the repo root.** Reasonable, but `docs/` already exists for
-  prose documentation and decision records, and specs fit there
+- **`specifications/` at the repo root.** Reasonable, but `docs/` already
+  exists for prose documentation and decision records, and specs fit there
   comfortably.
-- **`src/generated/specs/`.** Mixes data files with source code under
-  `src/`.
+- **`src/generated/specifications/`.** Mixes data files with source code
+  under `src/`.
 - **Don't commit specs; fetch on demand.** Loses determinism and makes
   spec changes invisible in code review.
 
