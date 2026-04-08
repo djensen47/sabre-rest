@@ -50,3 +50,19 @@ export type {
   LookupAirlineAlliancesInput,
   LookupAirlineAlliancesOutput,
 } from './services/airline-alliance-lookup-v1/types.js';
+export type { BargainFinderMaxV5Service } from './services/bargain-finder-max-v5/service.js';
+export type {
+  CabinClass,
+  FlightSegment,
+  ItineraryLeg,
+  OriginDestination,
+  PassengerCount,
+  PointOfSale,
+  PricedItinerary,
+  SabreMessage,
+  SearchBargainFinderMaxInput,
+  SearchBargainFinderMaxOutput,
+  SegmentEndpoint,
+  TotalFare,
+  TravelPreferences,
+} from './services/bargain-finder-max-v5/types.js';
