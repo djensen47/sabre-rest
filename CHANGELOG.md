@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/djensen47/sabre-rest/compare/v0.7.0...v0.7.1) (2026-04-08)
+
+
+### Bug Fixes
+
+* make bargain-finder-max actually work end-to-end ([#31](https://github.com/djensen47/sabre-rest/issues/31)) ([8e7ea67](https://github.com/djensen47/sabre-rest/commit/8e7ea67ff61ca827083f18ba93929153bbd71594))
+
 ## [0.7.0](https://github.com/djensen47/sabre-rest/compare/v0.6.2...v0.7.0) (2026-04-08)
 
 
