@@ -7,13 +7,55 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # The remaining steps only run when release-please actually created a
+      # release in this workflow run. Running them in the same workflow (rather
+      # than triggering publish.yml on tag push) avoids the GitHub Actions
+      # limitation where workflows triggered by GITHUB_TOKEN cannot trigger
+      # other workflows.
+
+      - if: ${{ steps.release.outputs.release_created }}
+        uses: actions/checkout@v4
+
+      - if: ${{ steps.release.outputs.release_created }}
+        name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+
+      - if: ${{ steps.release.outputs.release_created }}
+        run: npm ci
+
+      - if: ${{ steps.release.outputs.release_created }}
+        name: Lint
+        run: npm run lint
+
+      - if: ${{ steps.release.outputs.release_created }}
+        name: Typecheck
+        run: npm run typecheck
+
+      - if: ${{ steps.release.outputs.release_created }}
+        name: Test
+        run: npm test
+
+      - if: ${{ steps.release.outputs.release_created }}
+        name: Build
+        run: npm run build
+
+      - if: ${{ steps.release.outputs.release_created }}
+        name: Publish to npm
+        run: npm publish --provenance --access public
