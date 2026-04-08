@@ -76,7 +76,7 @@ For each operation, define:
 
 - An **input type** named `<MethodName>Input` (e.g., `LookupAirlinesInput`). Always a single object — no positional parameters, even if there's only one field. This makes future additions non-breaking.
 - An **output type** named `<MethodName>Output` (e.g., `LookupAirlinesOutput`). When the result is a list, wrap it in a property name (`{ airlines: Airline[] }`) so adding sibling fields later is non-breaking.
-- **Domain types** (e.g., `Airline`, `AirlineAlliance`). Plain interfaces, idiomatic camelCase, required fields where the public contract demands them.
+- **Domain types** (e.g., `Airline`, `AirlineAlliance`). Plain interfaces, idiomatic camelCase. **Mirror Sabre's optionality** — if a field is optional in the OAS, it must be optional in the public type. The public type renames and reshapes Sabre's response, but it does not invent stricter required-field rules. Inventing required fields is the root cause of the silent-data-loss bug pattern (see "Don't drop data" below).
 
 **Critical**: do not import anything from `src/generated/` here. This file is the public contract. Generated types are an implementation detail of the mapper.
 
@@ -132,17 +132,26 @@ if (parsed === null || typeof parsed !== 'object') {
 }
 ```
 
-#### Be lenient with the response shape
+#### Don't drop data
 
-Sabre marks most fields optional in the OAS even when they're effectively required. Skip records missing the fields your public type requires rather than failing the whole call. Consumers are better served by partial data than nothing.
+The mapper translates Sabre's response into the public shape. It does **not** decide which records are "useful enough" to keep. Every record Sabre returned ends up in the output, with whatever fields Sabre actually populated.
+
+This rule exists because the obvious-feeling shortcut — "if `AirlineCode` is missing, just skip the row" — is silent data loss dressed up as defensive programming. The consumer asked for what Sabre returned; they get what Sabre returned. Whether to ignore an undercooked record is **business logic** that belongs in the consumer's code, not the library's mapper.
+
+The way to avoid the temptation is to follow the rule from step 5: the public type's optionality matches the OAS. If the OAS marks `AirlineCode` optional, then `Airline.code?: string` in the public type, and the mapper has nothing to "fail" on:
 
 ```ts
-const items: Airline[] = [];
-for (const item of parsed.AirlineInfo ?? []) {
-  if (!item.AirlineCode || !item.AirlineName) continue;
-  items.push({ code: item.AirlineCode, name: item.AirlineName });
-}
+const airlines: Airline[] = (parsed.AirlineInfo ?? []).map((item) => {
+  const airline: Airline = {};
+  if (item.AirlineCode !== undefined) airline.code = item.AirlineCode;
+  if (item.AirlineName !== undefined) airline.name = item.AirlineName;
+  return airline;
+});
 ```
+
+If you find yourself writing `if (!item.X || !item.Y) continue` in a mapper, stop — that's the bug. The fix is to make `X` and `Y` optional in the public type, not to drop the row.
+
+The only thing the mapper *should* refuse is a response that fundamentally isn't shaped like a Sabre response (not JSON, not an object, missing the documented top-level envelope). Those throw `SabreParseError`. Everything else passes through.
 
 #### Pure functions only
 

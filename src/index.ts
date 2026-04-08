@@ -46,6 +46,7 @@ export type {
 export type { AirlineAllianceLookupV1Service } from './services/airline-alliance-lookup-v1/service.js';
 export type {
   AirlineAlliance,
+  AirlineAllianceMember,
   LookupAirlineAlliancesInput,
   LookupAirlineAlliancesOutput,
 } from './services/airline-alliance-lookup-v1/types.js';

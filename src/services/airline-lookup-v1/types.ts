@@ -30,12 +30,20 @@ export interface LookupAirlinesOutput {
   airlines: readonly Airline[];
 }
 
-/** A single airline as returned by the Airline Lookup v1 service. */
+/**
+ * A single airline as returned by the Airline Lookup v1 service.
+ *
+ * Every field is optional because Sabre's spec marks every field
+ * optional. The library does not invent its own required-field rubric;
+ * it surfaces records exactly as Sabre returned them, including ones
+ * where one or more fields are missing. Consumers should defensively
+ * handle `undefined` values.
+ */
 export interface Airline {
-  /** Two-character IATA airline code. */
-  code: string;
-  /** Proper business name (e.g., "Air India Limited"). */
-  name: string;
+  /** Two-character IATA airline code, when populated. */
+  code?: string;
+  /** Proper business name (e.g., "Air India Limited"), when populated. */
+  name?: string;
   /**
    * Common business name (e.g., "Air India"). Often present alongside
    * {@link name} but not always — Sabre omits this field for some
