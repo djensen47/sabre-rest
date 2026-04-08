@@ -43,3 +43,9 @@ export type {
   LookupAirlinesInput,
   LookupAirlinesOutput,
 } from './services/airline-lookup-v1/types.js';
+export type { AirlineAllianceLookupV1Service } from './services/airline-alliance-lookup-v1/service.js';
+export type {
+  AirlineAlliance,
+  LookupAirlineAlliancesInput,
+  LookupAirlineAlliancesOutput,
+} from './services/airline-alliance-lookup-v1/types.js';
