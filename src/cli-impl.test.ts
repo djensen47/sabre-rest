@@ -443,16 +443,31 @@ describe('buildAirlineAllianceLookupInput', () => {
 describe('buildBfmInput', () => {
   it('builds a minimal one-way input from --from / --to / --departure-date', () => {
     // Per the BFM v5 spec, only origin/destination, departure date, and a
-    // passenger group are required. CompanyName and PseudoCityCode are
-    // optional in the OTA POS structure, so the CLI never demands them.
-    // The date-only --departure-date is normalized to the canonical
-    // YYYY-MM-DDTHH:MM:SS form Sabre's schema requires.
+    // passenger group are required. PseudoCityCode is optional in the OTA
+    // POS structure and the CLI doesn't demand it. CompanyName.Code is
+    // also spec-optional, but real-world testing showed Sabre's runtime
+    // rejects requests without it, so the CLI defaults --company-code to
+    // 'TN' (Sabre's Travel Network channel — what every canonical example
+    // body in the spec uses, and what the working monorepo reference
+    // hardcodes). Override per-call with --company-code or per-environment
+    // with SABRE_COMPANY_CODE.
     const out = buildBfmInput({ from: 'JFK', to: 'LHR', 'departure-date': '2025-12-25' }, {});
     expect(out).toEqual({
       originDestinations: [{ from: 'JFK', to: 'LHR', departureDateTime: '2025-12-25T00:00:00' }],
       passengers: [{ type: 'ADT', quantity: 1 }],
-      pointOfSale: {},
+      pointOfSale: { companyCode: 'TN' },
     });
+  });
+
+  it("defaults companyCode to 'TN' when neither --company-code nor SABRE_COMPANY_CODE is set", () => {
+    // The library does NOT hardcode this default — `CompanyName.Code` has
+    // no `default:` keyword in the spec, so the library passes it through
+    // verbatim. The 'TN' default lives in the CLI specifically, where
+    // ergonomic defaults are the right call. This test guards the CLI
+    // behavior; the library mapper's behavior is covered by the BFM
+    // mapper tests.
+    const out = buildBfmInput({ from: 'JFK', to: 'LHR', 'departure-date': '2026-09-25' }, {});
+    expect(out.pointOfSale.companyCode).toBe('TN');
   });
 
   it('adds a return leg when --return-date is supplied; both dates are normalized', () => {
@@ -571,7 +586,8 @@ describe('buildBfmInput', () => {
       },
       {},
     );
-    expect(out.pointOfSale).toEqual({ pseudoCityCode: 'ABCD' });
+    // companyCode defaults to 'TN' when no value is supplied (CLI default).
+    expect(out.pointOfSale).toEqual({ companyCode: 'TN', pseudoCityCode: 'ABCD' });
   });
 
   it('attaches both companyCode and pcc when both are present', () => {

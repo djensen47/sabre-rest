@@ -309,6 +309,21 @@ const KNOWN_CABINS: ReadonlySet<CabinClass> = new Set([
 ]);
 
 /**
+ * Default value the CLI uses for `RequestorID.CompanyName.Code` when the
+ * caller doesn't supply one via `--company-code` or `SABRE_COMPANY_CODE`.
+ *
+ * Sabre's `'TN'` (Travel Network) channel is the right default for a
+ * testing tool because it's what every canonical example body in the
+ * BFM v5 spec uses, and it's what the working reference implementation
+ * at `the-ai-travel-company/monorepo/tools/sabre-cli` hardcodes. The
+ * library deliberately does not hardcode this — `CompanyName.Code` has
+ * no `default:` keyword in the spec, so the library passes it through
+ * verbatim — but the CLI is allowed to be opinionated about ergonomic
+ * defaults at its boundary.
+ */
+const DEFAULT_BFM_COMPANY_CODE = 'TN';
+
+/**
  * Validates a cabin class name. Accepts only the long-form names from
  * {@link CabinClass}; the single-letter Sabre shortcuts (`Y`, `C`, etc.)
  * are deliberately not exposed because they're harder to read at the
@@ -491,9 +506,20 @@ export function buildBfmInput(
 
   const passengers: PassengerCount[] = (values.pax ?? ['ADT:1']).map(parsePassenger);
 
+  // Sabre's BFM v5 spec marks `RequestorID.CompanyName.Code` as not
+  // required, but real-world testing has shown the runtime rejects
+  // requests without it (with the generic "Incorrect GIR response schema
+  // version used" error). The library deliberately stays spec-faithful
+  // and does not hardcode this — but the CLI is allowed to be opinionated
+  // about ergonomic defaults, and `'TN'` (Sabre's "Travel Network" code,
+  // which every canonical example body in the spec uses and which the
+  // working reference at /Users/djensen/code/the-ai-travel-company/
+  // monorepo/tools/sabre-cli/src/commands/bfm-shop.ts also hardcodes)
+  // is the right default for a testing tool. Override per-call with
+  // `--company-code` or per-environment with `SABRE_COMPANY_CODE`.
   const pointOfSale: SearchBargainFinderMaxInput['pointOfSale'] = {};
-  const companyCode = values['company-code'] ?? env.companyCode;
-  if (companyCode) pointOfSale.companyCode = companyCode;
+  const companyCode = values['company-code'] ?? env.companyCode ?? DEFAULT_BFM_COMPANY_CODE;
+  pointOfSale.companyCode = companyCode;
   const pcc = values.pcc ?? env.pcc;
   if (pcc) pointOfSale.pseudoCityCode = pcc;
 
@@ -635,7 +661,7 @@ Flags:
   --carriers <list>         Comma-separated preferred marketing carriers
   --non-stop                Only return non-stop itineraries
   --max-stops <n>           Maximum stops per leg
-  --company-code <code>     Optional agency company code (RequestorID/CompanyName)
+  --company-code <code>     Agency company code (RequestorID/CompanyName). Defaults to TN.
   --pcc <code>              Optional pseudo city code (Source/PseudoCityCode)
   --body <json>             Override input with raw JSON (ignores other flags)
   --base-url <url>          Override SABRE_BASE_URL
