@@ -14,9 +14,6 @@ import type {
 
 const PATH = '/v5/offers/shop';
 
-/** Sabre BFM service version, written into both `Version` and `ResponseVersion`. */
-const SERVICE_VERSION = 'V5';
-
 /**
  * Builds the outgoing {@link SabreRequest} for the `CreateBargainFinderMax`
  * operation.
@@ -60,9 +57,18 @@ export function toSearchRequest(baseUrl: string, input: SearchBargainFinderMaxIn
   }
 
   const ota: Record<string, unknown> = {
-    Version: SERVICE_VERSION,
-    ResponseType: 'GIR-JSON',
-    ResponseVersion: SERVICE_VERSION,
+    // The OTA `Version` field is the major-version digit only — every
+    // canonical example body in `bargain-finder-max.yml` for v5 sends
+    // `"Version": "5"`. The schema property's `example: 'V4'` hint is
+    // stale doc from the v4 era, not the actual format Sabre's runtime
+    // accepts. Sending `"V5"` produces "Incorrect GIR response schema
+    // version used" at runtime.
+    Version: '5',
+    // ResponseType and ResponseVersion are deliberately omitted: neither
+    // is in the spec's required list, none of the canonical example
+    // bodies include them, and Sabre's runtime rejects the values that
+    // looked plausible (`"GIR-JSON"` / `"V5"`) with the same "Incorrect
+    // GIR response schema version used" error. Let Sabre default both.
     POS: { Source: [sourceEntry] },
     OriginDestinationInformation: originDestinationInformation,
     TravelerInfoSummary: {

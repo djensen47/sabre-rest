@@ -40,9 +40,16 @@ describe('toSearchRequest', () => {
     const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
     const ota = body.OTA_AirLowFareSearchRQ as Record<string, unknown>;
 
-    expect(ota.Version).toBe('V5');
-    expect(ota.ResponseType).toBe('GIR-JSON');
-    expect(ota.ResponseVersion).toBe('V5');
+    // The OTA Version field uses the major-version digit only — matches
+    // every canonical example body in the spec for v5. Sending 'V5' here
+    // produces "Incorrect GIR response schema version used" at runtime.
+    expect(ota.Version).toBe('5');
+    // ResponseType and ResponseVersion are deliberately not sent: neither
+    // is in the spec's required list, none of the canonical example bodies
+    // include them, and Sabre's runtime rejected the values that looked
+    // plausible. Regression guard so we don't accidentally re-add them.
+    expect('ResponseType' in ota).toBe(false);
+    expect('ResponseVersion' in ota).toBe(false);
 
     expect(ota.OriginDestinationInformation).toEqual([
       {
