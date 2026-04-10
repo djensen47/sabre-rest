@@ -15,6 +15,10 @@ import {
   type BargainFinderMaxV5Service,
   DefaultBargainFinderMaxV5Service,
 } from './services/bargain-finder-max-v5/service.js';
+import {
+  DefaultMultiAirportCityLookupV1Service,
+  type MultiAirportCityLookupV1Service,
+} from './services/multi-airport-city-lookup-v1/service.js';
 import type { ServiceDeps } from './services/types.js';
 
 /**
@@ -53,6 +57,13 @@ export interface SabreClient {
    * passenger groups, ranked by Sabre's shopping engine.
    */
   readonly bargainFinderMaxV5: BargainFinderMaxV5Service;
+
+  /**
+   * Sabre Multi-Airport City Lookup v1.
+   *
+   * Returns multi-airport city (MAC) codes, optionally filtered by country.
+   */
+  readonly multiAirportCityLookupV1: MultiAirportCityLookupV1Service;
 
   /**
    * Send a request through the configured middleware chain. Used by
@@ -132,11 +143,13 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
   const airlineLookupV1 = new DefaultAirlineLookupV1Service(deps);
   const airlineAllianceLookupV1 = new DefaultAirlineAllianceLookupV1Service(deps);
   const bargainFinderMaxV5 = new DefaultBargainFinderMaxV5Service(deps);
+  const multiAirportCityLookupV1 = new DefaultMultiAirportCityLookupV1Service(deps);
 
   return new DefaultSabreClient(chain, {
     airlineLookupV1,
     airlineAllianceLookupV1,
     bargainFinderMaxV5,
+    multiAirportCityLookupV1,
   });
 }
 
@@ -144,6 +157,7 @@ interface SabreClientServices {
   airlineLookupV1: AirlineLookupV1Service;
   airlineAllianceLookupV1: AirlineAllianceLookupV1Service;
   bargainFinderMaxV5: BargainFinderMaxV5Service;
+  multiAirportCityLookupV1: MultiAirportCityLookupV1Service;
 }
 
 /**
@@ -156,12 +170,14 @@ class DefaultSabreClient implements SabreClient {
   readonly airlineLookupV1: AirlineLookupV1Service;
   readonly airlineAllianceLookupV1: AirlineAllianceLookupV1Service;
   readonly bargainFinderMaxV5: BargainFinderMaxV5Service;
+  readonly multiAirportCityLookupV1: MultiAirportCityLookupV1Service;
 
   constructor(run: (req: SabreRequest) => Promise<SabreResponse>, services: SabreClientServices) {
     this.#run = run;
     this.airlineLookupV1 = services.airlineLookupV1;
     this.airlineAllianceLookupV1 = services.airlineAllianceLookupV1;
     this.bargainFinderMaxV5 = services.bargainFinderMaxV5;
+    this.multiAirportCityLookupV1 = services.multiAirportCityLookupV1;
   }
 
   request(req: SabreRequest): Promise<SabreResponse> {

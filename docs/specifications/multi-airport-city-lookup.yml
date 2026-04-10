@@ -1,0 +1,119 @@
+# https://developer.sabre.com/docs/read/rest_apis/air/utility/multiairport_city_lookup
+openapi: 3.0.0
+info:
+  title: Multi-Airport City Lookup
+  version: v1
+  description: The Multi-Airport City Lookup API returns a list of multi-airport city (MAC) codes.
+servers:
+  - url: https://api.cert.platform.sabre.com
+paths:
+  /v1/lists/supported/cities:
+    get:
+      operationId: multiAirportCityLookup
+      parameters:
+        - name: country
+          in: query
+          required: false
+          description: |
+            2-letter ISO 3166 country code(s).
+
+            Returns MACs for specified countries. If none are specified, all MACs will be returned.
+          example: US
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MultiAirportCityLookupResponse'
+        '400':
+          description: |
+            Bad Request
+
+            - One of the 'country' has an unsupported value '{value}'.
+        '404':
+          description: |
+            Not Found
+
+            - No results were found.
+security:
+  - oauth2_authentication: []
+components:
+  securitySchemes:
+    oauth2_authentication:
+      type: oauth2
+      x-base64-encode-client-credentials: true
+      flows:
+        clientCredentials:
+          tokenUrl: https://api.cert.platform.sabre.com/v2/auth/token
+          scopes: {}
+  schemas:
+    MultiAirportCityLookupResponse:
+      type: object
+      properties:
+        Cities:
+          type: array
+          items:
+            $ref: '#/components/schemas/MultiAirportCity'
+        Links:
+          type: array
+          description: 'Array of links for different types of relations, e.g. self, linkTemplate'
+          items:
+            $ref: '#/components/schemas/ResponseLink'
+    MultiAirportCity:
+      type: object
+      properties:
+        code:
+          type: string
+          example: BER
+          description: Multi-airport city (MAC) code.
+        name:
+          type: string
+          example: Berlin
+          description: City name that is associated with the city code in the `code` object.
+        countryCode:
+          type: string
+          example: DE
+          description: Country code that is associated with the city code in the `code` object.
+        countryName:
+          type: string
+          example: Germany
+          description: The name of the country that corresponds to `countryCode`.
+        regionName:
+          type: string
+          example: Europe
+          description: The name of the region that is assigned to the country.
+        Links:
+          type: array
+          description: 'Array of links for different types of relations, e.g. airportsInCity'
+          items:
+            $ref: '#/components/schemas/CityLink'
+    CityLink:
+      type: object
+      properties:
+        rel:
+          type: string
+          enum:
+            - airportsInCity
+          example: airportsInCity
+          description: Describes relationship between href and current request.
+        href:
+          type: string
+          description: Link to related API request.
+          example: 'https://api.cert.platform.sabre.com/v1/lists/supported/cities/BER/airports'
+    ResponseLink:
+      type: object
+      properties:
+        rel:
+          type: string
+          enum:
+            - self
+            - linkTemplate
+          example: self
+          description: Describes relationship between href and current request.
+        href:
+          type: string
+          description: Link to related API request.
+          example: 'https://api.cert.platform.sabre.com/v1/lists/supported/cities?country=DE'

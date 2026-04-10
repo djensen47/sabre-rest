@@ -66,3 +66,10 @@ export type {
   TotalFare,
   TravelPreferences,
 } from './services/bargain-finder-max-v5/types.js';
+export type { MultiAirportCityLookupV1Service } from './services/multi-airport-city-lookup-v1/service.js';
+export type {
+  CityLink,
+  LookupCitiesInput,
+  LookupCitiesOutput,
+  MultiAirportCity,
+} from './services/multi-airport-city-lookup-v1/types.js';
