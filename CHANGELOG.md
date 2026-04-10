@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/djensen47/sabre-rest/compare/v0.8.0...v0.9.0) (2026-04-10)
+
+
+### Features
+
+* **cli:** add --debug-request flag to print outbound HTTP request ([#36](https://github.com/djensen47/sabre-rest/issues/36)) ([85cfb68](https://github.com/djensen47/sabre-rest/commit/85cfb688b41889f27a3920ca0c880f5b66b17d05))
+
 ## [0.8.0](https://github.com/djensen47/sabre-rest/compare/v0.7.1...v0.8.0) (2026-04-10)
 
 
