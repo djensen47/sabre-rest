@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/djensen47/sabre-rest/compare/v0.7.1...v0.8.0) (2026-04-10)
+
+
+### Features
+
+* add multi-airport city lookup v1 service ([#34](https://github.com/djensen47/sabre-rest/issues/34)) ([68b1e8a](https://github.com/djensen47/sabre-rest/commit/68b1e8a041daa24c4b350a44c7dc83e1da058103))
+* **bfm:** surface fare offers and baggage allowances on priced itineraries ([#33](https://github.com/djensen47/sabre-rest/issues/33)) ([6268dda](https://github.com/djensen47/sabre-rest/commit/6268dda4bee251ceaf001407cd5760df8f6ce682))
+
 ## [0.7.1](https://github.com/djensen47/sabre-rest/compare/v0.7.0...v0.7.1) (2026-04-08)
 
 
