@@ -17,6 +17,7 @@ import { createOAuthV2 } from './auth/oauth-v2.js';
 import { type SabreClient, createSabreClient } from './client.js';
 import { SabreApiResponseError } from './errors/sabre-api-response-error.js';
 import { SabreError } from './errors/sabre-error.js';
+import type { Middleware, SabreRequest } from './http/types.js';
 import type {
   Airline,
   AirlineAlliance,
@@ -102,7 +103,10 @@ export function resolveClientConfig(
 }
 
 /** Constructs the {@link SabreClient} the CLI uses for live calls. */
-export function buildClient(config: ResolvedClientConfig): SabreClient {
+export function buildClient(
+  config: ResolvedClientConfig,
+  middleware?: readonly Middleware[],
+): SabreClient {
   return createSabreClient({
     baseUrl: config.baseUrl,
     auth: createOAuthV2({
@@ -110,7 +114,31 @@ export function buildClient(config: ResolvedClientConfig): SabreClient {
       clientId: config.clientId,
       clientSecret: config.clientSecret,
     }),
+    middleware,
   });
+}
+
+/**
+ * Creates a middleware that dumps the outbound {@link SabreRequest} to
+ * stderr before passing it down the chain. Used by the CLI's
+ * `--debug-request` flag for diagnosing what the library actually sends
+ * to Sabre.
+ */
+export function createDebugRequestMiddleware(io: CliIo): Middleware {
+  return async (req: SabreRequest, next) => {
+    io.stderr.write(`${req.method} ${req.url}\n`);
+    for (const [name, value] of Object.entries(req.headers)) {
+      io.stderr.write(`${name}: ${value}\n`);
+    }
+    if (req.body !== undefined) {
+      try {
+        io.stderr.write(`\n${JSON.stringify(JSON.parse(req.body), null, 2)}\n\n`);
+      } catch {
+        io.stderr.write(`\n${req.body}\n\n`);
+      }
+    }
+    return next(req);
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -558,6 +586,7 @@ export function buildBfmInput(
 const COMMON_OPTIONS = {
   'base-url': { type: 'string' },
   format: { type: 'string' },
+  'debug-request': { type: 'boolean' },
   help: { type: 'boolean', short: 'h' },
 } as const satisfies ParseArgsConfig['options'];
 
@@ -600,6 +629,7 @@ Commands:
 Common flags:
   --base-url <url>          Override SABRE_BASE_URL
   --format json|table       Output format (default: json)
+  --debug-request           Print the outbound HTTP request to stderr
   -h, --help                Show this help (or per-command help)
 
 Environment:
@@ -623,6 +653,7 @@ Flags:
   --body <json>             Override input with raw JSON (ignores other flags)
   --base-url <url>          Override SABRE_BASE_URL
   --format json|table       Output format (default: json)
+  --debug-request           Print the outbound HTTP request to stderr
   -h, --help                Show this help
 
 Examples:
@@ -640,6 +671,7 @@ Flags:
   --body <json>             Override input with raw JSON (ignores other flags)
   --base-url <url>          Override SABRE_BASE_URL
   --format json|table       Output format (default: json)
+  --debug-request           Print the outbound HTTP request to stderr
   -h, --help                Show this help
 
 Examples:
@@ -666,6 +698,7 @@ Flags:
   --body <json>             Override input with raw JSON (ignores other flags)
   --base-url <url>          Override SABRE_BASE_URL
   --format json|table       Output format (default: json). Table is a one-row-per-itinerary summary.
+  --debug-request           Print the outbound HTTP request to stderr
   -h, --help                Show this help
 
 Examples:
@@ -711,7 +744,8 @@ async function airlineLookupCommand(
   }
   const format = parseOutputFormat(values.format);
   const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
-  const client = buildClient(config);
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
   const input = buildAirlineLookupInput(values);
   const result = await client.airlineLookupV1.lookup(input);
   emitResult(result, format, io, () => {
@@ -737,7 +771,8 @@ async function airlineAllianceLookupCommand(
   }
   const format = parseOutputFormat(values.format);
   const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
-  const client = buildClient(config);
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
   const input = buildAirlineAllianceLookupInput(values);
   const result = await client.airlineAllianceLookupV1.lookup(input);
   emitResult(result, format, io, () => {
@@ -763,7 +798,8 @@ async function bargainFinderMaxCommand(
   }
   const format = parseOutputFormat(values.format);
   const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
-  const client = buildClient(config);
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
   const input = buildBfmInput(values, env);
   const result = await client.bargainFinderMaxV5.search(input);
   emitResult(result, format, io, () => {
