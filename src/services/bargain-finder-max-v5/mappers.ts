@@ -2,8 +2,14 @@ import { SabreParseError } from '../../errors/sabre-parse-error.js';
 import type { components } from '../../generated/bargain-finder-max.js';
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type {
+  BaggageAllowance,
+  FareComponent,
+  FareComponentSegment,
+  FareOffer,
   FlightSegment,
   ItineraryLeg,
+  PassengerFare,
+  PassengerTotal,
   PricedItinerary,
   SabreMessage,
   SearchBargainFinderMaxInput,
@@ -180,10 +186,26 @@ export function fromSearchResponse(res: SabreResponse): SearchBargainFinderMaxOu
     }
   }
 
+  const fareComponentById = new Map<number, components['schemas']['FareComponentType']>();
+  for (const fc of root.fareComponentDescs ?? []) {
+    if (typeof fc.id === 'number') {
+      fareComponentById.set(fc.id, fc);
+    }
+  }
+
+  const baggageAllowanceById = new Map<number, components['schemas']['BaggageAllowanceType']>();
+  for (const ba of root.baggageAllowanceDescs ?? []) {
+    if (typeof ba.id === 'number') {
+      baggageAllowanceById.set(ba.id, ba);
+    }
+  }
+
   const itineraries: PricedItinerary[] = [];
   for (const group of root.itineraryGroups ?? []) {
     for (const itin of group.itineraries ?? []) {
-      itineraries.push(buildPricedItinerary(itin, legById, scheduleById));
+      itineraries.push(
+        buildPricedItinerary(itin, legById, scheduleById, fareComponentById, baggageAllowanceById),
+      );
     }
   }
 
@@ -202,6 +224,8 @@ function buildPricedItinerary(
   itin: components['schemas']['ItineraryType'],
   legById: Map<number, components['schemas']['LegType']>,
   scheduleById: Map<number, components['schemas']['ScheduleDescType']>,
+  fareComponentById: Map<number, components['schemas']['FareComponentType']>,
+  baggageAllowanceById: Map<number, components['schemas']['BaggageAllowanceType']>,
 ): PricedItinerary {
   const legs: ItineraryLeg[] = (itin.legs ?? []).map((legRef) => {
     const ref = typeof legRef.ref === 'number' ? legRef.ref : undefined;
@@ -209,12 +233,20 @@ function buildPricedItinerary(
     return buildItineraryLeg(ref, leg, scheduleById);
   });
 
-  const result: PricedItinerary = { legs };
+  const fareOffers: FareOffer[] = (itin.pricingInformation ?? []).map((pi) =>
+    buildFareOffer(pi, fareComponentById, baggageAllowanceById),
+  );
+
+  const result: PricedItinerary = { legs, fareOffers };
 
   if (typeof itin.id === 'number') {
     result.id = itin.id;
   }
 
+  // The top-level totalFare / validatingCarrierCode / distributionModel
+  // fields mirror `fareOffers[0]` for the common single-offer case. They
+  // predate the `fareOffers` field and are kept here unchanged so existing
+  // consumers see no behavior change.
   const pricing = (itin.pricingInformation ?? [])[0];
   const totalFare = extractTotalFare(pricing?.fare);
   if (totalFare !== undefined) {
@@ -228,6 +260,149 @@ function buildPricedItinerary(
   }
 
   return result;
+}
+
+function buildFareOffer(
+  pricing: components['schemas']['PricingInformationType'],
+  fareComponentById: Map<number, components['schemas']['FareComponentType']>,
+  baggageAllowanceById: Map<number, components['schemas']['BaggageAllowanceType']>,
+): FareOffer {
+  const passengerFares: PassengerFare[] = [];
+  for (const entry of pricing.fare?.passengerInfoList ?? []) {
+    // Skip "passenger not available" stubs — these mean Sabre couldn't
+    // price the requested passenger type for this offer. Surfacing them as
+    // empty PassengerFare records would be misleading.
+    if (!entry.passengerInfo) continue;
+    passengerFares.push(
+      buildPassengerFare(entry.passengerInfo, fareComponentById, baggageAllowanceById),
+    );
+  }
+
+  const offer: FareOffer = { passengerFares };
+  const totalFare = extractTotalFare(pricing.fare);
+  if (totalFare !== undefined) {
+    offer.totalFare = totalFare;
+  }
+  if (pricing.fare?.validatingCarrierCode !== undefined) {
+    offer.validatingCarrierCode = pricing.fare.validatingCarrierCode;
+  }
+  if (pricing.distributionModel !== undefined) {
+    offer.distributionModel = pricing.distributionModel;
+  }
+  return offer;
+}
+
+function buildPassengerFare(
+  info: components['schemas']['PassengerInformationType'],
+  fareComponentById: Map<number, components['schemas']['FareComponentType']>,
+  baggageAllowanceById: Map<number, components['schemas']['BaggageAllowanceType']>,
+): PassengerFare {
+  const fareComponents: FareComponent[] = (info.fareComponents ?? []).map((idEntry) => {
+    const desc = typeof idEntry.ref === 'number' ? fareComponentById.get(idEntry.ref) : undefined;
+    return buildFareComponent(idEntry, desc);
+  });
+
+  const baggageAllowances: BaggageAllowance[] = [];
+  for (const bag of info.baggageInformation ?? []) {
+    const allowanceRef = bag.allowance?.ref;
+    // BaggageInformation can carry charge-only entries with no allowance
+    // ref — those belong to the (deferred) charges surface, not allowances.
+    if (typeof allowanceRef !== 'number') continue;
+    baggageAllowances.push(buildBaggageAllowance(bag, baggageAllowanceById.get(allowanceRef)));
+  }
+
+  const out: PassengerFare = { fareComponents, baggageAllowances };
+
+  if (info.passengerType !== undefined) out.passengerType = info.passengerType;
+  if (typeof info.passengerNumber === 'number') out.passengerNumber = info.passengerNumber;
+  if (typeof info.total === 'number') out.passengerCount = info.total;
+  if (info.lastTicketDate !== undefined) out.lastTicketDate = info.lastTicketDate;
+  if (info.lastTicketTime !== undefined) out.lastTicketTime = info.lastTicketTime;
+  if (info.nonRefundable === true) out.nonRefundable = info.nonRefundable;
+
+  const total = extractPassengerTotal(info.passengerTotalFare);
+  if (total !== undefined) out.total = total;
+
+  return out;
+}
+
+function buildFareComponent(
+  idEntry: components['schemas']['FareComponentIDType'],
+  desc: components['schemas']['FareComponentType'] | undefined,
+): FareComponent {
+  const segments: FareComponentSegment[] = [];
+  for (const segEntry of idEntry.segments ?? []) {
+    // ARUNK (surface) entries carry no booking data — skip them.
+    if (!segEntry.segment) continue;
+    segments.push(buildFareComponentSegment(segEntry.segment));
+  }
+
+  const out: FareComponent = { segments };
+
+  if (idEntry.beginAirport !== undefined) out.beginAirport = idEntry.beginAirport;
+  if (idEntry.endAirport !== undefined) out.endAirport = idEntry.endAirport;
+
+  if (desc) {
+    if (desc.fareBasisCode !== undefined) out.fareBasisCode = desc.fareBasisCode;
+    if (desc.cabinCode !== undefined) out.cabinCode = desc.cabinCode;
+    if (desc.governingCarrier !== undefined) out.governingCarrier = desc.governingCarrier;
+    if (desc.farePassengerType !== undefined) out.farePassengerType = desc.farePassengerType;
+  }
+
+  return out;
+}
+
+function buildFareComponentSegment(
+  seg: components['schemas']['SegmentType'],
+): FareComponentSegment {
+  const out: FareComponentSegment = {};
+  if (seg.bookingCode !== undefined) out.bookingCode = seg.bookingCode;
+  if (seg.cabinCode !== undefined) out.cabinCode = seg.cabinCode;
+  if (seg.mealCode !== undefined) out.mealCode = seg.mealCode;
+  return out;
+}
+
+function buildBaggageAllowance(
+  info: components['schemas']['BaggageInformationType'],
+  allowance: components['schemas']['BaggageAllowanceType'] | undefined,
+): BaggageAllowance {
+  const segmentIndices: number[] = [];
+  for (const seg of info.segments ?? []) {
+    if (typeof seg.id === 'number') segmentIndices.push(seg.id);
+  }
+
+  const descriptions: string[] = [];
+  if (typeof allowance?.description1 === 'string') descriptions.push(allowance.description1);
+  if (typeof allowance?.description2 === 'string') descriptions.push(allowance.description2);
+
+  const out: BaggageAllowance = { segmentIndices, descriptions };
+
+  if (info.airlineCode !== undefined) out.airlineCode = info.airlineCode;
+  if (info.provisionType !== undefined) out.provisionType = info.provisionType;
+
+  if (allowance) {
+    if (typeof allowance.pieceCount === 'number') out.pieceCount = allowance.pieceCount;
+    if (typeof allowance.weight === 'number') out.weight = allowance.weight;
+    if (typeof allowance.unit === 'string') out.weightUnit = allowance.unit;
+  }
+
+  return out;
+}
+
+function extractPassengerTotal(
+  total: components['schemas']['PassengerTotalFareType'] | undefined,
+): PassengerTotal | undefined {
+  if (!total) return undefined;
+  const out: PassengerTotal = {};
+  // PassengerTotalFareType has `totalFare: number` and `currency: string`
+  // marked as required in the spec, but the library never assumes the wire
+  // matches its own spec — every field is treated as optional.
+  if (typeof total.totalFare === 'number') out.totalAmount = total.totalFare;
+  if (typeof total.currency === 'string') out.currency = total.currency;
+  if (typeof total.baseFareAmount === 'number') out.baseFareAmount = total.baseFareAmount;
+  if (typeof total.baseFareCurrency === 'string') out.baseFareCurrency = total.baseFareCurrency;
+  if (typeof total.totalTaxAmount === 'number') out.totalTaxAmount = total.totalTaxAmount;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function buildItineraryLeg(

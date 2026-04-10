@@ -380,8 +380,16 @@ describe('fromSearchResponse', () => {
     );
 
     expect(out.itineraries).toHaveLength(2);
-    expect(out.itineraries[0]).toEqual({ id: 1, legs: [] });
-    expect(out.itineraries[1]).toEqual({ id: 2, legs: [] });
+    // The second itinerary's empty `passengerInfoList` still produces a
+    // fare offer (with an empty passengerFares array) because a pricing
+    // entry was present. The first itinerary has no pricing entries at all
+    // and thus an empty `fareOffers` array.
+    expect(out.itineraries[0]).toEqual({ id: 1, legs: [], fareOffers: [] });
+    expect(out.itineraries[1]).toEqual({
+      id: 2,
+      legs: [],
+      fareOffers: [{ passengerFares: [] }],
+    });
   });
 
   it('preserves segments whose schedule is missing fields, including a missing carrier', () => {
@@ -540,5 +548,478 @@ describe('fromSearchResponse', () => {
 
   it('throws SabreParseError when groupedItineraryResponse is missing', () => {
     expect(() => fromSearchResponse(okResponse({}))).toThrow(SabreParseError);
+  });
+});
+
+describe('fareOffers', () => {
+  it('surfaces a single offer with fare components, segment booking codes, and a baggage allowance', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          fareComponentDescs: [
+            {
+              id: 10,
+              fareBasisCode: 'TKEE4M',
+              cabinCode: 'Y',
+              governingCarrier: 'BA',
+              farePassengerType: 'ADT',
+            },
+            {
+              id: 11,
+              fareBasisCode: 'TLEE4M',
+              cabinCode: 'Y',
+              governingCarrier: 'BA',
+              farePassengerType: 'ADT',
+            },
+          ],
+          baggageAllowanceDescs: [
+            {
+              id: 20,
+              description1: 'UP TO 50 POUNDS/23 KILOGRAMS',
+              description2: 'UP TO 62 LINEAR INCHES/158 LINEAR CENTIMETERS',
+              pieceCount: 1,
+              weight: 23,
+              unit: 'kg',
+            },
+          ],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      distributionModel: 'ATPCO',
+                      fare: {
+                        validatingCarrierCode: 'BA',
+                        totalFare: { totalPrice: 800, currency: 'USD' },
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              passengerNumber: 1,
+                              total: 1,
+                              nonRefundable: true,
+                              lastTicketDate: '2026-04-30',
+                              lastTicketTime: '23:59',
+                              passengerTotalFare: {
+                                totalFare: 800,
+                                currency: 'USD',
+                                baseFareAmount: 700,
+                                totalTaxAmount: 100,
+                              },
+                              fareComponents: [
+                                {
+                                  ref: 10,
+                                  beginAirport: 'JFK',
+                                  endAirport: 'LHR',
+                                  segments: [
+                                    {
+                                      segment: { bookingCode: 'T', cabinCode: 'Y', mealCode: 'B' },
+                                    },
+                                  ],
+                                },
+                                {
+                                  ref: 11,
+                                  beginAirport: 'LHR',
+                                  endAirport: 'JFK',
+                                  segments: [{ segment: { bookingCode: 'T', cabinCode: 'Y' } }],
+                                },
+                              ],
+                              baggageInformation: [
+                                {
+                                  airlineCode: 'BA',
+                                  provisionType: 'A',
+                                  allowance: { ref: 20 },
+                                  segments: [{ id: 0 }, { id: 1 }],
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const itin = out.itineraries[0];
+    expect(itin?.fareOffers).toHaveLength(1);
+    const offer = itin?.fareOffers[0];
+    expect(offer?.totalFare).toEqual({ totalAmount: 800, currency: 'USD' });
+    expect(offer?.validatingCarrierCode).toBe('BA');
+    expect(offer?.distributionModel).toBe('ATPCO');
+    expect(offer?.passengerFares).toHaveLength(1);
+
+    const pf = offer?.passengerFares[0];
+    expect(pf).toEqual({
+      passengerType: 'ADT',
+      passengerNumber: 1,
+      passengerCount: 1,
+      nonRefundable: true,
+      lastTicketDate: '2026-04-30',
+      lastTicketTime: '23:59',
+      total: {
+        totalAmount: 800,
+        currency: 'USD',
+        baseFareAmount: 700,
+        totalTaxAmount: 100,
+      },
+      fareComponents: [
+        {
+          fareBasisCode: 'TKEE4M',
+          cabinCode: 'Y',
+          governingCarrier: 'BA',
+          farePassengerType: 'ADT',
+          beginAirport: 'JFK',
+          endAirport: 'LHR',
+          segments: [{ bookingCode: 'T', cabinCode: 'Y', mealCode: 'B' }],
+        },
+        {
+          fareBasisCode: 'TLEE4M',
+          cabinCode: 'Y',
+          governingCarrier: 'BA',
+          farePassengerType: 'ADT',
+          beginAirport: 'LHR',
+          endAirport: 'JFK',
+          segments: [{ bookingCode: 'T', cabinCode: 'Y' }],
+        },
+      ],
+      baggageAllowances: [
+        {
+          segmentIndices: [0, 1],
+          airlineCode: 'BA',
+          provisionType: 'A',
+          pieceCount: 1,
+          weight: 23,
+          weightUnit: 'kg',
+          descriptions: [
+            'UP TO 50 POUNDS/23 KILOGRAMS',
+            'UP TO 62 LINEAR INCHES/158 LINEAR CENTIMETERS',
+          ],
+        },
+      ],
+    });
+  });
+
+  it('surfaces every pricingInformation entry as a separate fareOffer; top-level fields mirror [0]', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      distributionModel: 'ATPCO',
+                      fare: {
+                        validatingCarrierCode: 'BA',
+                        totalFare: { totalPrice: 800, currency: 'USD' },
+                        passengerInfoList: [],
+                      },
+                    },
+                    {
+                      distributionModel: 'NDC',
+                      fare: {
+                        validatingCarrierCode: 'AA',
+                        totalFare: { totalPrice: 950, currency: 'USD' },
+                        passengerInfoList: [],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const itin = out.itineraries[0];
+    expect(itin?.fareOffers).toHaveLength(2);
+    expect(itin?.fareOffers[0]?.distributionModel).toBe('ATPCO');
+    expect(itin?.fareOffers[0]?.totalFare).toEqual({ totalAmount: 800, currency: 'USD' });
+    expect(itin?.fareOffers[1]?.distributionModel).toBe('NDC');
+    expect(itin?.fareOffers[1]?.totalFare).toEqual({ totalAmount: 950, currency: 'USD' });
+    // Top-level fields still mirror the first pricing entry, unchanged.
+    expect(itin?.totalFare).toEqual({ totalAmount: 800, currency: 'USD' });
+    expect(itin?.validatingCarrierCode).toBe('BA');
+    expect(itin?.distributionModel).toBe('ATPCO');
+  });
+
+  it('surfaces multiple passengers within a single offer with their own fare components', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          fareComponentDescs: [
+            { id: 30, fareBasisCode: 'ADTFARE', cabinCode: 'Y' },
+            { id: 31, fareBasisCode: 'CHDFARE', cabinCode: 'Y' },
+          ],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [
+                                { ref: 30, beginAirport: 'JFK', endAirport: 'LHR', segments: [] },
+                              ],
+                            },
+                          },
+                          {
+                            passengerInfo: {
+                              passengerType: 'CHD',
+                              fareComponents: [
+                                { ref: 31, beginAirport: 'JFK', endAirport: 'LHR', segments: [] },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const fares = out.itineraries[0]?.fareOffers[0]?.passengerFares;
+    expect(fares).toHaveLength(2);
+    expect(fares?.[0]?.passengerType).toBe('ADT');
+    expect(fares?.[0]?.fareComponents[0]?.fareBasisCode).toBe('ADTFARE');
+    expect(fares?.[1]?.passengerType).toBe('CHD');
+    expect(fares?.[1]?.fareComponents[0]?.fareBasisCode).toBe('CHDFARE');
+  });
+
+  it('preserves a fare component with an unresolved ref using only the inline begin/end airports', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          fareComponentDescs: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [
+                                {
+                                  ref: 999,
+                                  beginAirport: 'JFK',
+                                  endAirport: 'LHR',
+                                  segments: [{ segment: { bookingCode: 'Y' } }],
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const fc = out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.fareComponents[0];
+    expect(fc).toEqual({
+      beginAirport: 'JFK',
+      endAirport: 'LHR',
+      segments: [{ bookingCode: 'Y' }],
+    });
+  });
+
+  it('preserves a baggage allowance with an unresolved ref using only the inline info', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          baggageAllowanceDescs: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [],
+                              baggageInformation: [
+                                {
+                                  airlineCode: 'BA',
+                                  provisionType: 'A',
+                                  allowance: { ref: 999 },
+                                  segments: [{ id: 0 }],
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const bag = out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.baggageAllowances[0];
+    expect(bag).toEqual({
+      segmentIndices: [0],
+      airlineCode: 'BA',
+      provisionType: 'A',
+      descriptions: [],
+    });
+  });
+
+  it('skips passenger entries that are passengerNotAvailable stubs', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [],
+                            },
+                          },
+                          {
+                            passengerNotAvailableInfo: { passengerType: 'CHD' },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const fares = out.itineraries[0]?.fareOffers[0]?.passengerFares;
+    expect(fares).toHaveLength(1);
+    expect(fares?.[0]?.passengerType).toBe('ADT');
+  });
+
+  it('produces an empty fareOffers array for an itinerary with no pricingInformation', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          itineraryGroups: [
+            {
+              itineraries: [{ id: 1 }],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(out.itineraries[0]?.fareOffers).toEqual([]);
+    expect(out.itineraries[0]?.totalFare).toBeUndefined();
+    expect(out.itineraries[0]?.validatingCarrierCode).toBeUndefined();
+    expect(out.itineraries[0]?.distributionModel).toBeUndefined();
+  });
+
+  it('skips ARUNK (surface) entries inside fare component segments without crashing', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [
+                                {
+                                  ref: 1,
+                                  beginAirport: 'JFK',
+                                  endAirport: 'LAX',
+                                  segments: [
+                                    { segment: { bookingCode: 'Y' } },
+                                    { surface: {} },
+                                    { segment: { bookingCode: 'B' } },
+                                  ],
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const segs = out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.fareComponents[0]?.segments;
+    expect(segs).toEqual([{ bookingCode: 'Y' }, { bookingCode: 'B' }]);
   });
 });

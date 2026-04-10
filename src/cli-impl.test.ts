@@ -234,15 +234,18 @@ describe('formatTotalFare', () => {
     expect(
       formatTotalFare({
         legs: [],
+        fareOffers: [],
         totalFare: { totalAmount: 1806.62, currency: 'USD' },
       }),
     ).toBe('1806.62 USD');
   });
 
   it('renders ? when total fare is missing or has missing fields', () => {
-    expect(formatTotalFare({ legs: [] })).toBe('?');
-    expect(formatTotalFare({ legs: [], totalFare: { totalAmount: 100 } })).toBe('?');
-    expect(formatTotalFare({ legs: [], totalFare: { currency: 'USD' } })).toBe('?');
+    expect(formatTotalFare({ legs: [], fareOffers: [] })).toBe('?');
+    expect(formatTotalFare({ legs: [], fareOffers: [], totalFare: { totalAmount: 100 } })).toBe(
+      '?',
+    );
+    expect(formatTotalFare({ legs: [], fareOffers: [], totalFare: { currency: 'USD' } })).toBe('?');
   });
 });
 
@@ -283,6 +286,7 @@ describe('bfmToTableRows', () => {
           totalFare: { totalAmount: 1806.62, currency: 'USD' },
           validatingCarrierCode: 'BA',
           distributionModel: 'ATPCO',
+          fareOffers: [],
         },
       ],
       messages: [],
@@ -295,7 +299,10 @@ describe('bfmToTableRows', () => {
 
   it('preserves itineraries with missing fields by rendering ? / empty cells', () => {
     const out = bfmToTableRows({
-      itineraries: [{ legs: [] }, { id: 2, legs: [], totalFare: { totalAmount: 100 } }],
+      itineraries: [
+        { legs: [], fareOffers: [] },
+        { id: 2, legs: [], fareOffers: [], totalFare: { totalAmount: 100 } },
+      ],
       messages: [],
     });
     expect(out.rows).toEqual([
