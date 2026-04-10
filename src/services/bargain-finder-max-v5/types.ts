@@ -8,10 +8,15 @@
  * BFM is a large API; this v1 of the public surface deliberately covers
  * only the common low-fare-search use case (origin/destination, dates,
  * passenger types, basic preferences) and the corresponding priced
- * itinerary results. Less-common features (NDC brand programs, baggage
- * subcategories, Universal Product Attributes, exchange/reissue, handling
- * markups, statistics) are intentionally omitted and may be added later
+ * itinerary results. Less-common features (NDC brand programs, Universal
+ * Product Attributes, exchange/reissue, handling markups, statistics, fare
+ * rules, change/refund penalties, tax breakdowns, baggage charges,
+ * alternate-date flavors) are intentionally omitted and may be added later
  * non-breakingly.
+ *
+ * Baggage *allowances* are surfaced per-passenger on each fare offer;
+ * baggage *charges* (the "pay $X for your 2nd bag" side of the data) remain
+ * deferred.
  */
 
 /**
@@ -197,6 +202,206 @@ export interface PricedItinerary {
    * content).
    */
   distributionModel?: 'ATPCO' | 'NDC' | 'API';
+  /**
+   * All fare offers Sabre returned for this itinerary, in wire order. Each
+   * entry corresponds to one `pricingInformation` entry in the response.
+   * Most responses carry a single offer; alternate pricing flavors can
+   * produce multiple. The top-level {@link totalFare},
+   * {@link validatingCarrierCode}, and {@link distributionModel} fields on
+   * this itinerary mirror `fareOffers[0]` for the common single-offer case
+   * and are preserved as a convenience for consumers that don't need the
+   * per-passenger breakdown.
+   */
+  fareOffers: readonly FareOffer[];
+}
+
+/**
+ * A single fare offer on a priced itinerary.
+ *
+ * Each entry in {@link PricedItinerary.fareOffers} corresponds to one
+ * `pricingInformation` entry in the wire response. A single itinerary can
+ * carry multiple offers when Sabre returns alternate pricing flavors — the
+ * library surfaces all of them in wire order and does not dedupe.
+ */
+export interface FareOffer {
+  /**
+   * Per-passenger fare detail. One entry per priced passenger. Sabre's
+   * "passenger not available" stubs (no fare for a requested passenger type)
+   * are skipped rather than emitted as empty entries.
+   */
+  passengerFares: readonly PassengerFare[];
+  /**
+   * Aggregate total fare across all passengers for this offer, when
+   * populated. For the first offer this value mirrors the top-level
+   * {@link PricedItinerary.totalFare}.
+   */
+  totalFare?: TotalFare;
+  /** Validating carrier for this offer, when populated. */
+  validatingCarrierCode?: string;
+  /** Content model for this offer, when populated. */
+  distributionModel?: 'ATPCO' | 'NDC' | 'API';
+}
+
+/**
+ * Per-passenger fare detail within a {@link FareOffer}.
+ *
+ * Captures the fare basis code, booking classes per segment, and baggage
+ * allowances that Sabre filed for this passenger on this offer.
+ */
+export interface PassengerFare {
+  /**
+   * Sabre passenger type code, e.g. `ADT`, `CHD`, `INF`. Absent only when
+   * Sabre omitted the field entirely (shouldn't happen in practice — the
+   * generated spec marks it required — but the library never fabricates).
+   */
+  passengerType?: string;
+  /** Sabre's passenger number within the offer, when populated. */
+  passengerNumber?: number;
+  /**
+   * Number of passengers of this type covered by this fare entry, when
+   * Sabre populated it.
+   */
+  passengerCount?: number;
+  /**
+   * Flat per-passenger total fare, when populated. This is distinct from
+   * {@link FareOffer.totalFare} (which sums across all passengers) — the
+   * wire shapes the two differently and the library preserves both.
+   */
+  total?: PassengerTotal;
+  /** Last date to ticket (`YYYY-MM-DD`), when populated. */
+  lastTicketDate?: string;
+  /** Last time to ticket (`HH:MM`), when populated. */
+  lastTicketTime?: string;
+  /** True when Sabre marked the fare as non-refundable. */
+  nonRefundable?: boolean;
+  /**
+   * Fare components in pricing order. Each component covers a contiguous
+   * chunk of the journey (often one origin/destination), with its own fare
+   * basis code and per-segment booking classes. Empty when Sabre returned
+   * no components.
+   */
+  fareComponents: readonly FareComponent[];
+  /**
+   * Baggage allowances attached to this passenger, in wire order. Empty
+   * when Sabre returned none.
+   */
+  baggageAllowances: readonly BaggageAllowance[];
+}
+
+/**
+ * Flat per-passenger total fare.
+ *
+ * Distinct shape from {@link TotalFare} because the wire uses a flat
+ * `totalFare: number` here rather than the nested `totalPrice?: number` used
+ * at the offer level.
+ */
+export interface PassengerTotal {
+  /** Total fare for this passenger, when populated. */
+  totalAmount?: number;
+  /** ISO 4217 currency code, when populated. */
+  currency?: string;
+  /** Base fare amount before taxes, when populated. */
+  baseFareAmount?: number;
+  /** Currency for {@link baseFareAmount}, when different from {@link currency}. */
+  baseFareCurrency?: string;
+  /** Total taxes, when populated. */
+  totalTaxAmount?: number;
+}
+
+/**
+ * A single fare component within a {@link PassengerFare}.
+ *
+ * Sabre files fares per contiguous chunk of journey (typically one
+ * origin/destination). Each component carries a fare basis code plus
+ * per-segment booking classes.
+ *
+ * The library does **not** correlate a fare component's segments back to
+ * {@link ItineraryLeg.segments} because the wire provides no reliable way
+ * to do so: segments are matched only by position and ARUNK (surface)
+ * entries can offset the index. Consumers that need to zip fare detail
+ * onto flight segments should use the component's {@link beginAirport} and
+ * {@link endAirport} plus the per-segment order.
+ */
+export interface FareComponent {
+  /** Fare basis code (e.g. `TKEE4M`), when populated. */
+  fareBasisCode?: string;
+  /**
+   * Cabin code as filed on the fare (e.g. `Y`, `C`, `F`), when populated.
+   * This is the component-level default; individual segments may carry
+   * their own {@link FareComponentSegment.cabinCode} override.
+   */
+  cabinCode?: string;
+  /** Governing carrier IATA code, when populated. */
+  governingCarrier?: string;
+  /**
+   * Passenger type this fare was filed for (e.g. `ADT`), when populated.
+   * May differ from the enclosing {@link PassengerFare.passengerType} when
+   * Sabre applied a pricing substitution.
+   */
+  farePassengerType?: string;
+  /** IATA code of the first airport covered by the component, when populated. */
+  beginAirport?: string;
+  /** IATA code of the last airport covered by the component, when populated. */
+  endAirport?: string;
+  /**
+   * Per-segment detail in wire order. Empty when Sabre returned no
+   * segments, or when every segment was an ARUNK (surface) entry — the
+   * library skips surface entries because they have no booking data.
+   */
+  segments: readonly FareComponentSegment[];
+}
+
+/** Per-segment fare detail within a {@link FareComponent}. */
+export interface FareComponentSegment {
+  /**
+   * Booking class (RBD) Sabre assigned to this segment for this fare,
+   * when populated. This is the per-fare RBD — the {@link
+   * FlightSegment.scheduleBookingClass} value from the schedule side is
+   * the schedule's default RBD and may differ.
+   */
+  bookingCode?: string;
+  /** Cabin code (e.g. `Y`, `B`) for this segment, when populated. */
+  cabinCode?: string;
+  /** Meal code, when populated. */
+  mealCode?: string;
+}
+
+/**
+ * Baggage allowance attached to a priced passenger.
+ *
+ * Baggage *charges* (the "pay $X for the 2nd bag" side of the data) are
+ * intentionally omitted from this v1 surface and may be added later
+ * non-breakingly.
+ */
+export interface BaggageAllowance {
+  /**
+   * 0-based itinerary-wide segment indices this allowance covers, in wire
+   * order. Sabre indexes across the entire itinerary (flat), not per leg —
+   * the library passes the index values through verbatim without any
+   * leg-relative translation.
+   */
+  segmentIndices: readonly number[];
+  /** Airline that owns the baggage (IATA code), when populated. */
+  airlineCode?: string;
+  /**
+   * Provision type code passed through from the wire. The common value is
+   * `A` (check-in allowance); other provision types (`C` = day-of-checkin
+   * charges, etc.) appear when Sabre returns the full set — consumers that
+   * only want the included-in-fare allowance should filter on `A`.
+   */
+  provisionType?: string;
+  /** Total pieces allowed, when populated. */
+  pieceCount?: number;
+  /** Total allowed weight, when populated. */
+  weight?: number;
+  /** Weight unit — Sabre returns `lbs` or `kg`. */
+  weightUnit?: string;
+  /**
+   * Free-text description lines exactly as Sabre returned them (may
+   * include dimensions, carrier-specific rules). Empty when Sabre sent
+   * none. Lines are preserved in wire order.
+   */
+  descriptions: readonly string[];
 }
 
 /** A single leg of an itinerary, made up of zero or more flight segments. */
