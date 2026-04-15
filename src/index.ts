@@ -73,3 +73,10 @@ export type {
   LookupCitiesOutput,
   MultiAirportCity,
 } from './services/multi-airport-city-lookup-v1/types.js';
+export type { RevalidateItineraryV5Service } from './services/revalidate-itinerary-v5/service.js';
+export type {
+  RevalidateFlight,
+  RevalidateItineraryInput,
+  RevalidateItineraryOutput,
+  RevalidateOriginDestination,
+} from './services/revalidate-itinerary-v5/types.js';

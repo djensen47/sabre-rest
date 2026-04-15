@@ -19,6 +19,10 @@ import {
   DefaultMultiAirportCityLookupV1Service,
   type MultiAirportCityLookupV1Service,
 } from './services/multi-airport-city-lookup-v1/service.js';
+import {
+  DefaultRevalidateItineraryV5Service,
+  type RevalidateItineraryV5Service,
+} from './services/revalidate-itinerary-v5/service.js';
 import type { ServiceDeps } from './services/types.js';
 
 /**
@@ -64,6 +68,14 @@ export interface SabreClient {
    * Returns multi-airport city (MAC) codes, optionally filtered by country.
    */
   readonly multiAirportCityLookupV1: MultiAirportCityLookupV1Service;
+
+  /**
+   * Sabre Revalidate Itinerary v5.
+   *
+   * Rechecks availability and pricing for a specific itinerary option
+   * without booking it. NDC content is not supported.
+   */
+  readonly revalidateItineraryV5: RevalidateItineraryV5Service;
 
   /**
    * Send a request through the configured middleware chain. Used by
@@ -144,12 +156,14 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
   const airlineAllianceLookupV1 = new DefaultAirlineAllianceLookupV1Service(deps);
   const bargainFinderMaxV5 = new DefaultBargainFinderMaxV5Service(deps);
   const multiAirportCityLookupV1 = new DefaultMultiAirportCityLookupV1Service(deps);
+  const revalidateItineraryV5 = new DefaultRevalidateItineraryV5Service(deps);
 
   return new DefaultSabreClient(chain, {
     airlineLookupV1,
     airlineAllianceLookupV1,
     bargainFinderMaxV5,
     multiAirportCityLookupV1,
+    revalidateItineraryV5,
   });
 }
 
@@ -158,6 +172,7 @@ interface SabreClientServices {
   airlineAllianceLookupV1: AirlineAllianceLookupV1Service;
   bargainFinderMaxV5: BargainFinderMaxV5Service;
   multiAirportCityLookupV1: MultiAirportCityLookupV1Service;
+  revalidateItineraryV5: RevalidateItineraryV5Service;
 }
 
 /**
@@ -171,6 +186,7 @@ class DefaultSabreClient implements SabreClient {
   readonly airlineAllianceLookupV1: AirlineAllianceLookupV1Service;
   readonly bargainFinderMaxV5: BargainFinderMaxV5Service;
   readonly multiAirportCityLookupV1: MultiAirportCityLookupV1Service;
+  readonly revalidateItineraryV5: RevalidateItineraryV5Service;
 
   constructor(run: (req: SabreRequest) => Promise<SabreResponse>, services: SabreClientServices) {
     this.#run = run;
@@ -178,6 +194,7 @@ class DefaultSabreClient implements SabreClient {
     this.airlineAllianceLookupV1 = services.airlineAllianceLookupV1;
     this.bargainFinderMaxV5 = services.bargainFinderMaxV5;
     this.multiAirportCityLookupV1 = services.multiAirportCityLookupV1;
+    this.revalidateItineraryV5 = services.revalidateItineraryV5;
   }
 
   request(req: SabreRequest): Promise<SabreResponse> {

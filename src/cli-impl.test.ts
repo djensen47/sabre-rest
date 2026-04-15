@@ -8,6 +8,7 @@ import {
   buildAirlineAllianceLookupInput,
   buildAirlineLookupInput,
   buildBfmInput,
+  buildRevalidateInput,
   formatJson,
   formatTotalFare,
   normalizeBfmDateTime,
@@ -19,6 +20,7 @@ import {
   renderError,
   renderTable,
   resolveClientConfig,
+  revalidateToTableRows,
   splitCommaList,
   summarizeLeg,
 } from './cli-impl.js';
@@ -640,6 +642,131 @@ describe('buildBfmInput', () => {
   });
 });
 
+describe('buildRevalidateInput', () => {
+  const minFlags = {
+    from: 'JFK',
+    to: 'LHR',
+    'departure-date': '2025-12-25',
+    carrier: 'BA',
+    'flight-number': '178',
+    'flight-depart': '2025-12-25T21:00:00',
+    'flight-arrive': '2025-12-26T09:00:00',
+  };
+
+  it('builds a single-leg single-flight revalidation from flags', () => {
+    const out = buildRevalidateInput(minFlags, {});
+    expect(out.originDestinations).toHaveLength(1);
+    const od = out.originDestinations[0];
+    expect(od?.from).toBe('JFK');
+    expect(od?.to).toBe('LHR');
+    expect(od?.departureDateTime).toBe('2025-12-25T00:00:00');
+    expect(od?.flights).toHaveLength(1);
+    const f = od?.flights[0];
+    expect(f?.marketingCarrier).toBe('BA');
+    expect(f?.flightNumber).toBe(178);
+    expect(f?.from).toBe('JFK');
+    expect(f?.to).toBe('LHR');
+  });
+
+  it('uses --flight-from and --flight-to when provided', () => {
+    const out = buildRevalidateInput({ ...minFlags, 'flight-from': 'EWR', 'flight-to': 'LGW' }, {});
+    const f = out.originDestinations[0]?.flights[0];
+    expect(f?.from).toBe('EWR');
+    expect(f?.to).toBe('LGW');
+  });
+
+  it('includes classOfService when --class is provided', () => {
+    const out = buildRevalidateInput({ ...minFlags, class: 'Y' }, {});
+    expect(out.originDestinations[0]?.flights[0]?.classOfService).toBe('Y');
+  });
+
+  it('defaults passengers to ADT:1', () => {
+    const out = buildRevalidateInput(minFlags, {});
+    expect(out.passengers).toEqual([{ type: 'ADT', quantity: 1 }]);
+  });
+
+  it('defaults company code to TN', () => {
+    const out = buildRevalidateInput(minFlags, {});
+    expect(out.pointOfSale.companyCode).toBe('TN');
+  });
+
+  it('uses env company code over default', () => {
+    const out = buildRevalidateInput(minFlags, { companyCode: 'XX' });
+    expect(out.pointOfSale.companyCode).toBe('XX');
+  });
+
+  it('uses flag company code over env', () => {
+    const out = buildRevalidateInput({ ...minFlags, 'company-code': 'ZZ' }, { companyCode: 'XX' });
+    expect(out.pointOfSale.companyCode).toBe('ZZ');
+  });
+
+  it('throws for missing required flags', () => {
+    expect(() => buildRevalidateInput({}, {})).toThrow(CliUsageError);
+  });
+
+  it('throws for non-integer flight number', () => {
+    expect(() => buildRevalidateInput({ ...minFlags, 'flight-number': 'abc' }, {})).toThrow(
+      CliUsageError,
+    );
+  });
+
+  it('parses --body as JSON and returns it verbatim', () => {
+    const body = JSON.stringify({
+      originDestinations: [
+        {
+          from: 'A',
+          to: 'B',
+          departureDateTime: '2025-01-01T00:00:00',
+          flights: [
+            {
+              from: 'A',
+              to: 'B',
+              marketingCarrier: 'XX',
+              flightNumber: 1,
+              departureDateTime: '2025-01-01T10:00:00',
+              arrivalDateTime: '2025-01-01T14:00:00',
+            },
+          ],
+        },
+      ],
+      passengers: [{ type: 'ADT', quantity: 1 }],
+      pointOfSale: { companyCode: 'YY' },
+    });
+    const out = buildRevalidateInput({ body }, {});
+    expect(out.pointOfSale.companyCode).toBe('YY');
+    expect(out.originDestinations[0]?.from).toBe('A');
+  });
+});
+
+describe('revalidateToTableRows', () => {
+  it('renders itineraries in the same format as BFM', () => {
+    const { headers, rows } = revalidateToTableRows({
+      itineraries: [
+        {
+          id: 1,
+          legs: [
+            {
+              segments: [
+                {
+                  departure: { airport: 'JFK' },
+                  arrival: { airport: 'LHR' },
+                },
+              ],
+            },
+          ],
+          totalFare: { totalAmount: 999, currency: 'USD' },
+          validatingCarrierCode: 'BA',
+          distributionModel: 'ATPCO',
+          fareOffers: [],
+        },
+      ],
+      messages: [],
+    });
+    expect(headers).toEqual(['id', 'legs', 'total', 'carrier', 'model']);
+    expect(rows).toEqual([['1', 'JFK→LHR (nonstop)', '999.00 USD', 'BA', 'ATPCO']]);
+  });
+});
+
 describe('pickNotableResponseHeaders', () => {
   it('returns an empty array when headers is undefined', () => {
     expect(pickNotableResponseHeaders(undefined)).toEqual([]);
@@ -761,6 +888,7 @@ describe('COMMANDS dispatch table', () => {
       'airline-alliance-lookup',
       'airline-lookup',
       'bargain-finder-max',
+      'revalidate-itinerary',
     ]);
   });
 });
