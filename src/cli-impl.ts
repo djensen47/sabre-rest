@@ -22,6 +22,7 @@ import type {
   Airline,
   AirlineAlliance,
   CabinClass,
+  GetAncillariesInput,
   ItineraryLeg,
   LookupAirlineAlliancesInput,
   LookupAirlineAlliancesOutput,
@@ -672,6 +673,34 @@ export function buildRevalidateInput(
   };
 }
 
+/**
+ * Builds the input for `getAncillariesV2.getAncillaries` from the CLI
+ * flags.
+ */
+export function buildGetAncillariesInput(values: {
+  'order-id'?: string;
+  'segment-refs'?: string;
+  'passenger-refs'?: string;
+  'group-code'?: string;
+  body?: string;
+}): GetAncillariesInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as GetAncillariesInput;
+  }
+  if (!values['order-id']) {
+    throw new CliUsageError(
+      'get-ancillaries requires --order-id. (Or supply --body with a full JSON input.)',
+    );
+  }
+  const input: GetAncillariesInput = { orderId: values['order-id'] };
+  const segRefs = splitCommaList(values['segment-refs']);
+  if (segRefs) input.segmentRefs = segRefs;
+  const paxRefs = splitCommaList(values['passenger-refs']);
+  if (paxRefs) input.passengerRefs = paxRefs;
+  if (values['group-code'] !== undefined) input.groupCode = values['group-code'];
+  return input;
+}
+
 // ---------------------------------------------------------------------------
 // parseArgs option configurations
 // ---------------------------------------------------------------------------
@@ -723,6 +752,15 @@ const REVALIDATE_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const GET_ANCILLARIES_OPTIONS = {
+  ...COMMON_OPTIONS,
+  'order-id': { type: 'string' },
+  'segment-refs': { type: 'string' },
+  'passenger-refs': { type: 'string' },
+  'group-code': { type: 'string' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 // ---------------------------------------------------------------------------
 // Help text
 // ---------------------------------------------------------------------------
@@ -736,6 +774,7 @@ Commands:
   airline-lookup            Sabre Airline Lookup v1
   airline-alliance-lookup   Sabre Airline Alliance Lookup v1
   bargain-finder-max        Sabre Bargain Finder Max v5
+  get-ancillaries           Sabre Get Ancillaries v2
   revalidate-itinerary      Sabre Revalidate Itinerary v5
 
 Common flags:
@@ -871,6 +910,27 @@ export function revalidateToTableRows(out: RevalidateItineraryOutput): {
   ]);
   return { headers: ['id', 'legs', 'total', 'carrier', 'model'], rows };
 }
+
+const GET_ANCILLARIES_HELP = `Usage: sabre-rest get-ancillaries [flags]
+
+Sabre Get Ancillaries v2. Retrieves ancillary services (baggage, seats,
+meals, etc.) for a given Sabre order in NDC format.
+
+Flags:
+  --order-id <id>           Sabre order ID (required unless --body)
+  --segment-refs <list>     Comma-separated segment ref IDs (optional filter)
+  --passenger-refs <list>   Comma-separated passenger ref IDs (optional filter)
+  --group-code <code>       ATPCO group code filter, e.g. BG (optional)
+  --body <json>             Override input with raw JSON (ignores other flags)
+  --base-url <url>          Override SABRE_BASE_URL
+  --format json|table       Output format (default: json)
+  --debug-request           Print the outbound HTTP request to stderr
+  -h, --help                Show this help
+
+Examples:
+  sabre-rest get-ancillaries --order-id SRVC-2B88-4C33-9787-9461114BC9BE
+  sabre-rest get-ancillaries --order-id SRVC-2B88 --group-code BG
+`;
 
 // ---------------------------------------------------------------------------
 // Command handlers
@@ -1013,6 +1073,30 @@ async function revalidateItineraryCommand(
   });
 }
 
+async function getAncillariesCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: GET_ANCILLARIES_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(GET_ANCILLARIES_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildGetAncillariesInput(values);
+  const result = await client.getAncillariesV2.getAncillaries(input);
+  emitResult(result, format, io, () => formatJson(result));
+}
+
 /** Mapping from subcommand name to its handler. Exported so tests can introspect it. */
 export const COMMANDS: Record<
   string,
@@ -1021,6 +1105,7 @@ export const COMMANDS: Record<
   'airline-lookup': airlineLookupCommand,
   'airline-alliance-lookup': airlineAllianceLookupCommand,
   'bargain-finder-max': bargainFinderMaxCommand,
+  'get-ancillaries': getAncillariesCommand,
   'revalidate-itinerary': revalidateItineraryCommand,
 };
 

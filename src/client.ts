@@ -16,6 +16,10 @@ import {
   DefaultBargainFinderMaxV5Service,
 } from './services/bargain-finder-max-v5/service.js';
 import {
+  DefaultGetAncillariesV2Service,
+  type GetAncillariesV2Service,
+} from './services/get-ancillaries-v2/service.js';
+import {
   DefaultMultiAirportCityLookupV1Service,
   type MultiAirportCityLookupV1Service,
 } from './services/multi-airport-city-lookup-v1/service.js';
@@ -61,6 +65,14 @@ export interface SabreClient {
    * passenger groups, ranked by Sabre's shopping engine.
    */
   readonly bargainFinderMaxV5: BargainFinderMaxV5Service;
+
+  /**
+   * Sabre Get Ancillaries v2.
+   *
+   * Retrieves ancillary services (baggage, seats, meals, etc.) for a
+   * given Sabre order in NDC format.
+   */
+  readonly getAncillariesV2: GetAncillariesV2Service;
 
   /**
    * Sabre Multi-Airport City Lookup v1.
@@ -155,6 +167,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
   const airlineLookupV1 = new DefaultAirlineLookupV1Service(deps);
   const airlineAllianceLookupV1 = new DefaultAirlineAllianceLookupV1Service(deps);
   const bargainFinderMaxV5 = new DefaultBargainFinderMaxV5Service(deps);
+  const getAncillariesV2 = new DefaultGetAncillariesV2Service(deps);
   const multiAirportCityLookupV1 = new DefaultMultiAirportCityLookupV1Service(deps);
   const revalidateItineraryV5 = new DefaultRevalidateItineraryV5Service(deps);
 
@@ -162,6 +175,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
     airlineLookupV1,
     airlineAllianceLookupV1,
     bargainFinderMaxV5,
+    getAncillariesV2,
     multiAirportCityLookupV1,
     revalidateItineraryV5,
   });
@@ -171,6 +185,7 @@ interface SabreClientServices {
   airlineLookupV1: AirlineLookupV1Service;
   airlineAllianceLookupV1: AirlineAllianceLookupV1Service;
   bargainFinderMaxV5: BargainFinderMaxV5Service;
+  getAncillariesV2: GetAncillariesV2Service;
   multiAirportCityLookupV1: MultiAirportCityLookupV1Service;
   revalidateItineraryV5: RevalidateItineraryV5Service;
 }
@@ -185,6 +200,7 @@ class DefaultSabreClient implements SabreClient {
   readonly airlineLookupV1: AirlineLookupV1Service;
   readonly airlineAllianceLookupV1: AirlineAllianceLookupV1Service;
   readonly bargainFinderMaxV5: BargainFinderMaxV5Service;
+  readonly getAncillariesV2: GetAncillariesV2Service;
   readonly multiAirportCityLookupV1: MultiAirportCityLookupV1Service;
   readonly revalidateItineraryV5: RevalidateItineraryV5Service;
 
@@ -193,6 +209,7 @@ class DefaultSabreClient implements SabreClient {
     this.airlineLookupV1 = services.airlineLookupV1;
     this.airlineAllianceLookupV1 = services.airlineAllianceLookupV1;
     this.bargainFinderMaxV5 = services.bargainFinderMaxV5;
+    this.getAncillariesV2 = services.getAncillariesV2;
     this.multiAirportCityLookupV1 = services.multiAirportCityLookupV1;
     this.revalidateItineraryV5 = services.revalidateItineraryV5;
   }

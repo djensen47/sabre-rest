@@ -51,6 +51,18 @@ export type {
   LookupAirlineAlliancesOutput,
 } from './services/airline-alliance-lookup-v1/types.js';
 export type { BargainFinderMaxV5Service } from './services/bargain-finder-max-v5/service.js';
+export type { GetAncillariesV2Service } from './services/get-ancillaries-v2/service.js';
+export type {
+  AncillaryError,
+  AncillaryOfferItem,
+  AncillaryPassenger,
+  AncillaryPriceDefinition,
+  AncillarySegment,
+  AncillaryServiceDefinition,
+  AncillaryWarning,
+  GetAncillariesInput,
+  GetAncillariesOutput,
+} from './services/get-ancillaries-v2/types.js';
 export type {
   CabinClass,
   FlightSegment,

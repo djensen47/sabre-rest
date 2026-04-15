@@ -8,6 +8,7 @@ import {
   buildAirlineAllianceLookupInput,
   buildAirlineLookupInput,
   buildBfmInput,
+  buildGetAncillariesInput,
   buildRevalidateInput,
   formatJson,
   formatTotalFare,
@@ -767,6 +768,39 @@ describe('revalidateToTableRows', () => {
   });
 });
 
+describe('buildGetAncillariesInput', () => {
+  it('builds input from --order-id flag', () => {
+    const out = buildGetAncillariesInput({ 'order-id': 'ORDER-123' });
+    expect(out.orderId).toBe('ORDER-123');
+    expect(out.segmentRefs).toBeUndefined();
+    expect(out.passengerRefs).toBeUndefined();
+    expect(out.groupCode).toBeUndefined();
+  });
+
+  it('includes optional filters when provided', () => {
+    const out = buildGetAncillariesInput({
+      'order-id': 'ORDER-123',
+      'segment-refs': 'SEG-1,SEG-2',
+      'passenger-refs': 'PAX-1',
+      'group-code': 'BG',
+    });
+    expect(out.segmentRefs).toEqual(['SEG-1', 'SEG-2']);
+    expect(out.passengerRefs).toEqual(['PAX-1']);
+    expect(out.groupCode).toBe('BG');
+  });
+
+  it('throws for missing --order-id', () => {
+    expect(() => buildGetAncillariesInput({})).toThrow(CliUsageError);
+  });
+
+  it('parses --body as JSON and returns it verbatim', () => {
+    const body = JSON.stringify({ orderId: 'FROM-BODY', groupCode: 'ML' });
+    const out = buildGetAncillariesInput({ body });
+    expect(out.orderId).toBe('FROM-BODY');
+    expect(out.groupCode).toBe('ML');
+  });
+});
+
 describe('pickNotableResponseHeaders', () => {
   it('returns an empty array when headers is undefined', () => {
     expect(pickNotableResponseHeaders(undefined)).toEqual([]);
@@ -888,6 +922,7 @@ describe('COMMANDS dispatch table', () => {
       'airline-alliance-lookup',
       'airline-lookup',
       'bargain-finder-max',
+      'get-ancillaries',
       'revalidate-itinerary',
     ]);
   });
