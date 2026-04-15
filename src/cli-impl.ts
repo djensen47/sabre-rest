@@ -29,6 +29,8 @@ import type {
   LookupAirlinesOutput,
   PassengerCount,
   PricedItinerary,
+  RevalidateItineraryInput,
+  RevalidateItineraryOutput,
   SearchBargainFinderMaxInput,
   SearchBargainFinderMaxOutput,
 } from './index.js';
@@ -579,6 +581,97 @@ export function buildBfmInput(
   return input;
 }
 
+/** Flag set for `revalidate-itinerary`. */
+export interface RevalidateFlagValues {
+  from?: string;
+  to?: string;
+  'departure-date'?: string;
+  'flight-from'?: string;
+  'flight-to'?: string;
+  carrier?: string;
+  'flight-number'?: string;
+  'flight-depart'?: string;
+  'flight-arrive'?: string;
+  class?: string;
+  pax?: string[];
+  'company-code'?: string;
+  pcc?: string;
+  body?: string;
+}
+
+/**
+ * Builds the input for `revalidateItineraryV5.revalidate` from the CLI
+ * flags.
+ *
+ * - When `--body` is supplied, it is parsed as JSON and returned
+ *   verbatim.
+ * - Otherwise the required flags assemble a single-leg, single-flight
+ *   revalidation request. For multi-leg or connecting itineraries, use
+ *   `--body`.
+ */
+export function buildRevalidateInput(
+  values: RevalidateFlagValues,
+  env: CliEnvConfig,
+): RevalidateItineraryInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as RevalidateItineraryInput;
+  }
+
+  const missing: string[] = [];
+  if (!values.from) missing.push('--from');
+  if (!values.to) missing.push('--to');
+  if (!values['departure-date']) missing.push('--departure-date');
+  if (!values.carrier) missing.push('--carrier');
+  if (!values['flight-number']) missing.push('--flight-number');
+  if (!values['flight-depart']) missing.push('--flight-depart');
+  if (!values['flight-arrive']) missing.push('--flight-arrive');
+  if (missing.length > 0) {
+    throw new CliUsageError(
+      `revalidate-itinerary requires: ${missing.join(', ')}. (Or supply --body with a full JSON input.)`,
+    );
+  }
+
+  const flightNumber = Number(values['flight-number']);
+  if (!Number.isInteger(flightNumber) || flightNumber < 1) {
+    throw new CliUsageError(
+      `Invalid --flight-number '${values['flight-number']}'. Expected a positive integer.`,
+    );
+  }
+
+  const flight: RevalidateItineraryInput['originDestinations'][number]['flights'][number] = {
+    from: values['flight-from'] ?? (values.from as string),
+    to: values['flight-to'] ?? (values.to as string),
+    marketingCarrier: values.carrier as string,
+    flightNumber,
+    departureDateTime: normalizeBfmDateTime(values['flight-depart'] as string),
+    arrivalDateTime: normalizeBfmDateTime(values['flight-arrive'] as string),
+  };
+  if (values.class !== undefined) {
+    flight.classOfService = values.class;
+  }
+
+  const passengers: PassengerCount[] = (values.pax ?? ['ADT:1']).map(parsePassenger);
+
+  const pointOfSale: RevalidateItineraryInput['pointOfSale'] = {};
+  const companyCode = values['company-code'] ?? env.companyCode ?? DEFAULT_BFM_COMPANY_CODE;
+  pointOfSale.companyCode = companyCode;
+  const pcc = values.pcc ?? env.pcc;
+  if (pcc) pointOfSale.pseudoCityCode = pcc;
+
+  return {
+    originDestinations: [
+      {
+        from: values.from as string,
+        to: values.to as string,
+        departureDateTime: normalizeBfmDateTime(values['departure-date'] as string),
+        flights: [flight],
+      },
+    ],
+    passengers,
+    pointOfSale,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // parseArgs option configurations
 // ---------------------------------------------------------------------------
@@ -612,6 +705,24 @@ const BFM_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const REVALIDATE_OPTIONS = {
+  ...COMMON_OPTIONS,
+  from: { type: 'string' },
+  to: { type: 'string' },
+  'departure-date': { type: 'string' },
+  'flight-from': { type: 'string' },
+  'flight-to': { type: 'string' },
+  carrier: { type: 'string' },
+  'flight-number': { type: 'string' },
+  'flight-depart': { type: 'string' },
+  'flight-arrive': { type: 'string' },
+  class: { type: 'string' },
+  pax: { type: 'string', multiple: true },
+  'company-code': { type: 'string' },
+  pcc: { type: 'string' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 // ---------------------------------------------------------------------------
 // Help text
 // ---------------------------------------------------------------------------
@@ -625,6 +736,7 @@ Commands:
   airline-lookup            Sabre Airline Lookup v1
   airline-alliance-lookup   Sabre Airline Alliance Lookup v1
   bargain-finder-max        Sabre Bargain Finder Max v5
+  revalidate-itinerary      Sabre Revalidate Itinerary v5
 
 Common flags:
   --base-url <url>          Override SABRE_BASE_URL
@@ -707,6 +819,58 @@ Examples:
     --departure-date 2025-12-25 --return-date 2026-01-05 \\
     --pax ADT:1 --pax CHD:1 --cabin Business --non-stop
 `;
+
+const REVALIDATE_HELP = `Usage: sabre-rest revalidate-itinerary [flags]
+
+Sabre Revalidate Itinerary v5. Rechecks availability and pricing for a
+specific itinerary without booking.
+
+Flags (single-leg / single-flight shorthand):
+  --from <iata>             Origin IATA code (required unless --body)
+  --to <iata>               Destination IATA code (required unless --body)
+  --departure-date <iso>    Departure local date or date-time (required unless --body)
+  --carrier <iata>          Marketing carrier code (required unless --body)
+  --flight-number <n>       Flight number (required unless --body)
+  --flight-depart <iso>     Flight departure date-time (required unless --body)
+  --flight-arrive <iso>     Flight arrival date-time (required unless --body)
+  --flight-from <iata>      Segment origin (defaults to --from)
+  --flight-to <iata>        Segment destination (defaults to --to)
+  --class <rbd>             Booking class, e.g. Y, J, M (optional, enables verification path)
+  --pax <type:count>        Passenger group, repeatable (default: ADT:1)
+  --company-code <code>     Agency company code. Defaults to TN.
+  --pcc <code>              Optional pseudo city code
+  --body <json>             Override input with raw JSON (ignores other flags).
+                            Use this for multi-leg or connecting itineraries.
+  --base-url <url>          Override SABRE_BASE_URL
+  --format json|table       Output format (default: json). Table is a one-row-per-itinerary summary.
+  --debug-request           Print the outbound HTTP request to stderr
+  -h, --help                Show this help
+
+Examples:
+  sabre-rest revalidate-itinerary --from JFK --to LHR \\
+    --departure-date 2025-12-25 --carrier BA --flight-number 178 \\
+    --flight-depart 2025-12-25T21:00:00 --flight-arrive 2025-12-26T09:00:00 \\
+    --class Y
+`;
+
+/**
+ * Converts a Revalidate Itinerary v5 output into a one-row-per-itinerary
+ * summary table. Reuses the same column layout as BFM since the GIR
+ * response format is shared.
+ */
+export function revalidateToTableRows(out: RevalidateItineraryOutput): {
+  headers: readonly string[];
+  rows: readonly string[][];
+} {
+  const rows = out.itineraries.map((itin: PricedItinerary) => [
+    itin.id !== undefined ? String(itin.id) : '?',
+    itin.legs.map(summarizeLeg).join(' | '),
+    formatTotalFare(itin),
+    itin.validatingCarrierCode ?? '',
+    itin.distributionModel ?? '',
+  ]);
+  return { headers: ['id', 'legs', 'total', 'carrier', 'model'], rows };
+}
 
 // ---------------------------------------------------------------------------
 // Command handlers
@@ -822,6 +986,33 @@ function emitResult(result: unknown, format: OutputFormat, io: CliIo, tableFn: (
   }
 }
 
+async function revalidateItineraryCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: REVALIDATE_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(REVALIDATE_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildRevalidateInput(values, env);
+  const result = await client.revalidateItineraryV5.revalidate(input);
+  emitResult(result, format, io, () => {
+    const { headers, rows } = revalidateToTableRows(result);
+    return renderTable(headers, rows);
+  });
+}
+
 /** Mapping from subcommand name to its handler. Exported so tests can introspect it. */
 export const COMMANDS: Record<
   string,
@@ -830,6 +1021,7 @@ export const COMMANDS: Record<
   'airline-lookup': airlineLookupCommand,
   'airline-alliance-lookup': airlineAllianceLookupCommand,
   'bargain-finder-max': bargainFinderMaxCommand,
+  'revalidate-itinerary': revalidateItineraryCommand,
 };
 
 // ---------------------------------------------------------------------------
