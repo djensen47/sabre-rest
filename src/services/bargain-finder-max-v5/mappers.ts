@@ -16,6 +16,7 @@ import type {
   SearchBargainFinderMaxInput,
   SearchBargainFinderMaxOutput,
   SegmentEndpoint,
+  Tax,
   TotalFare,
 } from './types.js';
 
@@ -208,6 +209,13 @@ export function fromSearchResponse(res: SabreResponse): SearchBargainFinderMaxOu
     }
   }
 
+  const taxById = new Map<number, components['schemas']['TaxType']>();
+  for (const t of root.taxDescs ?? []) {
+    if (typeof t.id === 'number') {
+      taxById.set(t.id, t);
+    }
+  }
+
   const itineraries: PricedItinerary[] = [];
   for (const group of root.itineraryGroups ?? []) {
     for (const itin of group.itineraries ?? []) {
@@ -219,6 +227,7 @@ export function fromSearchResponse(res: SabreResponse): SearchBargainFinderMaxOu
           fareComponentById,
           baggageAllowanceById,
           baggageChargeById,
+          taxById,
         ),
       );
     }
@@ -242,6 +251,7 @@ function buildPricedItinerary(
   fareComponentById: Map<number, components['schemas']['FareComponentType']>,
   baggageAllowanceById: Map<number, components['schemas']['BaggageAllowanceType']>,
   baggageChargeById: Map<number, components['schemas']['BaggageChargeType']>,
+  taxById: Map<number, components['schemas']['TaxType']>,
 ): PricedItinerary {
   const legs: ItineraryLeg[] = (itin.legs ?? []).map((legRef) => {
     const ref = typeof legRef.ref === 'number' ? legRef.ref : undefined;
@@ -250,7 +260,7 @@ function buildPricedItinerary(
   });
 
   const fareOffers: FareOffer[] = (itin.pricingInformation ?? []).map((pi) =>
-    buildFareOffer(pi, fareComponentById, baggageAllowanceById, baggageChargeById),
+    buildFareOffer(pi, fareComponentById, baggageAllowanceById, baggageChargeById, taxById),
   );
 
   const result: PricedItinerary = { legs, fareOffers };
@@ -283,6 +293,7 @@ function buildFareOffer(
   fareComponentById: Map<number, components['schemas']['FareComponentType']>,
   baggageAllowanceById: Map<number, components['schemas']['BaggageAllowanceType']>,
   baggageChargeById: Map<number, components['schemas']['BaggageChargeType']>,
+  taxById: Map<number, components['schemas']['TaxType']>,
 ): FareOffer {
   const passengerFares: PassengerFare[] = [];
   for (const entry of pricing.fare?.passengerInfoList ?? []) {
@@ -296,6 +307,7 @@ function buildFareOffer(
         fareComponentById,
         baggageAllowanceById,
         baggageChargeById,
+        taxById,
       ),
     );
   }
@@ -319,6 +331,7 @@ function buildPassengerFare(
   fareComponentById: Map<number, components['schemas']['FareComponentType']>,
   baggageAllowanceById: Map<number, components['schemas']['BaggageAllowanceType']>,
   baggageChargeById: Map<number, components['schemas']['BaggageChargeType']>,
+  taxById: Map<number, components['schemas']['TaxType']>,
 ): PassengerFare {
   const fareComponents: FareComponent[] = (info.fareComponents ?? []).map((idEntry) => {
     const desc = typeof idEntry.ref === 'number' ? fareComponentById.get(idEntry.ref) : undefined;
@@ -339,7 +352,12 @@ function buildPassengerFare(
     baggageCharges.push(buildBaggageCharge(bag, baggageChargeById.get(chargeRef)));
   }
 
-  const out: PassengerFare = { fareComponents, baggageAllowances, baggageCharges };
+  const taxes: Tax[] = (info.taxes ?? []).map((taxRef) => {
+    const desc = typeof taxRef.ref === 'number' ? taxById.get(taxRef.ref) : undefined;
+    return buildTax(desc);
+  });
+
+  const out: PassengerFare = { fareComponents, baggageAllowances, baggageCharges, taxes };
 
   if (info.passengerType !== undefined) out.passengerType = info.passengerType;
   if (typeof info.passengerNumber === 'number') out.passengerNumber = info.passengerNumber;
@@ -444,6 +462,20 @@ function buildBaggageCharge(
       out.noChargeNotAvailable = charge.noChargeNotAvailable;
   }
 
+  return out;
+}
+
+function buildTax(desc: components['schemas']['TaxType'] | undefined): Tax {
+  const out: Tax = {};
+  if (!desc) return out;
+  if (desc.code !== undefined) out.code = desc.code;
+  if (typeof desc.amount === 'number') out.amount = desc.amount;
+  if (desc.currency !== undefined) out.currency = desc.currency;
+  if (desc.country !== undefined) out.country = desc.country;
+  if (desc.description !== undefined) out.description = desc.description;
+  if (desc.station !== undefined) out.station = desc.station;
+  if (typeof desc.publishedAmount === 'number') out.publishedAmount = desc.publishedAmount;
+  if (desc.publishedCurrency !== undefined) out.publishedCurrency = desc.publishedCurrency;
   return out;
 }
 

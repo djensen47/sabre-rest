@@ -10,11 +10,11 @@
  * passenger types, basic preferences) and the corresponding priced
  * itinerary results. Less-common features (NDC brand programs, Universal
  * Product Attributes, exchange/reissue, handling markups, statistics, fare
- * rules, change/refund penalties, tax breakdowns, alternate-date flavors)
+ * rules, change/refund penalties, alternate-date flavors)
  * are intentionally omitted and may be added later non-breakingly.
  *
- * Baggage allowances and charges are both surfaced per-passenger on each
- * fare offer.
+ * Baggage allowances, baggage charges, and per-passenger tax breakdowns
+ * are all surfaced on each fare offer.
  */
 
 /**
@@ -286,6 +286,8 @@ export interface PassengerFare {
   baggageAllowances: readonly BaggageAllowance[];
   /** Baggage charges attached to this passenger, in wire order. */
   baggageCharges: readonly BaggageCharge[];
+  /** Individual tax line items for this passenger, in wire order. */
+  taxes: readonly Tax[];
 }
 
 /**
@@ -441,6 +443,26 @@ export interface BaggageCharge {
    * sent none.
    */
   descriptions: readonly string[];
+}
+
+/** A single tax line item on a priced passenger. */
+export interface Tax {
+  /** Tax code (e.g. `US`, `XF`, `YC`), when populated. */
+  code?: string;
+  /** Tax amount, when populated. */
+  amount?: number;
+  /** ISO 4217 currency code, when populated. */
+  currency?: string;
+  /** Two-letter country code where the tax originates, when populated. */
+  country?: string;
+  /** Descriptive text for the tax, when populated. */
+  description?: string;
+  /** Station/airport code where the tax applies, when populated. */
+  station?: string;
+  /** Published tax amount before currency conversion, when populated. */
+  publishedAmount?: number;
+  /** Published tax currency, when different from {@link currency}. */
+  publishedCurrency?: string;
 }
 
 /** A single leg of an itinerary, made up of zero or more flight segments. */
