@@ -706,6 +706,7 @@ describe('fareOffers', () => {
           ],
         },
       ],
+      baggageCharges: [],
     });
   });
 
@@ -1021,5 +1022,277 @@ describe('fareOffers', () => {
 
     const segs = out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.fareComponents[0]?.segments;
     expect(segs).toEqual([{ bookingCode: 'Y' }, { bookingCode: 'B' }]);
+  });
+
+  it('surfaces baggage charges with piece range, amount, currency, and descriptions', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          baggageChargeDescs: [
+            {
+              id: 50,
+              firstPiece: 1,
+              lastPiece: 1,
+              equivalentAmount: 35,
+              equivalentCurrency: 'USD',
+              description1: 'UP TO 50 POUNDS/23 KILOGRAMS',
+              description2: 'UP TO 62 LINEAR INCHES/158 LINEAR CENTIMETERS',
+            },
+          ],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [],
+                              baggageInformation: [
+                                {
+                                  airlineCode: 'AA',
+                                  provisionType: 'C',
+                                  charge: { ref: 50 },
+                                  segments: [{ id: 0 }, { id: 1 }],
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const charges = out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.baggageCharges;
+    expect(charges).toEqual([
+      {
+        segmentIndices: [0, 1],
+        airlineCode: 'AA',
+        provisionType: 'C',
+        firstPiece: 1,
+        lastPiece: 1,
+        amount: 35,
+        currency: 'USD',
+        descriptions: [
+          'UP TO 50 POUNDS/23 KILOGRAMS',
+          'UP TO 62 LINEAR INCHES/158 LINEAR CENTIMETERS',
+        ],
+      },
+    ]);
+  });
+
+  it('preserves a baggage charge with an unresolved ref using only inline info', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          baggageChargeDescs: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [],
+                              baggageInformation: [
+                                {
+                                  airlineCode: 'DL',
+                                  provisionType: 'C',
+                                  charge: { ref: 999 },
+                                  segments: [{ id: 0 }],
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const charge = out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.baggageCharges[0];
+    expect(charge).toEqual({
+      segmentIndices: [0],
+      airlineCode: 'DL',
+      provisionType: 'C',
+      descriptions: [],
+    });
+  });
+
+  it('passes through noChargeNotAvailable when the charge is free', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          baggageChargeDescs: [{ id: 60, noChargeNotAvailable: 'F' }],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [],
+                              baggageInformation: [
+                                {
+                                  airlineCode: 'BA',
+                                  provisionType: 'C',
+                                  charge: { ref: 60 },
+                                  segments: [{ id: 0 }],
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const charge = out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.baggageCharges[0];
+    expect(charge?.noChargeNotAvailable).toBe('F');
+    expect(charge?.amount).toBeUndefined();
+  });
+
+  it('emits an entry in both baggageAllowances and baggageCharges when a baggageInformation has both refs', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          baggageAllowanceDescs: [{ id: 70, pieceCount: 2 }],
+          baggageChargeDescs: [
+            {
+              id: 80,
+              firstPiece: 1,
+              lastPiece: 2,
+              equivalentAmount: 50,
+              equivalentCurrency: 'USD',
+            },
+          ],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [],
+                              baggageInformation: [
+                                {
+                                  airlineCode: 'UA',
+                                  provisionType: 'A',
+                                  allowance: { ref: 70 },
+                                  charge: { ref: 80 },
+                                  segments: [{ id: 0 }],
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const pf = out.itineraries[0]?.fareOffers[0]?.passengerFares[0];
+    expect(pf?.baggageAllowances).toHaveLength(1);
+    expect(pf?.baggageAllowances[0]?.pieceCount).toBe(2);
+    expect(pf?.baggageCharges).toHaveLength(1);
+    expect(pf?.baggageCharges[0]?.amount).toBe(50);
+    expect(pf?.baggageCharges[0]?.currency).toBe('USD');
+  });
+
+  it('returns empty baggageCharges when no charge refs are present', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [],
+                              baggageInformation: [
+                                {
+                                  airlineCode: 'BA',
+                                  provisionType: 'A',
+                                  allowance: { ref: 1 },
+                                  segments: [{ id: 0 }],
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.baggageCharges).toEqual([]);
   });
 });

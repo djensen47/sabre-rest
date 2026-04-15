@@ -3,6 +3,7 @@ import type { components } from '../../generated/bargain-finder-max.js';
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type {
   BaggageAllowance,
+  BaggageCharge,
   FareComponent,
   FareComponentSegment,
   FareOffer,
@@ -200,11 +201,25 @@ export function fromSearchResponse(res: SabreResponse): SearchBargainFinderMaxOu
     }
   }
 
+  const baggageChargeById = new Map<number, components['schemas']['BaggageChargeType']>();
+  for (const bc of root.baggageChargeDescs ?? []) {
+    if (typeof bc.id === 'number') {
+      baggageChargeById.set(bc.id, bc);
+    }
+  }
+
   const itineraries: PricedItinerary[] = [];
   for (const group of root.itineraryGroups ?? []) {
     for (const itin of group.itineraries ?? []) {
       itineraries.push(
-        buildPricedItinerary(itin, legById, scheduleById, fareComponentById, baggageAllowanceById),
+        buildPricedItinerary(
+          itin,
+          legById,
+          scheduleById,
+          fareComponentById,
+          baggageAllowanceById,
+          baggageChargeById,
+        ),
       );
     }
   }
@@ -226,6 +241,7 @@ function buildPricedItinerary(
   scheduleById: Map<number, components['schemas']['ScheduleDescType']>,
   fareComponentById: Map<number, components['schemas']['FareComponentType']>,
   baggageAllowanceById: Map<number, components['schemas']['BaggageAllowanceType']>,
+  baggageChargeById: Map<number, components['schemas']['BaggageChargeType']>,
 ): PricedItinerary {
   const legs: ItineraryLeg[] = (itin.legs ?? []).map((legRef) => {
     const ref = typeof legRef.ref === 'number' ? legRef.ref : undefined;
@@ -234,7 +250,7 @@ function buildPricedItinerary(
   });
 
   const fareOffers: FareOffer[] = (itin.pricingInformation ?? []).map((pi) =>
-    buildFareOffer(pi, fareComponentById, baggageAllowanceById),
+    buildFareOffer(pi, fareComponentById, baggageAllowanceById, baggageChargeById),
   );
 
   const result: PricedItinerary = { legs, fareOffers };
@@ -266,6 +282,7 @@ function buildFareOffer(
   pricing: components['schemas']['PricingInformationType'],
   fareComponentById: Map<number, components['schemas']['FareComponentType']>,
   baggageAllowanceById: Map<number, components['schemas']['BaggageAllowanceType']>,
+  baggageChargeById: Map<number, components['schemas']['BaggageChargeType']>,
 ): FareOffer {
   const passengerFares: PassengerFare[] = [];
   for (const entry of pricing.fare?.passengerInfoList ?? []) {
@@ -274,7 +291,12 @@ function buildFareOffer(
     // empty PassengerFare records would be misleading.
     if (!entry.passengerInfo) continue;
     passengerFares.push(
-      buildPassengerFare(entry.passengerInfo, fareComponentById, baggageAllowanceById),
+      buildPassengerFare(
+        entry.passengerInfo,
+        fareComponentById,
+        baggageAllowanceById,
+        baggageChargeById,
+      ),
     );
   }
 
@@ -296,6 +318,7 @@ function buildPassengerFare(
   info: components['schemas']['PassengerInformationType'],
   fareComponentById: Map<number, components['schemas']['FareComponentType']>,
   baggageAllowanceById: Map<number, components['schemas']['BaggageAllowanceType']>,
+  baggageChargeById: Map<number, components['schemas']['BaggageChargeType']>,
 ): PassengerFare {
   const fareComponents: FareComponent[] = (info.fareComponents ?? []).map((idEntry) => {
     const desc = typeof idEntry.ref === 'number' ? fareComponentById.get(idEntry.ref) : undefined;
@@ -305,13 +328,18 @@ function buildPassengerFare(
   const baggageAllowances: BaggageAllowance[] = [];
   for (const bag of info.baggageInformation ?? []) {
     const allowanceRef = bag.allowance?.ref;
-    // BaggageInformation can carry charge-only entries with no allowance
-    // ref — those belong to the (deferred) charges surface, not allowances.
     if (typeof allowanceRef !== 'number') continue;
     baggageAllowances.push(buildBaggageAllowance(bag, baggageAllowanceById.get(allowanceRef)));
   }
 
-  const out: PassengerFare = { fareComponents, baggageAllowances };
+  const baggageCharges: BaggageCharge[] = [];
+  for (const bag of info.baggageInformation ?? []) {
+    const chargeRef = bag.charge?.ref;
+    if (typeof chargeRef !== 'number') continue;
+    baggageCharges.push(buildBaggageCharge(bag, baggageChargeById.get(chargeRef)));
+  }
+
+  const out: PassengerFare = { fareComponents, baggageAllowances, baggageCharges };
 
   if (info.passengerType !== undefined) out.passengerType = info.passengerType;
   if (typeof info.passengerNumber === 'number') out.passengerNumber = info.passengerNumber;
@@ -384,6 +412,36 @@ function buildBaggageAllowance(
     if (typeof allowance.pieceCount === 'number') out.pieceCount = allowance.pieceCount;
     if (typeof allowance.weight === 'number') out.weight = allowance.weight;
     if (typeof allowance.unit === 'string') out.weightUnit = allowance.unit;
+  }
+
+  return out;
+}
+
+function buildBaggageCharge(
+  info: components['schemas']['BaggageInformationType'],
+  charge: components['schemas']['BaggageChargeType'] | undefined,
+): BaggageCharge {
+  const segmentIndices: number[] = [];
+  for (const seg of info.segments ?? []) {
+    if (typeof seg.id === 'number') segmentIndices.push(seg.id);
+  }
+
+  const descriptions: string[] = [];
+  if (typeof charge?.description1 === 'string') descriptions.push(charge.description1);
+  if (typeof charge?.description2 === 'string') descriptions.push(charge.description2);
+
+  const out: BaggageCharge = { segmentIndices, descriptions };
+
+  if (info.airlineCode !== undefined) out.airlineCode = info.airlineCode;
+  if (info.provisionType !== undefined) out.provisionType = info.provisionType;
+
+  if (charge) {
+    if (typeof charge.firstPiece === 'number') out.firstPiece = charge.firstPiece;
+    if (typeof charge.lastPiece === 'number') out.lastPiece = charge.lastPiece;
+    if (typeof charge.equivalentAmount === 'number') out.amount = charge.equivalentAmount;
+    if (typeof charge.equivalentCurrency === 'string') out.currency = charge.equivalentCurrency;
+    if (charge.noChargeNotAvailable !== undefined)
+      out.noChargeNotAvailable = charge.noChargeNotAvailable;
   }
 
   return out;

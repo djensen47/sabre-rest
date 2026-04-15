@@ -10,13 +10,11 @@
  * passenger types, basic preferences) and the corresponding priced
  * itinerary results. Less-common features (NDC brand programs, Universal
  * Product Attributes, exchange/reissue, handling markups, statistics, fare
- * rules, change/refund penalties, tax breakdowns, baggage charges,
- * alternate-date flavors) are intentionally omitted and may be added later
- * non-breakingly.
+ * rules, change/refund penalties, tax breakdowns, alternate-date flavors)
+ * are intentionally omitted and may be added later non-breakingly.
  *
- * Baggage *allowances* are surfaced per-passenger on each fare offer;
- * baggage *charges* (the "pay $X for your 2nd bag" side of the data) remain
- * deferred.
+ * Baggage allowances and charges are both surfaced per-passenger on each
+ * fare offer.
  */
 
 /**
@@ -286,6 +284,8 @@ export interface PassengerFare {
    * when Sabre returned none.
    */
   baggageAllowances: readonly BaggageAllowance[];
+  /** Baggage charges attached to this passenger, in wire order. */
+  baggageCharges: readonly BaggageCharge[];
 }
 
 /**
@@ -366,13 +366,7 @@ export interface FareComponentSegment {
   mealCode?: string;
 }
 
-/**
- * Baggage allowance attached to a priced passenger.
- *
- * Baggage *charges* (the "pay $X for the 2nd bag" side of the data) are
- * intentionally omitted from this v1 surface and may be added later
- * non-breakingly.
- */
+/** Baggage allowance attached to a priced passenger. */
 export interface BaggageAllowance {
   /**
    * 0-based itinerary-wide segment indices this allowance covers, in wire
@@ -400,6 +394,51 @@ export interface BaggageAllowance {
    * Free-text description lines exactly as Sabre returned them (may
    * include dimensions, carrier-specific rules). Empty when Sabre sent
    * none. Lines are preserved in wire order.
+   */
+  descriptions: readonly string[];
+}
+
+/**
+ * Baggage charge for a specific piece range, attached to a priced passenger.
+ *
+ * Each charge entry tells the consumer "for bag N through bag M on these
+ * segments, the fee is X in currency Y." When the `noChargeNotAvailable`
+ * field is populated instead of `amount`, the bag is either free or
+ * unavailable for purchase — see the field doc for the code semantics.
+ */
+export interface BaggageCharge {
+  /**
+   * 0-based itinerary-wide segment indices this charge covers, in wire
+   * order. Same flat-itinerary semantics as
+   * {@link BaggageAllowance.segmentIndices}.
+   */
+  segmentIndices: readonly number[];
+  /** Airline that owns the baggage (IATA code), when populated. */
+  airlineCode?: string;
+  /**
+   * Provision type code from the wire (e.g. `C` for day-of-checkin
+   * charges). Consumers filtering for charges should typically match on
+   * `C`.
+   */
+  provisionType?: string;
+  /** First piece number this charge applies to (e.g. `1` = first bag). */
+  firstPiece?: number;
+  /** Last piece number this charge applies to (e.g. `2` = up to second bag). */
+  lastPiece?: number;
+  /** Charge amount, when populated. */
+  amount?: number;
+  /** ISO 4217 currency code for the charge, when populated. */
+  currency?: string;
+  /**
+   * Status code when charges are unavailable or free. Values: `X` = not
+   * available, `F` = free (no EMD), `E` = free (EMD issued), `G` = free
+   * (no booking required, no EMD), `H` = free (no booking required, EMD
+   * issued). When this field is present, `amount` is typically absent.
+   */
+  noChargeNotAvailable?: string;
+  /**
+   * Free-text description lines from the wire, in order. Empty when Sabre
+   * sent none.
    */
   descriptions: readonly string[];
 }
