@@ -707,6 +707,7 @@ describe('fareOffers', () => {
         },
       ],
       baggageCharges: [],
+      taxes: [],
     });
   });
 
@@ -1294,5 +1295,159 @@ describe('fareOffers', () => {
     );
 
     expect(out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.baggageCharges).toEqual([]);
+  });
+
+  it('surfaces per-passenger tax line items resolved from taxDescs', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          taxDescs: [
+            {
+              id: 100,
+              code: 'US',
+              amount: 19.6,
+              currency: 'USD',
+              country: 'US',
+              description: 'US TRANSPORTATION TAX',
+              station: 'JFK',
+            },
+            {
+              id: 101,
+              code: 'XF',
+              amount: 4.5,
+              currency: 'USD',
+              country: 'US',
+              description: 'PASSENGER FACILITY CHARGE',
+              station: 'JFK',
+              publishedAmount: 4.5,
+              publishedCurrency: 'USD',
+            },
+          ],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [],
+                              taxes: [{ ref: 100 }, { ref: 101 }],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const taxes = out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.taxes;
+    expect(taxes).toEqual([
+      {
+        code: 'US',
+        amount: 19.6,
+        currency: 'USD',
+        country: 'US',
+        description: 'US TRANSPORTATION TAX',
+        station: 'JFK',
+      },
+      {
+        code: 'XF',
+        amount: 4.5,
+        currency: 'USD',
+        country: 'US',
+        description: 'PASSENGER FACILITY CHARGE',
+        station: 'JFK',
+        publishedAmount: 4.5,
+        publishedCurrency: 'USD',
+      },
+    ]);
+  });
+
+  it('emits an empty Tax object for an unresolved tax ref', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          taxDescs: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [],
+                              taxes: [{ ref: 999 }],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const taxes = out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.taxes;
+    expect(taxes).toEqual([{}]);
+  });
+
+  it('returns empty taxes array when no taxes are present on the passenger', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.taxes).toEqual([]);
   });
 });
