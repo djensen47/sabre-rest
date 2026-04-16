@@ -78,6 +78,34 @@ export type {
   TotalFare,
   TravelPreferences,
 } from './services/bargain-finder-max-v5/types.js';
+export type { GetSeatsV2Service } from './services/get-seats-v2/service.js';
+export type {
+  GetSeatsInput,
+  GetSeatsOfferInput,
+  GetSeatsOrderInput,
+  GetSeatsOutput,
+  GetSeatsPayloadInput,
+  GetSeatsStatelessInput,
+  Seat,
+  SeatALaCarteOffer,
+  SeatALaCarteOfferItem,
+  SeatCabinCompartment,
+  SeatCabinLayout,
+  SeatCabinType,
+  SeatCharacteristic,
+  SeatDataLists,
+  SeatError,
+  SeatMap,
+  SeatPaxSegmentRS,
+  SeatPayloadAttributes,
+  SeatPointOfSale,
+  SeatPrice,
+  SeatProfile,
+  SeatRow,
+  SeatServiceDefinition,
+  SeatShoppingResponse,
+  SeatWarning,
+} from './services/get-seats-v2/types.js';
 export type { MultiAirportCityLookupV1Service } from './services/multi-airport-city-lookup-v1/service.js';
 export type {
   CityLink,

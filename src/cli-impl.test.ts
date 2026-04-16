@@ -923,6 +923,7 @@ describe('COMMANDS dispatch table', () => {
       'airline-lookup',
       'bargain-finder-max',
       'get-ancillaries',
+      'get-seats',
       'revalidate-itinerary',
     ]);
   });
