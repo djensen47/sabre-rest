@@ -23,6 +23,7 @@ import type {
   AirlineAlliance,
   CabinClass,
   GetAncillariesInput,
+  GetSeatsInput,
   ItineraryLeg,
   LookupAirlineAlliancesInput,
   LookupAirlineAlliancesOutput,
@@ -761,6 +762,11 @@ const GET_ANCILLARIES_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const GET_SEATS_OPTIONS = {
+  ...COMMON_OPTIONS,
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 // ---------------------------------------------------------------------------
 // Help text
 // ---------------------------------------------------------------------------
@@ -775,6 +781,7 @@ Commands:
   airline-alliance-lookup   Sabre Airline Alliance Lookup v1
   bargain-finder-max        Sabre Bargain Finder Max v5
   get-ancillaries           Sabre Get Ancillaries v2
+  get-seats                 Sabre Get Seats v2
   revalidate-itinerary      Sabre Revalidate Itinerary v5
 
 Common flags:
@@ -930,6 +937,26 @@ Flags:
 Examples:
   sabre-rest get-ancillaries --order-id SRVC-2B88-4C33-9787-9461114BC9BE
   sabre-rest get-ancillaries --order-id SRVC-2B88 --group-code BG
+`;
+
+const GET_SEATS_HELP = `Usage: sabre-rest get-seats [flags]
+
+Sabre Get Seats v2. Retrieves seat availability and pricing information.
+
+The input is a discriminated union with four request types (offerId,
+orderId, payload, stateless). Use --body to supply the full JSON input.
+
+Flags:
+  --body <json>             Full JSON input (required). Set requestType to one
+                            of: offerId, orderId, payload, stateless.
+  --base-url <url>          Override SABRE_BASE_URL
+  --format json|table       Output format (default: json)
+  --debug-request           Print the outbound HTTP request to stderr
+  -h, --help                Show this help
+
+Examples:
+  sabre-rest get-seats --body '{"requestType":"orderId","pointOfSale":{"countryCode":"US","cityCode":"TPA"},"orderId":"ORDER-123"}'
+  sabre-rest get-seats --body '{"requestType":"stateless","pnrLocator":"ABC123"}'
 `;
 
 // ---------------------------------------------------------------------------
@@ -1097,6 +1124,33 @@ async function getAncillariesCommand(
   emitResult(result, format, io, () => formatJson(result));
 }
 
+async function getSeatsCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: GET_SEATS_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(GET_SEATS_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  if (values.body === undefined) {
+    throw new CliUsageError('get-seats requires --body with a full JSON input.');
+  }
+  const input = JSON.parse(values.body) as GetSeatsInput;
+  const result = await client.getSeatsV2.getSeats(input);
+  emitResult(result, format, io, () => formatJson(result));
+}
+
 /** Mapping from subcommand name to its handler. Exported so tests can introspect it. */
 export const COMMANDS: Record<
   string,
@@ -1106,6 +1160,7 @@ export const COMMANDS: Record<
   'airline-alliance-lookup': airlineAllianceLookupCommand,
   'bargain-finder-max': bargainFinderMaxCommand,
   'get-ancillaries': getAncillariesCommand,
+  'get-seats': getSeatsCommand,
   'revalidate-itinerary': revalidateItineraryCommand,
 };
 

@@ -1,0 +1,2268 @@
+openapi: 3.0.0
+x-lingo-api-type: restful
+tags:
+  - name: GetSeats
+    description: Get Seats API.
+info:
+  title: Get Seats
+  version: "2.0"
+  description: The Get Seats API retrieves seat availability and pricing information by `orderId`, 'offerId', or `payload` and 'stateless'.
+  contact:
+    name: Contact Us
+    url: https://developer.sabre.com/contact
+security:
+  - oauth2_authentication: []
+servers:
+  - url: https://api.cert.platform.sabre.com{basePath}
+    description: Certification server used for testing.
+    variables:
+      basePath:
+        default: /v1/offers
+  - url: https://api.platform.sabre.com{basePath}
+    description: Production server.
+    variables:
+      basePath:
+        default: /v1/offers
+paths:
+  /getseats:
+    description: Retrieves seat availability and pricing information.
+    post:
+      tags:
+        - GetSeats
+      operationId: getSeats
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/SeatAvailabilityOfferRQ"
+                - $ref: "#/components/schemas/SeatAvailabilityOrderRQ"
+                - $ref: "#/components/schemas/SeatAvailabilityPayloadRQ"
+                - $ref: "#/components/schemas/SeatAvailabilityStatelessRQ"
+        description: Retrieves specific seat availability.
+        required: true
+      responses:
+        "200":
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeatAvailabilityRS"
+        default:
+          description: Response with errors.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeatAvailabilityRS"
+components:
+  securitySchemes:
+    oauth2_authentication:
+      type: oauth2
+      x-base64-encode-client-credentials: true
+      flows:
+        clientCredentials:
+          tokenUrl: https://api.cert.platform.sabre.com/v2/auth/token
+          scopes: {}
+  schemas:
+    GenericSeatAvailabilityRQ:
+      description: Contains the base request body for `GetSeats` used to determine the `requestType`.
+      type: object
+      required:
+        - requestType
+      properties:
+        requestType:
+          type: string
+          example: payload
+          description: Determines the action the `GetSeats` operation will perform. Can be `payload`, `stateless`, `orderId`, or `offerId`.
+        payloadAttributes:
+          description: Select additional attributes to be included in the response, like `echoTokenText`, `timeStamp`, `transactionID`, and `correlationID` to help aid troubleshooting.
+          $ref: "#/components/schemas/PayloadAttributes"
+      discriminator:
+        propertyName: requestType
+        mapping:
+          payload: "#/components/schemas/SeatAvailabilityPayloadRQ"
+          orderId: "#/components/schemas/SeatAvailabilityOrderRQ"
+          offerId: "#/components/schemas/SeatAvailabilityOfferRQ"
+          stateless: "#/components/schemas/SeatAvailabilityStatelessRQ"
+    SeatAvailabilityOfferRQ:
+      allOf:
+        - $ref: '#/components/schemas/GenericSeatAvailabilityRQ'
+        - type: object
+          description: Contains the transaction set from `GetSeats` that returns data used to construct the respective seat map(s) for a given offer.
+          required:
+            - pointOfSale
+            - request
+          properties:
+            pointOfSale:
+              description: Contains point of sale information.
+              $ref: "#/components/schemas/PointOfSale"
+            request:
+              description: Contains the offer associated with the seat map.
+              $ref: "#/components/schemas/OfferRequest"
+    SeatAvailabilityOrderRQ:
+      allOf:
+        - $ref: '#/components/schemas/GenericSeatAvailabilityRQ'
+        - type: object
+          description: Contains the transaction set from `GetSeats` that returns data used to construct the respective seat map(s) for a given order.
+          required:
+            - pointOfSale
+            - request
+          properties:
+            pointOfSale:
+              description: Contains point of sale information.
+              $ref: "#/components/schemas/PointOfSale"
+            request:
+              description: Contains the offer associated with the seat map.
+              $ref: "#/components/schemas/OrderRequest"
+    SeatAvailabilityPayloadRQ:
+      allOf:
+        - $ref: '#/components/schemas/GenericSeatAvailabilityRQ'
+        - type: object
+          description: The transaction set from `GetSeats` that returns data used to construct the respective seat map(s) with fully integrated fees for any identified premium seats.
+          required:
+            - request
+          properties:
+            request:
+              description: Contains itinerary elements required for the `payload` request type.
+              $ref: "#/components/schemas/PayloadRequest"
+            requestMode:
+              description: Identifies whether the request should be used for booking or for check-in.
+              $ref: "#/components/schemas/RequestMode"
+    SeatAvailabilityStatelessRQ:
+      allOf:
+        - $ref: '#/components/schemas/GenericSeatAvailabilityRQ'
+        - type: object
+          description: Contains the transaction set from `GetSeats` that returns data used to contruct the respective seat map(s) for a given offer.
+          required:
+            - request
+          properties:
+            request:
+              description: Contains itinerary elements required for the `stateless` request type.
+              $ref: "#/components/schemas/StatelessRequest"
+            requestMode:
+              description: Identifies whether the request should be used for booking or for check-in.
+              $ref: "#/components/schemas/RequestMode"
+    OfferRequest:
+      description: Contains offer request information.
+      type: object
+      required:
+        - offer
+      properties:
+        offer:
+          description: Contains the offer ID/offer item ID associated with the seat map.
+          $ref: "#/components/schemas/Offer"
+        paxes:
+          description: Lists passenger information.
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/OfferPaxRQ"
+    OrderRequest:
+      description: Contains order request information.
+      type: object
+      required:
+        - order
+      properties:
+        order:
+          $ref: "#/components/schemas/Order"
+    PayloadRequest:
+      description: Contains payload request information.
+      type: object
+      required:
+        - paxSegmentRefIds
+        - originDest
+        - paxes
+      properties:
+        paxSegmentRefIds:
+          description: Lists passenger segment IDs for a requested seat map.
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/XmlID"
+        originDest:
+          description: Contains the origin and destination airport/city pair.
+          $ref: "#/components/schemas/OriginDestRQ"
+        paxes:
+          description: Lists passenger definitions for each seat map to be returned.
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/PayloadPaxRQ"
+        fareComponents:
+          description: Lists fare definitions used for the trip.
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/FareComponent"
+        currency:
+          description: Requested search processing and results currency information.
+          $ref: "#/components/schemas/Token"
+        dataBin:
+          $ref: "#/components/schemas/TinyString"
+        customAttributes:
+          description: Lists any custom input attributes.
+          type: array
+          items:
+            $ref: "#/components/schemas/KeyValuePair"
+    StatelessRequest:
+      description: Contains offer request information.
+      type: object
+      required:
+        - pnrLocator
+      properties:
+        pnrLocator:
+          description: The PNR locator associated with the seat maps to return in the `stateless` request.
+          $ref: "#/components/schemas/ID"
+        dataBin:
+          $ref: "#/components/schemas/TinyString"
+        customAttributes:
+          description: Lists any custom input attributes.
+          type: array
+          items:
+            $ref: "#/components/schemas/KeyValuePair"
+    Offer:
+      description: Contains the ID record of an Offer in OfferStore. An Offer is an agreement between one party and another to receive products and services under specified terms and conditions.
+      type: object
+      required:
+        - offerId
+      properties:
+        offerId:
+          description: The unique ID of the NDC Offer associated with the seat maps to return in the `offerId` request.
+          $ref: "#/components/schemas/ID"
+    Order:
+      description: Contains the ID record of an Order.
+      type: object
+      required:
+        - orderId
+      properties:
+        orderId:
+          description: The unique ID of the NDC Order associated with the seat maps to return in the `orderId` request.
+          $ref: "#/components/schemas/ID"
+    SeatAvailabilityRS:
+      description: |
+        Contains the `SeatAvailability` transaction set that returns data used to construct
+        respective seat maps with fully integrated fees for any identified
+        premium seats. The message also returns multi-media content at the
+        message level with media content references at the individual service
+        level.
+      type: object
+      properties:
+        payloadAttributes:
+          description: The interary parameters of the seat maps to return.
+          $ref: "#/components/schemas/PayloadAttributes"
+        response:
+          description: Contains seat map response information.
+          $ref: "#/components/schemas/SeatAvailabilityResponse"
+        errors:
+          description: Lists any errors that occured during request processing.
+          type: array
+          items:
+            description: Errors that occured during request processing.
+            $ref: "#/components/schemas/Error"
+        warnings:
+          description: Lists any warnings that occured during request processing.
+          type: array
+          items:
+            description: Warnings that occurred during processing.
+            $ref: "#/components/schemas/Warning"
+        extensions:
+          description: Contains any additional Seat Availability parameters, mostly technical ones.
+          type: object
+    SeatAvailabilityResponse:
+      description: Contains seat map response information.
+      type: object
+      required:
+        - seatMaps
+      properties:
+        aLaCarteOffer:
+          description: |
+            Container for standalone optional `OfferItems`. This serves as a shopping basket
+            aimed to reduce the size of the message by inserting any items that are applicable
+            to multiple flight-related Offers.
+          $ref: "#/components/schemas/ALaCarteOffer"
+        dataLists:
+          description: Data List information used for inter-message referencing.
+          $ref: "#/components/schemas/DataLists"
+        seatMaps:
+          description: Lists seat maps with corresponding cabins and seats.
+          type: array
+          items:
+            $ref: "#/components/schemas/SeatMap"
+        shoppingResponse:
+          description: |
+            A collection of shopping session (message response) IDs, including the unique (master) Shopping Response ID, Offer IDs, Offer Item IDs and Service IDs.
+
+            Notes: This capability may not be supported by all NDC-enabled systems or may be supported by bilateral agreement only.
+            The technical implementation of this capability is not dictated by this specification.
+          $ref: "#/components/schemas/ShoppingResponse"
+    DataLists:
+      description: Contains a list of data, including origin destinations, passenger information, service definitions, and seat information.
+      type: object
+      properties:
+        originDests:
+          description: Lists all origin and destination pairs associated with the seat information.
+          type: array
+          items:
+            $ref: "#/components/schemas/OriginDestRS"
+        paxSegments:
+          description: Lists all flight segments associated with the seat information.
+          type: array
+          items:
+            $ref: "#/components/schemas/PaxSegmentRS"
+        paxJourneys:
+          description: Lists all journies included in the passenger's itinerary.
+          type: array
+          items:
+            $ref: "#/components/schemas/PaxJourneyRS"
+        paxs:
+          description: Lists data related to the passenger.
+          type: array
+          items:
+            $ref: "#/components/schemas/PaxRS"
+        serviceDefinitions:
+          description: Lists all airline-specific products and services (excluding flights) that can be separately sold and delivered.
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceDefinition"
+        seatProfiles:
+          description: Lists all descriptions and characteristics of a seat.
+          type: array
+          items:
+            $ref: "#/components/schemas/SeatProfile"
+    Description:
+      description: An account or representation of the certain or major aspects, characteristics, or features of a person, object, or event.
+      type: object
+      required:
+        - descriptionID
+      properties:
+        descriptionID:
+          description: Unique ID of the description.
+          $ref: "#/components/schemas/XmlID"
+        descriptionText:
+          description: An account or representation of the certain or major aspects, characteristics, or features of a person, object, or event.
+          type: string
+          example: This is the description of the Price Class.
+        markupStyleText:
+          description: The mark-up Style of the Description Text.
+          type: string
+          example: HTML
+        url:
+          description: The URL of the source of the description information.
+          type: string
+          format: uri
+          example: https://developer.sabre.com/home
+    OriginDestRS:
+      description: Contains the origin and destination airport/city pair that confine a passenger journey or an aircraft flight.
+      type: object
+      properties:
+        originDestID:
+          description: The ID of the origin destination.
+          $ref: "#/components/schemas/XmlID"
+        originCode:
+          description: IATA-defined code that identifies a departure city or station.
+          $ref: "#/components/schemas/IataCityOrStationCodeType"
+        destCode:
+          description: IATA-defined code that identifies an arrival city or station.
+          $ref: "#/components/schemas/IataCityOrStationCodeType"
+        paxJourneyRefIDs:
+          description: Reference to a passenger journey ID within this message.
+          $ref: "#/components/schemas/IDREFS"
+    PaxSegmentRS:
+      description: Contains details of the passenger transportation on a dated operating segment.
+      type: object
+      required:
+        - paxSegmentID
+        - departure
+        - arrival
+        - marketingCarrierInfo
+      properties:
+        paxSegmentID:
+          description: The ID of the passenger segment.
+          $ref: "#/components/schemas/XmlID"
+        arrivalUknown:
+          description: If true, there is a gap between the current segment departure and previous segment arrival, indicating an unknown passenger movement.
+          type: boolean
+          example: true
+        ticketless:
+          description: If true, there are no ticket records (as defined by IATA Resolutions) expected to be issued for this segment.
+          type: boolean
+          example: true
+        secureFlight:
+          description: If true, this segment is subject to the US TSA Secure Flight passenger pre-screening program.
+            prescreening program.
+          type: boolean
+          example: true
+        duration:
+          description: The total segment time, including combined air time and the connection times of any legs.
+          $ref: "#/components/schemas/Token"
+        segmentTypeCode:
+          description: Defines the operational flight segment type based on the encoding scheme IATA PADIS 1.4 Codeset FST - Flight Segment Type. Can be `Open`, `Passive`, `Service`.
+          type: string
+          example: Passive
+        cabinType:
+          description: The aircraft compartment type used to offer special services (e.g. business class, economy).
+          $ref: "#/components/schemas/CabinType"
+        departure:
+          description: The departure time and date of the aircraft.
+          $ref: "#/components/schemas/TransportRS"
+        arrival:
+          description: The arrival time and date of the aircraft.
+          $ref: "#/components/schemas/TransportRS"
+        marketingCarrierInfo:
+          description: The commercial designation under which a dated operating segment can be booked, either under the operating carrier's designator or that of another carrier (codeshare).
+          $ref: "#/components/schemas/DatedMarketingSegment"
+        operatingCarrierInfo:
+          description: An operation between a boarding point and any subsequent off point within the same flight designator. Could be one or more legs. Could also be used for other transport vehicles such as train or bus, etc.
+          $ref: "#/components/schemas/DatedOperatingSegmentRS"
+        datedOperatingLegs:
+          description: |
+            The nonstop operation of a transport vehicle between the departure
+            station and the arrival station. Can be used for aircrafts as well
+            as other transport vehicles such as a train, bus, etc.
+          type: array
+          items:
+            $ref: "#/components/schemas/DatedOperatingLegType"
+    TransportRS:
+      description: Contains the details of the flight arrival/departure location and date/time.
+      type: object
+      properties:
+        boardingGateID:
+          description: Identifier of the gate within a terminal.
+          $ref: "#/components/schemas/BoardingGateID"
+        iataLocationCode:
+          description: IATA-defined code that identifies a city or station.
+          $ref: "#/components/schemas/IataCityOrStationCodeType"
+        stationName:
+          description: The name of the airport or station.
+          $ref: "#/components/schemas/StationNameType"
+        terminalName:
+          description: The name of the terminal within an airport or station.
+          $ref: "#/components/schemas/Token"
+        aircraftScheduledDateTime:
+          description: The scheduled date and time of the aircraft arrival or departure at the airport terminal/departure gate.
+          $ref: "#/components/schemas/DateTimeType"
+    DatedMarketingSegment:
+      description: |
+        Contains details of the commercial designation under which a dated operating segment
+        can be booked, either under the operating carrier's designator or that of another carrier (codeshare).
+      type: object
+      required:
+        - carrierDesignatorCode
+        - marketingCarrierFlightNumberText
+      properties:
+        carrierDesignatorCode:
+          description: A code assigned to an airline carrier. This can be either an ICAO-defined 3-character code or an IATA-defined 2-character code.
+          $ref: "#/components/schemas/AirlineCode"
+        carrierName:
+          description: "The commercial name of the carrier."
+          $ref: "#/components/schemas/Token"
+        marketingCarrierFlightNumberText:
+          description: The numerical designation of a flight as it is marketed by a carrier.
+          $ref: "#/components/schemas/CarrierFlightNumberType"
+        operationalSuffixText:
+          description: Used to distinguish two flights having the same flight number and departing from their respective origin stations on the same date.
+          type: string
+          maxLength: 1
+          example: A
+        rbdCode:
+          description: The code used to identify a particular RBD (e.g. P, J, W, M, etc.). Full list can be found at IATA Padis Codeset 9800.
+          type: string
+          example: P
+    DatedOperatingSegmentRS:
+      description: Contains details of the operation between the board point and any subsequent off point within the same flight designator. It can be one or more legs.
+      type: object
+      properties:
+        carrierDesignationCode:
+          description: A code assigned to an airline carrier. This can be either an ICAO-defined 3-character code or an IATA-defined 2-character code.
+          $ref: "#/components/schemas/AirlineCode"
+        carrierName:
+          description: The commercial name of the carrier.
+          $ref: "#/components/schemas/Token"
+        operatingCarrierFlightNumberText:
+          description: The numerical designation of a flight operated by a carrier.
+          $ref: "#/components/schemas/CarrierFlightNumberType"
+        operationalSuffixText:
+          description: Used to distinguish two flights having the same flight number and departing from their respective origin stations on the same date.
+          type: string
+          maxLength: 1
+          example: A
+        rbdCode:
+          description: The code used to identify a particular RBD (e.g. P, J, W, M, etc.). Full list can be found at IATA Padis Codeset 9800.
+          type: string
+          example: P
+    DatedOperatingLegType:
+      description: |
+        Contains non-stop operation details for a transport vehicle between the departure station and the arrival station. Can be used for aircrafts as well as other transport vehicles such as train or bus.
+      type: object
+      required:
+        - datedOperatingLegID
+        - departure
+        - arrival
+      properties:
+        datedOperatingLegID:
+          description: The ID of the operating leg.
+          $ref: "#/components/schemas/XmlID"
+        carrierAircraftType:
+          description: Carrier-defined internal grouping of aircrafts with the same form, function, and specification.
+          $ref: "#/components/schemas/CarrierAircraftTypeType"
+        departure:
+          description: The departure time and date of the aircraft or transport vehicle.
+          $ref: "#/components/schemas/TransportRS"
+        arrival:
+          description: The arrival time and date of the aircraft or transport vehicle.
+          $ref: "#/components/schemas/TransportRS"
+    CarrierAircraftTypeType:
+      description: Contains details of the carrier-defined aircraft type.
+      type: object
+      properties:
+        carrierAircraftTypeCode:
+          description: The internal code used by a carrier to identify the type of aircraft.
+          type: string
+          example: 32A
+        carrierAircraftTypeName:
+          description: The internal name given by the carrier to this aircraft type.
+          type: string
+          example: Airbus A320
+    PaxJourneyRS:
+      description: Contains passenger segment information. These segments contain passenger transportation details between a given origin and destination.
+      type: object
+      required:
+        - paxSegmentRefIDs
+      properties:
+        paxJourneyID:
+          description: The ID of the passenger journey.
+          $ref: "#/components/schemas/XmlID"
+        distanceMeasure:
+          description: The total journey distance. Includes the combined distance of all segments.
+          $ref: "#/components/schemas/Measure"
+        duration:
+          description: The total journey time, including combined air and connection times. In the case of a stopover, this value may or may not include the stopover duration.
+          $ref: "#/components/schemas/Token"
+        paxSegmentRefIDs:
+          description: The ID of the passenger segment.
+          $ref: "#/components/schemas/IDREFS"
+    Measure:
+      description: Contains numeric measurement information, including the unit of measurement.
+      type: object
+      required:
+        - measure
+      properties:
+        measure:
+          description: The numeric value of the measurement.
+          type: number
+          example: 5
+        unitCode:
+          description: The unit of measurement.
+          $ref: "#/components/schemas/Token"
+    PaxRS:
+      description: Contains passenger information specific to a booking.
+      type: object
+      required:
+        - paxID
+      properties:
+        paxID:
+          description: The ID of the passenger.
+          $ref: "#/components/schemas/XmlID"
+        ptc:
+          description: Passenger type code (PTC) that applies to the passenger. This typically drives pricing.
+          $ref: "#/components/schemas/PtcCodeType"
+        loyaltyProgramAccount:
+          description: Lists any loyalty program accounts associated with the passenger.
+          type: array
+          maxItems: 9
+          items:
+            $ref: "#/components/schemas/LoyaltyProgramAccountRS"
+    PayloadPaxRQ:
+      description: Contains passenger and the corresponding fare information, such as the association between `fareComponents` and `paxSegments`.
+      type: object
+      required:
+        - paxID
+        - ptc
+      properties:
+        paxID:
+          description: The ID of the passenger.
+          $ref: "#/components/schemas/XmlID"
+        ptc:
+          description: Passenger type code (PTC) that applies to the passenger. This typically drives pricing.
+          $ref: "#/components/schemas/PtcCodeType"
+        birthday:
+          description: The date on which the passenger was born.
+          type: string
+          format: date
+          example: "2024-11-20"
+        givenName:
+          description: The passenger's first or given name.
+          type: string
+          example: John
+        surname:
+          description: The passenger's family name or last name. Excludes any potential suffix.
+          type: string
+          example: Smith
+        accompaniedByInfant:
+          description: If true, the passenger is traveling with an infant that does not occupy a seat.
+          type: boolean
+          example: true
+        fareComponentsAndSegmentId:
+          description: Lists associations between the `segment`s and `fareComponent`s.
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/FareComponentsAndSegmentId"
+        loyaltyProgramAccount:
+          description: Lists any loyalty program accounts associated with the passenger.
+          type: array
+          minItems: 1
+          maxItems: 9
+          items:
+            $ref: "#/components/schemas/LoyaltyProgramAccount"
+        customAttributes:
+          description: Lists any custom input attributes for the passenger.
+          type: array
+          items:
+            $ref: "#/components/schemas/KeyValuePair"
+    OfferPaxRQ:
+      description: Contains passenger and the corresponding frequent flier information.
+      type: object
+      required:
+        - paxID
+      properties:
+        paxID:
+          description: The ID of the passenger.
+          $ref: "#/components/schemas/XmlID"
+        givenName:
+          description: The passenger's first or given name.
+          type: string
+          example: John
+        surname:
+          description: The passenger's family name or last name. Excludes any potential suffix.
+          type: string
+          example: Smith
+        loyaltyProgramAccount:
+          description: Lists any loyalty program accounts associated with the passenger.
+          type: array
+          minItems: 1
+          maxItems: 9
+          items:
+            $ref: "#/components/schemas/LoyaltyProgramAccount"
+    FareComponentsAndSegmentId:
+      description: Contains the association between `segment`s and `fareComponent`s.
+      type: object
+      required:
+        - segmentRefId
+        - fareComponentRefId
+      properties:
+        segmentRefId:
+          description: Reference to a fare component segment ID within this message.
+          $ref: "#/components/schemas/XmlID"
+        fareComponentRefId:
+          description: Reference to a fare component ID within this message.
+          $ref: "#/components/schemas/XmlID"
+    FareComponent:
+      description: Contains fare details.
+      type: object
+      required:
+        - fareComponentId
+        - fareBasis
+      properties:
+        fareComponentId:
+          description: The unique ID of the fare.
+          $ref: "#/components/schemas/XmlID"
+        governingCarrier:
+          description: The governing carrier on a ticket is the one whose fare basis is used for issuing the ticket.
+          $ref: "#/components/schemas/AirlineCode"
+        vendorCode:
+          description: The fare vendor code.
+          maxLength: 5
+          minLength: 1
+          type: string
+          example: AY
+        price:
+          description: Total price of all `FareComponent` prices.
+          $ref: "#/components/schemas/PriceRQ"
+        fareBasis:
+          description: Contains the alphanumeric code that appears in the Fare Basis box on a ticket.
+          $ref: "#/components/schemas/FareBasis"
+        brand:
+          description: Contains brand information.
+          $ref: "#/components/schemas/Brand"
+        fareDetail:
+          description: Contains a variety of additional fare information.
+          $ref: "#/components/schemas/FareDetail"
+    FareDetail:
+      description: Contains a variety of additional fare information.
+      type: object
+      properties:
+        fareType:
+          description: The alpha-numeric or alphabetic fare basis code.
+          type: string
+          example: XAN
+        fareTariff:
+          description: The charge for a passenger to fly a given segment (city pair).
+          type: string
+          example: "1"
+        fareRule:
+          description: The automated rule provisions for specific fare classes. The term can refer to rules governing published fares or to fares that are contained in the text of a rule.
+          type: string
+          example: "WPIL"
+        fareIndicator:
+          description: The numerical amount of the fare.
+          type: number
+          example: 21
+        fareTypeBitmap:
+          description: The alpha-numeric or alphabetic fare type from ticketing.
+          type: string
+          example: "00"
+        privateTariffIndicator:
+          description: If true, the tariff contains fare and rule data that is not available for public inquiry.
+          type: boolean
+          example: true
+    Brand:
+      description: Contains brand information. Brands are associated with fare families, which are defined by geographical locations or travel dates.
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          description: The unique ID of the brand.
+          type: string
+          example: BRND
+    PriceRQ:
+      type: object
+      description: Contains fare pricing information.
+      required:
+        - amount
+      properties:
+        amount:
+          description: Fare price amount value.
+          type: number
+          example: 100
+    FareBasis:
+      type: object
+      description: Contains the alphanumeric code that appears in the Fare Basis box on a ticket. A Fare Basis is a compilation of the fare class or ticketing code and one or two ticketing designators.
+      required:
+        - fareBasisCode
+      properties:
+        fareBasisCode:
+          $ref: "#/components/schemas/ShortString"
+    LoyaltyProgramAccount:
+      description: Contains the details of an account set up for a passenger with a loyalty program.
+      type: object
+      required:
+        - airline
+        - accountNumber
+      properties:
+        airline:
+          description: Contains either the IATA Resolution 762 airline code or ICAO airline code.
+          $ref: "#/components/schemas/AirlineCode"
+        accountNumber:
+          description: The loyalty program alphanumeric account number, following the formatting convention ABC123456.
+          $ref: '#/components/schemas/Token'
+        tierPriority:
+          description: The loyalty program-defined tier of the loyalty program, such as `Platinum` or `Executive`.
+          type: string
+          example: Platinum
+        partnerProgram:
+          description: Name of the partnership or alliance with another airline that the loyalty program is associated with.
+          type: string
+          example: Eurobonus
+    LoyaltyProgramAccountRS:
+      description: Contains the details of an account set up for a passenger with a loyalty program.
+      type: object
+      properties:
+        airline:
+          description: Contains either the IATA Resolution 762 airline code or ICAO airline code.
+          $ref: "#/components/schemas/AirlineCode"
+        accountNumber:
+          description: The loyalty program alphanumeric account number, following the formatting convention ABC123456.
+          $ref: '#/components/schemas/Token'
+        tierPriority:
+          description: The loyalty program-defined tier of the loyalty program, such as `Platinum` or `Executive`.
+          type: string
+          example: Platinum
+        partnerProgram:
+          description: Name of the partnership or alliance with another airline that the loyalty program is associated with.
+          type: string
+          example: Eurobonus
+        providerName:
+          description: Non-airline loyalty program provider name.
+          type: string
+          example: 30K
+        programName:
+          description: The marketing name of the loyalty program.
+          type: string
+          example: Miles and More
+        programCode:
+          description: The code associated with the loyalty program.
+          type: string
+          example: MAM
+    ServiceDefinition:
+      description: Contains the airline-specific definition of a product or service (excluding flights) that can be separately sold and delivered. For example, a bag, seat, or meal on a flight.
+      type: object
+      required:
+        - serviceDefinitionID
+        - name
+        - descriptions
+      properties:
+        serviceDefinitionID:
+          description: |
+            Unique ID returned in a shopping response that identifies an airline service item (a product or a service)
+            that can be separately delivered and uniquely described by an airline. These IDs follow the format: `SRVC-2B88-4C33-9787-9461114BC9BE`.
+          $ref: '#/components/schemas/XmlID'
+        ownerCode:
+          description: ICAO-defined 3-character code or IATA-defined 2-character code of the owner/assigner of the offer ID, typically used for offer ordering purposes.
+          $ref: '#/components/schemas/AirlineCode'
+        name:
+          type: string
+          description: Service name.
+          example: Lounge Pass
+        depositTimeLimitDateTime:
+          description: The date by which a deposit must be paid for an order item.
+          $ref: "#/components/schemas/DateTimeType"
+        namingTimeLimitDateTime:
+          description: The time by which an order item must be completed with individual passenger names.
+          $ref: "#/components/schemas/DateTimeType"
+        paymentTimeLimitDateTime:
+          description: The date by which a commitment to pay must be made for the confirmed items in an order item.
+          $ref: "#/components/schemas/DateTimeType"
+        ticketingTimeLimitDateTime:
+          description: The time by which passengers must secure tickets (or other accountable documents) for a confirmed reservation as agreed with the airline.
+          $ref: "#/components/schemas/DateTimeType"
+        bilateralProcessTimeLimits:
+          description: Lists bilaterally-agreed upon limitation or restriction of time information.
+          type: array
+          items:
+            $ref: '#/components/schemas/BilateralProcessTimeLimit'
+        validatingCarrierCode:
+          description: ICAO-defined 3-character code or IATA-defined 2-character code of the validating airline carrier.
+          $ref: '#/components/schemas/AirlineCode'
+        descriptions:
+          description: Lists any descriptive content assosicated with the special service.
+          type: array
+          items:
+            $ref: '#/components/schemas/Description'
+        serviceDefinitionAssociation:
+          description: Determines whether `ServiceDefinition` information should be extended with specific bag or seat characteristics, or if `ServiceDefinition` is used as a bundle for further `ServiceDefinitions`.
+          $ref: '#/components/schemas/ServiceDefinitionAssociation'
+        bookingInstructions:
+          description: Contains optional service booking instructions.
+          $ref: '#/components/schemas/BookingInstructions'
+        detail:
+          description: Contains detailed service information, including service bundles, service combinations, service coupons, service fulfillment, and service quantity rules.
+          $ref: '#/components/schemas/ServiceDefinitionDetail'
+    BilateralProcessTimeLimit:
+      description: Contains bilaterally agreed limitation or restriction of time information.
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          description: A bilaterally-agreed time limit name.
+          type: string
+          example: Name
+        timeLimitDateTime:
+          description: The date and time of the time limit.
+          $ref: "#/components/schemas/DateTimeType"
+        descriptionText:
+          description: Additional text that supplements a specified time limit.
+          type: string
+          example: "Datetime limit is 2026-10-24"
+    ServiceDefinitionAssociation:
+      description: |
+        Contains the choice to determine whether the `ServiceDefinition` information should be extended with specific bag or seat characteristics, or whether the `ServiceDefinition` is used as a bundle for further `ServiceDefinitions`. This is based on an `xsd:choice` - exactly one of the properties will be present.
+      type: object
+      minProperties: 1
+      maxProperties: 1
+      properties:
+        seatProfileRefID:
+          description: References seats within `SeatList` to further define the characteristics of the seat product.
+          $ref: '#/components/schemas/IDREFS'
+        serviceBundle:
+          description: Contains service bundle information.
+          $ref: "#/components/schemas/ServiceBundle"
+    ServiceBundle:
+      description: Contains service bundle information.
+      type: object
+      required:
+        - serviceDefinitionRefID
+      properties:
+        maxQuantity:
+          description: Maximum quantity of bundle services that can be selected by each passenger referenced in the Offer.
+          type: integer
+          example: 2
+        serviceDefinitionRefID:
+          description: The ID of the `serviceDefinition`s which form this service bundle.
+          $ref: '#/components/schemas/IDREFS'
+    BookingInstructions:
+      description: Contains optional service booking instructions.
+      type: object
+      properties:
+        ssrCodes:
+          type: array
+          items:
+            description: Four character SSR code string.
+            type: string
+            example: EXST
+          description: |
+            Lists the four-character IATA Special Service Request (SSR) code values to be used.
+
+            Select an enumerated value from the list or enter a four character SSR code string. Although optional, some SSR codes may required associated description elements. Can be:
+
+            * `EXST` (EXTRA SEAT REQUIRED)
+            * `INFT` (INFANT ACCOMPANYING ADULT PASSENGER)
+            * `PETC` (PASSENGER TRAVELING WITH PET IN CABIN)
+            * `UMNR` (UNACCOMPANIED MINOR)
+        osiText:
+          description: Lists Other Service Information (OSI) text.
+          type: array
+          items:
+            type: string
+        method:
+          description: The PNR booking method. Refer to the IATA PADIS code list for data element 9750. Select a code value or enter a value that is bilaterally agreed upon by trading partners.
+          type: string
+          example: AE
+        upgradeMethod:
+          description: Contains upgrade information when a passenger upgrades to a new class.
+          $ref: "#/components/schemas/UpgradeMethod"
+        text:
+          description: Data center instructions.
+          type: array
+          items:
+            type: string
+        equipment:
+          description: Aircraft equipment information.
+          type: string
+          example: Sun Visors
+    ServiceDefinitionDetail:
+      description: Contains detailed service information which includes service bundle, service combinations, service coupon, service fulfillment and service quantity rules.
+      type: object
+      properties:
+        serviceCombinations:
+          description: Lists the optional service combinations that may or may not be combined with one another.
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceCombination"
+        serviceCoupon:
+          description: Optional service coupon information, including the fee basis and coupon type.
+          $ref: "#/components/schemas/ServiceCoupon"
+        serviceFulfillment:
+          description: Optional service fulfillment information, including the date/time period, location, fulfillment company.
+          $ref: "#/components/schemas/ServiceFulfillment"
+        serviceItemQuantityRules:
+          description: Defines the maximum and minimum service ordering quantity.
+          $ref: "#/components/schemas/ServiceItemQuantityRules"
+    UpgradeMethod:
+      description: >
+        Contains upgrade information when a passenger upgrades to a new class.
+        For maximum interoperability, refer to the IATA PADIS code list for data element 9750.
+        Select a code value or enter a value that is bilaterally agreed upon between trading partners.
+      type: object
+      required:
+        - value
+      properties:
+        value:
+          description: New class of service value.
+          type: string
+          example: by cabin class
+        newClass:
+          description: New class of service code.
+          type: string
+          example: BD
+    ServiceCombination:
+      description: Contains combination information whenever services are combined.
+      type: object
+      required:
+        - rule
+      properties:
+        rule:
+          description: Service combination rule. Can be `Permitted`, `NotPermitted`, or `Other`.
+          type: string
+          example: NotPermitted
+        serviceID:
+          description: Lists all service IDs included in the combination.
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceID"
+        serviceReference:
+          description: Lists any associations tied to a service instance.
+          type: array
+          items:
+            description: Association to one Service instance.
+            type: string
+            example: srvc1
+    ServiceID:
+      description: Contains the unique airline-assigned ID of the service.
+      type: object
+      required:
+        - value
+        - owner
+      properties:
+        value:
+          $ref: "#/components/schemas/XmlID"
+        owner:
+          description: The two to three IATA/A4A airline or CRS designator code of the owner/assigner of the Offer ID.
+          type: string
+          example: UA
+        objectKey:
+          $ref: "#/components/schemas/XmlID"
+    ServiceCoupon:
+      description: Contains service coupon information, including the type of coupon and fee basis.
+      type: object
+      properties:
+        instantPurchase:
+          description: >
+            Instant purchase type.
+            Can be:
+            `CC` (Ticketless purchase immediately charged to credit card)
+            `NO` (Not an instant purchase)
+            `TT` (Simultaneous with time of ticketing)
+
+            Encoding scheme: IATA PADIS Codeset IPT - Instant Purchase Type.
+          $ref: '#/components/schemas/IataCodeType'
+        feeBasis:
+          description: >
+            Service fee basis.
+            Can be:
+            `DIS` (Option directly applied to fare)
+            `FEE` (Baggage only)
+            `FNA` (Item is not available/ applicable)
+            `INC` (Item is free of charge)
+            `NAP` (Item not applicable/ available)
+            `SUR` (Surcharge)
+
+            Encoding Scheme: IATA Padis Codeset - List for data element SFB - Service Fee Basis.
+          $ref: '#/components/schemas/IataCodeType'
+        couponType:
+          description: |
+            Contains instruction on what type of traffic document should be issued for an optional service.
+
+            Can be:
+            `EMD Associated`
+            `EMD Standalone`
+            `No EMD`
+            `Electronic Ticket`
+          type: string
+          example: EMD Associated
+    ServiceFulfillment:
+      description: Contains optional service fulfillment information, including the date and time period, location, and fulfillment company.
+      type: object
+      properties:
+        offerValidDates:
+          description: The start and end date time period(s) the service may be fulfilled or used.
+          $ref: "#/components/schemas/OfferValidDates"
+        provider:
+          description: References information about the company or party that will fulfill the service.
+          $ref: "#/components/schemas/FulfillmentPartnerType"
+        location:
+          description: Contains the location where the service will be fulfilled.
+          type: object
+          required:
+            - airportFulfillmentLocation
+          properties:
+            airportFulfillmentLocation:
+              description: Contains the location of the fulfillment airport location.
+              type: object
+              properties:
+                airportCode:
+                  description: The three-letter IATA code of the airport.
+                  type: string
+                  example: DFW
+            otherFulfillmentLocation:
+              description: References the physical address where the service fulfillment will occur.
+              $ref: "#/components/schemas/AddressType"
+    ServiceItemQuantityRules:
+      description: Contains the minimum and maximum quantity of service orders.
+      type: object
+      properties:
+        minimum:
+          description: The minimum quantity of service orders.
+          type: integer
+          example: 0
+        maximum:
+          description: The maximum quantity of service orders.
+          type: integer
+          example: 10
+    OfferValidDates:
+      description: Contains the start and end date/time the service may be fulfilled or used.
+      type: object
+      properties:
+        start:
+          description: The earliest date the associated optional service is available or may be used.
+          $ref: "#/components/schemas/DateTimeType"
+        end:
+          description: The latest date the associated optional service is available or may be used.
+          $ref: "#/components/schemas/DateTimeType"
+    FulfillmentPartnerType:
+      description: Contains common (role-agnostic) properties associated with a partner company, derived from `PartnerCoreRepType`.
+      type: object
+      required:
+        - partnerID
+      properties:
+        partnerID:
+          description: The unique ID of the partner company.
+          type: string
+          minLength: 1
+          example: AIRSTUFF
+        name:
+          description: The name of the partner company.
+          type: string
+          example: Flight Stuff Inc.
+        type:
+          description: "The partner company type. Can be: `ServiceProvider`, `ServiceFulfillment`, `Merchandise`."
+          type: string
+          example: ServiceProvider
+        fulfillments:
+          description: Lists offer and order fulfillment(s).
+          type: array
+          items:
+            $ref: "#/components/schemas/Fulfillment"
+    Fulfillment:
+      description: Contains fulfillment details.
+      type: object
+      properties:
+        offerValidDates:
+          description: The start and end date/time period(s) the service may be fulfilled (used).
+          $ref: '#/components/schemas/OfferValidDates'
+        location:
+          description: Information about the location where the service will be fulfilled.
+          $ref: "#/components/schemas/AirportAndAddress"
+    AirportAndAddress:
+      description: Contains airport address information.
+      type: object
+      properties:
+        airportCode:
+          description: The three-letter IATA airport code.
+          type: string
+          example: DFW
+        address:
+          description: Payment address representation.
+          $ref: "#/components/schemas/StructuredAddress"
+    StructuredAddress:
+      description: Contains structured address information.
+      type: object
+      properties:
+        application:
+          description: Identifies whether the address relates to the origin or destination airport.
+          type: string
+          enum:
+            - AddressAtOrigin
+            - AddressAtDestination
+        common:
+          description: Contains the common properties between the `PaymentAddress` and `StructuredAddress`.
+          $ref: "#/components/schemas/AddressCommon"
+        countryCode:
+          description: The two-letter ISO 3166-1 country code.
+          type: string
+          example: US
+        county:
+          description: The full name of the county the address is located in.
+          type: string
+          example: Litchfield
+    AddressCommon:
+      description: Contains the common properties between the `PaymentAddress` and `StructuredAddress`.
+      type: object
+      properties:
+        street:
+          description: Lists the streets in `PaymentAddress` and `StructuredAddress`.
+          type: array
+          items:
+            description: The street name and number.
+            type: string
+            example: Main Street
+        poBox:
+          description: The P.O. (Post Office) box number, if applicable.
+          type: string
+          example: P.O. Box 21
+        buildingRoom:
+          description: "The building type. Can be: `room`, `apartment`, or `suite number`."
+          type: string
+          example: room
+        city:
+          description: The full name of the city.
+          type: string
+          example: Tampa
+        stateProv:
+          description: State code or province name.
+          type: string
+          example: NY
+        postalCode:
+          description: The postal code.
+          type: string
+          example: "11001"
+    AddressType:
+      required:
+        - paymentAddress
+        - simpleAddress
+        - structuredAddress
+      properties:
+        paymentAddress:
+          description: Relaxed cardinality representation of `StructuredAddress` to support various combinations of address verification fields.
+          $ref: "#/components/schemas/PaymentAddress"
+        simpleAddress:
+          description: Simple (non-structured) address.
+          $ref: "#/components/schemas/SimpleAddress"
+        structuredAddress:
+          description: Structured address representation.
+          $ref: "#/components/schemas/StructuredAddress"
+        directions:
+          description: Lists navigational directions based on the NDC Capability Model.
+          type: array
+          items:
+            $ref: "#/components/schemas/Directions"
+    PaymentAddress:
+      description: >
+        Contains details of the payment address provided.
+        This is a "relaxed" cardinality of a `StructuredAddress` that supports various combinations of address verification fields.
+      type: object
+      properties:
+        common:
+          description: Contains the common properties between the `PaymentAddress` and `StructuredAddress`.
+          $ref: "#/components/schemas/AddressCommon"
+        country:
+          description: The two-letter ISO 3166-1 country code.
+          type: string
+          example: US
+    SimpleAddress:
+      description: Contains simplified address information.
+      type: object
+      required:
+        - addressLines
+      properties:
+        addressLines:
+          description: Lists address lines.
+          type: array
+          items:
+            description: The address line.
+            type: string
+            example: Address Line 1
+    Directions:
+      description: Contains direction instructions.
+      type: object
+      properties:
+        text:
+          description: Text-based directions, with either a text or link property present.
+          type: string
+          example: LEFT
+        link:
+          description: The source URL where the directions are being pulled. A text or link property will always be present.
+          type: string
+          format: uri
+          example: https://developer.sabre.com/home
+        name:
+          description: The name associated with the nature of the directions.
+          type: string
+          example: Directions to Headquarters
+        from:
+          description: The name of the `from` location from which the directions start.
+          type: string
+          example: City Center
+        to:
+          description: The name of the `to` location from which the directions end.
+          type: string
+          example: Headquarters
+    SeatProfile:
+      description: Contains the description and characteristics of a seat.
+      type: object
+      required:
+        - seatProfileId
+      properties:
+        seatProfileId:
+          description: The unique identifier associated to the seat definition.
+          $ref: "#/components/schemas/XmlID"
+        characteristicCodes:
+          description: |
+            "The Seat characteristic/property code.
+            Can be: `E` (EXIT ROW), `M` (Middle Seat), `A` (Aisle seat), `L` (Left side of aircraft), `Q`
+            (Bulkead).
+            Refer to PADIS code list 9825."
+          type: array
+          items:
+            $ref: "#/components/schemas/Token"
+        seatWidthMeasure:
+          description: Measure of a given seat's width.
+          $ref: "#/components/schemas/Measure"
+        seatPitchMeasure:
+          description: Measure between one seatback and the same spot on the next seatback, also known as a pitch.
+          $ref: "#/components/schemas/Measure"
+        descriptionText:
+          description: Lists any descriptive text about the seat profile.
+          type: array
+          items:
+            description: Desc Text.
+            type: string
+            example: The description text about seat profile.
+        marketingInformation:
+          description: Lists any marketing text about the seat profile.
+          type: array
+          items:
+            $ref: "#/components/schemas/Description"
+        seatKeywords:
+          description: Lists any keywords associated with the seat profile.
+          type: array
+          items:
+            $ref: "#/components/schemas/KeyWord"
+    KeyWord:
+      type: object
+      description: Contains the contextual information to further describe an object by using a key-value pair.
+      required:
+        - keyWordText
+        - valueText
+      properties:
+        keyWordText:
+          description: The key word.
+          type: string
+          example: SKYC
+        valueText:
+          description: Text-based key word value.
+          type: string
+          example: SkyCouch
+    SeatMap:
+      description: Contains a list of cabins and the seats within it. This information can be used by the Seller to render a graphical Seat Map.
+      type: object
+      required:
+        - paxSegmentRefID
+        - cabinCompartments
+      properties:
+        paxSegmentRefID:
+          description: "The references of a Passenger Segment ID from this message or from within the SeatAvailability request."
+          $ref: "#/components/schemas/XmlID"
+        datedOperatingLegRefID:
+          description: "The references of a Leg ID from within the SeatAvailability request."
+          $ref: "#/components/schemas/XmlID"
+        cabinCompartments:
+          description: Lists the physical aircraft compartments.
+          type: array
+          items:
+            $ref: "#/components/schemas/CabinCompartment"
+        sellable:
+          description: If true, seats from the `SeatMap` can be added to the order (if a sell is possible).
+          type: boolean
+          example: true
+        changeOfGaugeNotSupported:
+          description: If true, carrier does not support change of gauge in Supplier Profile.
+          type: boolean
+
+    CabinCompartment:
+      description: Contains physical aircraft compartment information, such as where passenger seats are installed, classified by a given `cabinType`.
+      type: object
+      properties:
+        deckCode:
+          description: Aircraft deck code, such as upper, main, or lower.
+          $ref: "#/components/schemas/Token"
+        firstRow:
+          description: First row number of the Cabin Compartment.
+          type: integer
+          example: 1
+        lastRow:
+          description: Last row number of the Cabin Compartment.
+          type: integer
+          example: 10
+        columnIDs:
+          description: Lists the unique identifier of the columns in a cabin compartment.
+          type: array
+          items:
+            $ref: "#/components/schemas/Token"
+        cabinType:
+          description: Type of compartment of an aircraft that offers specific services.
+          $ref: "#/components/schemas/CabinType"
+        cabinLayout:
+          description: A physical aircraft compartment where passenger seats are installed, classified by a given `cabinType`.
+          $ref: '#/components/schemas/CabinLayoutType'
+        seatRows:
+          description: Lists the rows of seats located in a cabin compartment.
+          type: array
+          items:
+            $ref: "#/components/schemas/SeatRow"
+    CabinLayoutType:
+      description: Contains data on the rows and columns within the cabin.
+      type: object
+      required:
+        - columns
+        - rows
+      properties:
+        columns:
+          description: Lists column positions within the cabin.
+          type: array
+          items:
+            $ref: '#/components/schemas/CabinLayoutColumn'
+          minItems: 1
+        rows:
+          description: Seat row number and row characterisitcs.
+          $ref: '#/components/schemas/CabinLayoutRowPosition'
+        wingRowPosition:
+          description: Lists the positions of any wing rows.
+          type: array
+          items:
+            $ref: '#/components/schemas/CabinLayoutRowPosition'
+        exitRowPosition:
+          description: Lists the positions of any exit rows.
+          type: array
+          items:
+            $ref: '#/components/schemas/CabinLayoutRowPosition'
+        seatCount:
+          description: Number of seats.
+          type: integer
+          example: 6
+        authorizedSeatCount:
+          description: Number of seats available for booking.
+          type: integer
+          example: 10
+        missingRowNumbers:
+          description: Lists the rows that are missing on seat map.
+          type: array
+          items:
+            type: string
+        missingSeatList:
+          description: Lists the seats that are missing on seat map.
+          type: array
+          items:
+            type: string
+        facilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Facility'
+    CabinLayoutColumn:
+      description: Contains the location of a column within a cabin.
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          description: The seat column.
+          example: A-Z
+          type: string
+        position:
+          description: The position of the column. Can be `A` - Aisle, `C` - Central, `W` - Window.
+          example: A
+          type: string
+    CabinLayoutRowPosition:
+      description: Contains index information on the first and last rows within the cabin.
+      type: object
+      required:
+        - firstRow
+        - lastRow
+      properties:
+        firstRow:
+          description: Index of the first row within the cabin.
+          example: 1
+          type: integer
+        lastRow:
+          description: Index of the last row within the cabin.
+          example: 30
+          type: integer
+    SeatRow:
+      description: Contains seat information related to a given row within a cabin compartment.
+      type: object
+      required:
+        - row
+        - seats
+      properties:
+        row:
+          description: Seat row number.
+          type: integer
+          example: 5
+        characteristics:
+          description: Lists row characteristic details.
+          type: array
+          items:
+            $ref: "#/components/schemas/RowCharacteristic"
+        seats:
+          description: Lists the seats within a single row.
+          type: array
+          items:
+            $ref: "#/components/schemas/SeatType"
+    RowCharacteristic:
+      description: Contains row characteristic details.
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          description: Contains row characteristics by PADIS 9864 code.
+          $ref: "#/components/schemas/RowCharacteristicCodeType"
+        description:
+          description: Text-based description of the row characteristics.
+          type: string
+          example: Exit row
+    SeatType:
+      description: Contains seat type and location within a cabin information.
+      type: object
+      required:
+        - column
+      properties:
+        column:
+          description: The unique ID of the column where the seat is located.
+          $ref: "#/components/schemas/Token"
+        occupationStatusCode:
+          description: The occupation status of the seat by IATA PADIS 9865 - Seat Occupation code.
+          $ref: "#/components/schemas/OccupationStatusCodeType"
+        characteristics:
+          description: Lists all PADIS 9825 codeset seat characteristics.
+          type: array
+          items:
+            $ref: "#/components/schemas/SeatCharacteristic"
+        seatProfileRefIDs:
+          description: References the seat profile `DataLists` ID to allow assignment of additional properties to the seat instance.
+          $ref: "#/components/schemas/IDREFS"
+        offerItemRefIDs:
+          description: References the price point applicable to an individual seat. Multiple seats can reference the same `OfferItem`.
+          $ref: "#/components/schemas/IDREFS"
+    SeatCharacteristic:
+      description: Contains seat characteristic details.
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          description: Lists all seat characteristics by PADIS 9825 codeset.
+          $ref: "#/components/schemas/SeatCharacteristicCodeType"
+        description:
+          description: Text-based description of the seat characteristic.
+          type: string
+          example: Crew seat
+    Facility:
+      description: Contains information about seat characteristic location and type.
+      type: object
+      required:
+        - location
+        - facilityType
+      properties:
+        location:
+          $ref: "#/components/schemas/FacilityLocation"
+        facilityType:
+          description: Type of the facility.
+          type: string
+    FacilityLocation:
+      description: Contains the facility location object.
+      type: object
+      required:
+        - beginRow
+        - endRow
+        - columnPositions
+        - orientation
+      properties:
+        beginRow:
+          description: Beginning row of the facility.
+          type: string
+        endRow:
+          description: Ending row of the facility.
+          type: string
+        columnPositions:
+          description: Lists the column position list.
+          type: array
+          items:
+            type: string
+        orientation:
+          description: The orientation of the facility.
+          type: string
+    Surcharge:
+      description: Contains single surcharge information.
+      type: object
+      properties:
+        total:
+          description: The subtotal of all fees and charges. Includes the monetary value and the corresponding currency code.
+          $ref: "#/components/schemas/Amount"
+        breakdown:
+          description: Lists detailed fee information.
+          type: array
+          items:
+            $ref: "#/components/schemas/Fee"
+    Fee:
+      description: Contains the fee breakdown.
+      type: object
+      properties:
+        amount:
+          description: The monetary amount of the fee accompanied by the currency code.
+          $ref: "#/components/schemas/Amount"
+        localAmount:
+          description: The monetary amount of the fee in the local currency, accompanied by the currency code.
+          $ref: "#/components/schemas/Amount"
+        designator:
+          description: Fee designator.
+          type: string
+          example: USC
+        description:
+          description: Text-based descriptor of the fee designator.
+          type: string
+          example: U.S Customs User Fee
+        nature:
+          description: Fee nature.
+          type: string
+          example: OBFCA
+    PtcOfferParameters:
+      description: Contains Passenger Type Code (PTC) information.
+      type: object
+      properties:
+        ptcPricedCode:
+          description: The three-character IATA passenger type code used for pricing.
+          $ref: '#/components/schemas/PtcCodeType'
+        ptcRequestedCode:
+          description: The requested three-character IATA passenger type code used for pricing.
+          $ref: '#/components/schemas/PtcCodeType'
+        requestedPaxNumber:
+          description: The number of passengers for the corresponding passenger type code.
+          type: integer
+          minimum: 0
+          example: 2
+        pricedPaxNumber:
+          description: The number of priced passengers for the corresponding passenger type code.
+          type: integer
+          minimum: 0
+          example: 2
+    CabinType:
+      description: Contains the cabin type being requested.
+      type: object
+      properties:
+        cabinTypeCode:
+          description: The PADIS codeset-standard cabin type code.
+          $ref: "#/components/schemas/CabinTypeCode"
+        cabinTypeName:
+          description: The name of the cabin.
+          type: string
+          example: "Economy"
+    Amount:
+      description: Contains monetary amount information.
+      type: object
+      required:
+        - amount
+      properties:
+        amount:
+          description: The seat price amount.
+          type: number
+          example: 100
+        currencyCode:
+          description: The ISO-4217 currency code associated with the seat price.
+          $ref: "#/components/schemas/Token"
+    ShoppingResponse:
+      description: Contains the ID and owner airline of the shopping response.
+      type: object
+      required:
+        - shoppingResponseID
+      properties:
+        shoppingResponseID:
+          description: The unique ID of the shopping session response.
+          $ref: "#/components/schemas/XmlID"
+        ownerCode:
+          $ref: "#/components/schemas/AirlineCode"
+    OriginDestRQ:
+      description: Contains the origin and destination airport/city pair that confines a passenger journey or aircraft flight.
+      type: object
+      required:
+        - paxJourney
+      properties:
+        paxJourney:
+          description: The origin and destination airport/city pair for the flight.
+          $ref: "#/components/schemas/PaxJourneyRQ"
+    PaxJourneyRQ:
+      description: Contains existing flight itinerary information.
+      type: object
+      required:
+        - paxSegments
+      properties:
+        paxSegments:
+          description: Lists any segment data definitions.
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/PaxSegmentRQ"
+    PaxSegmentRQ:
+      description: Contains passenger transportation information for a dated operating segment.
+      type: object
+      required:
+        - paxSegmentId
+        - departure
+        - arrival
+        - marketingCarrierInfo
+      properties:
+        paxSegmentId:
+          description: The unique ID of a passenger seat segment.
+          $ref: "#/components/schemas/XmlID"
+        departure:
+          description: References the departure airport and scheduled date.
+          $ref: '#/components/schemas/TransportRQ'
+        arrival:
+          description: References the arrival airport and scheduled date.
+          $ref: '#/components/schemas/TransportRQ'
+        marketingCarrierInfo:
+          description: Contains details of the commercial designation under which a dated operating segment can be booked, either under the operating carrier's designator or that of another carrier (codeshare).
+          $ref: '#/components/schemas/DatedSegmentRQ'
+        operatingCarrierInfo:
+          description: Contains details of the operation between the board point and any subsequent off point within the same flight designator. Can be one or more legs.
+          $ref: '#/components/schemas/DatedSegmentRQ'
+        cabinType:
+          description: Cabin data list definition.
+          $ref: '#/components/schemas/CabinType'
+    TransportRQ:
+      description: Contains the location code and scheduled date of the transportation.
+      type: object
+      required:
+        - locationCode
+        - aircraftScheduledDate
+      properties:
+        locationCode:
+          description: The IATA-defined code that identifies a city or station.
+          $ref: "#/components/schemas/IataCityOrStationCodeType"
+        aircraftScheduledDate:
+          description: The scheduled arrival/departure date for the aircraft.
+          $ref: "#/components/schemas/AircraftScheduledDate"
+    AircraftScheduledDate:
+      description: Contains information on a scheduled arrival/departure date of an aircraft.
+      type: object
+      required:
+        - date
+      properties:
+        date:
+          description: The arrival/departure date in YYYY-MM-DD format.
+          type: string
+          format: date
+          example: "2024-11-24"
+    DatedSegmentRQ:
+      description: Contains information about the marketing or operating carrier.
+      required:
+        - carrierCode
+        - carrierFlightNumber
+      type: object
+      properties:
+        bookingCode:
+          description: The unique booking code assigned to the segment.
+          $ref: "#/components/schemas/BookingCode"
+        carrierCode:
+          description: The two-character IATA or three-character ICAO airline code assigned to the carrier.
+          $ref: '#/components/schemas/AirlineCode'
+        carrierFlightNumber:
+          description: The unique number assigned to the flight by the airline carrier.
+          $ref: "#/components/schemas/CarrierFlightNumberType"
+    AirlineCode:
+      description: The code list contents of IATA Resolution 762 airline codes, or of ICAO airline codes.
+      type: string
+      pattern: ^([A-Z]{3}|[A-Z]{2})|([0-9][A-Z])|([A-Z][0-9])$
+      example: UA
+    Error:
+      description: Contains information related to errors detected during the processing of the preceding request.
+      type: object
+      properties:
+        code:
+          description: Error code specified by IATA code table 9321 - Application error, coded.
+          $ref: "#/components/schemas/IataCodeType"
+        descriptionText:
+          description: Free text description of the provided error.
+          type: string
+          example: Error was caused by bad weather and bad coffee
+        languageCode:
+          description: The ISO 639-2 code of the language the error is returned in.
+          type: string
+          example: mul
+        ownerName:
+          description: The name of the organization that owns the error codelist.
+          type: string
+          example: OwnerName
+        statusText:
+          description: "Document processing status. Can be: `NotProcessed`, `Incomplete`, `Complete`, or `Unknown`."
+          type: string
+          example: NotProcessed
+        tagText:
+          description: Lists any invalid elements found in the request. These are listed as URIs related to the JSON document root.
+          type: array
+          items:
+            description: Name of invalid element.
+            type: string
+            format: uri
+            example: "request.order.orderId"
+        typeCode:
+          description: The error type. This string can accept values that have not been explicitly coded for and can process them with the value `unknown`.
+          type: string
+          example: Type Code
+        url:
+          description: The link to an online description of the provided error.
+          type: string
+          format: uri
+          example: https://developer.sabre.com/home
+    Warning:
+      description: Contains information related to warnings detected during the processing of the preceding request.
+      type: object
+      properties:
+        code:
+          description: Code that identifies the returned warning (per warning owner).
+          type: string
+          example: "060544"
+        descriptionText:
+          description: Free text description of the provided warning.
+          type: string
+          example: Possible uncommitted PNR data exists
+        ownerName:
+          description: The name of the organization that owns the error codelist.
+          type: string
+          example: OrderView
+    ALaCarteOffer:
+      description: Contains optional, standalone `OfferItems`.
+      type: object
+      required:
+        - offerId
+        - ownerCode
+        - aLaCarteOfferItems
+      properties:
+        offerId:
+          description: The unique ID of an offer.
+          $ref: "#/components/schemas/XmlID"
+        ownerCode:
+          description: Airline code assigned to a carrier.
+          $ref: "#/components/schemas/AirlineCode"
+        ownerTypeCode:
+          description: Indicates whether or not the owner is the ORA or POA.
+          type: string
+          example: ORA
+        validatingCarrierCode:
+          description: Airline code assigned to a carrier.
+          $ref: "#/components/schemas/AirlineCode"
+        requestedDateIndicator:
+          description: If true, the offer is for a requested date. If false, the offer is for another date.
+          type: boolean
+          example: true
+        webAddressURL:
+          description: Provides a link to another site to complete the transaction of a specific offer.
+          type: string
+          format: uri
+          example: https://developer.sabre.com/home
+        redemptionIndicator:
+          description: If true, the offer must be redeemed and cannot be purchased. Taxes may still apply.
+          type: boolean
+          example: true
+        matchAppText:
+          description: "Text-based descriptor of the match type. Can be: `ATTRIBUTE`, `AFFINITY`, `OTHER`."
+          type: string
+          example: ATTRIBUTE
+        matchType:
+          description: >
+            Offer match to shopping criteria.
+            Can be: `Full`, `None`, `Partial`, `Other`.
+            Note: An additional percentage qualifier, such as 50%, may be specified for a Partial match.
+          $ref: '#/components/schemas/Token'
+        matchPercent:
+          description: Percentage of how closely the offer matches the shopping criteria. This value may also be used to indicate a percentage of a partial match.
+          type: number
+          example: 10
+        offerExpirationDateTime:
+          description: The date by which an offer must be converted into an order.
+          $ref: "#/components/schemas/DateTimeType"
+        paymentTimeLimitDateTime:
+          description: The date by which a commitment to pay must be made for the confirmed items in an offer.
+          $ref: "#/components/schemas/DateTimeType"
+        paymentTimeLimitText:
+          description: The local date by which a commitment to pay must be made for the confirmed items in an offer.
+          type: string
+          example: "2024-10-24"
+        priceGuaranteeTimeLimitDateTime:
+          description: The date when an offer price is no longer guaranteed.
+          $ref: "#/components/schemas/DateTimeType"
+        baggageDisclosureRefID:
+          description: Lists all bag disclosure IDs associated with an offer.
+          type: array
+          items:
+            $ref: "#/components/schemas/XmlID"
+        disclosureRefID:
+          description: The disclosure unique ID.
+          $ref: "#/components/schemas/XmlID"
+        penaltyRefID:
+          description: Lists penalty IDs associated with an offer.
+          type: array
+          items:
+            $ref: "#/components/schemas/XmlID"
+        ptcOfferParameters:
+          description: Lists passenger type code summary information for an offer.
+          type: array
+          items:
+            $ref: "#/components/schemas/PtcOfferParameters"
+        totalPrice:
+          description: Total price of the offer.
+          $ref: "#/components/schemas/Price"
+        aLaCarteOfferItems:
+          description: Lists any standalone optional `OfferItems`.
+          type: array
+          items:
+            $ref: "#/components/schemas/ALaCarteOfferItem"
+    ALaCarteOfferItem:
+      description: Contains one non-flight Service or Service Bundle which is priced per unit.
+      type: object
+      required:
+        - offerItemID
+        - unitPrice
+        - eligibility
+      properties:
+        offerItemID:
+          description: The unique ID of an offer item.
+          $ref: "#/components/schemas/XmlID"
+        source:
+          description: Source of the offer.
+          $ref: "#/components/schemas/SourceType"
+        unitPrice:
+          description: The price of the offer item.
+          $ref: "#/components/schemas/Price"
+        service:
+          description: Contains specific flight or service information for the specific offer.
+          $ref: "#/components/schemas/ALaCarteOfferService"
+        eligibility:
+          description: Passengers, price classes, or segments that are eligible for the offer item.
+          $ref: "#/components/schemas/Eligibility"
+
+    ALaCarteOfferService:
+      description: Contains specific flight or service definition as offered in the context of a specific offer/order.
+      type: object
+      required:
+        - serviceId
+        - serviceDefinitionRefID
+      properties:
+        serviceId:
+          description: The unique ID of the service.
+          $ref: "#/components/schemas/XmlID"
+        serviceRefID:
+          description: The ID associated with the definition of the service.
+          $ref: "#/components/schemas/XmlID"
+        serviceDefinitionRefID:
+          description: Reference to a Service Definition ID within this message.
+          $ref: "#/components/schemas/XmlID"
+    Price:
+      type: object
+      description: Contains detailed pricing breakdown information.
+      properties:
+        totalAmount:
+          description: The total amount includes all tax, surcharge, and fee amounts.
+          $ref: '#/components/schemas/Amount'
+        baseAmount:
+          description: The base amount excludes tax, surcharge, and fee amounts.
+          $ref: '#/components/schemas/Amount'
+        equivAmount:
+          description: The entire amount of the transaction in the local currency at the point of sale, or in the currency defined by the `currencyCode`.
+          $ref: '#/components/schemas/Amount'
+        loyaltyUnitAmount:
+          description: The amount specified in specific loyalty units. `currencyCode` should not be populated for this.
+          $ref: '#/components/schemas/Amount'
+        loyaltyUnitName:
+          description: The name of the loyalty unit used in `loyaltyUnitAmount`, such a `miles` or `points`.
+          $ref: '#/components/schemas/Token'
+        discount:
+          description: Deduction from the price amount made in advance of its payment.
+          $ref: '#/components/schemas/Discount'
+        fee:
+          description: Lists all specific fees applied to the `totalAmount`.
+          type: array
+          items:
+            $ref: "#/components/schemas/Fee"
+        taxSummary:
+          description: Contains a summary of the taxation applied.
+          $ref: '#/components/schemas/TaxSummary'
+        surcharge:
+          description: Lists all surcharges applied to the `totalAmount`.
+          type: array
+          items:
+            $ref: "#/components/schemas/Surcharge"
+    TaxSummary:
+      type: object
+      description: Contains a summary of applied taxation, including the total tax amount.
+      properties:
+        totalTaxAmount:
+          description: |
+            Total of all applicable tax amounts included in the price.
+            If tax breakdowns are provided, this amount should match the sum of the tax breakdown amounts.
+          $ref: '#/components/schemas/Amount'
+        taxes:
+          description: Lists any specific taxes that apply to the offer.
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxType'
+    TaxType:
+      description: Contains information about the type of taxation applied.
+      type: object
+      properties:
+        amount:
+          description: Total of all applicable tax amounts included in the price.
+          $ref: '#/components/schemas/Amount'
+        taxCode:
+          description: The tax code.
+          example: AY, GB
+          type: string
+        descText:
+          description: Short text-based description of the tax applied.
+          example: $4 per flight segment, per passenger (U.S. domestic segment tax)
+          type: string
+    Discount:
+      description: Contains discount information.
+      type: object
+      properties:
+        ruleId:
+          description: Rule ID that applies in the DR/SSI systems, or in another system, for the ancillary.
+          $ref: "#/components/schemas/XmlID"
+        discountAmount:
+          description: Discount amount applied to the price.
+          $ref: '#/components/schemas/Amount'
+        discountPercent:
+          description: Discount percentage applied to the price.
+          type: number
+          example: 10
+        preDiscountedAmount:
+          description: The original price before the discount was applied.
+          $ref: '#/components/schemas/Amount'
+        appText:
+          description: Text-based descriptor of what the discount applies to.
+          type: string
+          example: Bag
+        descriptionText:
+          description: Text-based description of the discount details.
+          type: string
+          example: Every orange juice cheaper by 50%
+        discountContext:
+          description: Lists contextual information to further describe a particular discount by using a key-value pair.
+          type: array
+          items:
+            $ref: "#/components/schemas/DiscountContext"
+    DiscountContext:
+      description: Contains contextual information to further describe a particular discount by using a key-value pair.
+      type: object
+      properties:
+        keyWordText:
+          description: The key word.
+          type: string
+          example: SKYC
+        valueText:
+          description: Text-based value of they key word.
+          type: string
+          example: SkyCouch
+    Eligibility:
+      description: Contains the passengers, price class, or segments for which the offer item is eligible.
+      type: object
+      properties:
+        paxRefIDs:
+          description: Passengers associated with the specific fare detail. Allows the price breakdown of the fare for the offer item per passenger.
+          $ref: "#/components/schemas/IDREFS"
+        priceClassRefID:
+          description: The price class for the associated offer item.
+          $ref: "#/components/schemas/IDREFS"
+        flightAssociations:
+          type: object
+          description: Contains offer item eligibility for segments or journeys.
+          properties:
+            paxSegmentRefID:
+              description: The flight segments on which the offer item is provided.
+              $ref: "#/components/schemas/IDREFS"
+            paxJourneyRefID:
+              description: The journeys on which the offer item is provided.
+              $ref: "#/components/schemas/IDREFS"
+    PointOfSale:
+      description: Contains point of sale information.
+      type: object
+      required:
+        - location
+      properties:
+        agentDutyCode:
+          description: Internally defines the agent authority to request changes.
+          type: string
+          example: read
+        location:
+          description: Point of sale location information.
+          $ref: "#/components/schemas/Location"
+    Location:
+      description: Contains point of sale location information.
+      type: object
+      required:
+        - countryCode
+        - cityCode
+      properties:
+        countryCode:
+          description: The ISO 3166-1 (two character) country code.
+          $ref: "#/components/schemas/CountryCodeType"
+          example: US
+        cityCode:
+          description: >
+            The three-letter IATA airport or city code.
+            Refer to the [IATA Airline Coding Directory](https://www.iata.org/publications/store/Pages/airline-coding-directory.aspx) for a full list of values.
+          type: string
+          example: TPA
+    PayloadAttributes:
+      description: Contains standard payload parameters.
+      type: object
+      required:
+        - transactionId
+      properties:
+        echoTokenText:
+          description: |
+            A reference for additional message identification, assigned by the requesting host system.
+            When a request message includes an echo token the corresponding response message MUST include an echo token with an identical value.
+          $ref: "#/components/schemas/Token"
+        timeStamp:
+          description: Indicates the creation date and time of the message in UTC time format.
+          $ref: "#/components/schemas/DateTimeType"
+        transactionID:
+          description: A unique identifier that relates all messages within a transaction. This ID is sent in all request and response messages that are part of an on-going transaction.
+          $ref: "#/components/schemas/TransactionIdType"
+        correlationID:
+          description: >
+            Unique ID assigned to an end-to-end flow.
+             * All requests in the same end-to-end flow have to have the same `correlationID`.
+             * Different end-to-end flows must have different `correlationID`s.
+
+            For example:
+            `OfferPriceRQ` has to have the same `correlationID` as the `AirShoppingRQ` or `AirShoppingRS` objects.
+            Two `AirShoppingRQ` objects for different vendors, AA & UA, for example, in the same flow have to have the same `correlationID`.
+          type: string
+          example: 9de88cdf-9723-4259-90f7-4d4334d210f0
+    IDREFS:
+      type: array
+      items:
+        $ref: "#/components/schemas/XmlID"
+    ID:
+      description: The unique ID of an offer within the context of one message.
+      type: string
+      pattern: ^[^\r\n\t\f\v ]+( [^\r\n\t\f\v ]+)*$
+      example: 0c56af2182744b9e84c890ee3f3434af
+    BoardingGateID:
+      description: The unique ID belonging to an airport gate.
+      maxLength: 8
+      minLength: 1
+      type: string
+      pattern: ^[^\r\n\t\f\v ]+( [^\r\n\t\f\v ]+)*$
+      example: A5
+    XmlID:
+      description: Element ID compliant with the `xsd:ID`.
+      type: string
+      pattern: ^[a-zA-Z_][a-zA-Z0-9_\-\.]*$
+      example: SRVC-2B88-4C33-9787-9461114BC9BE
+    SourceType:
+      description: |
+        Identifies the source of the seat map.
+        Can be:
+        `LCC` - Low Cost Carrier
+        `ATPCO` - ATPCO
+        `NDC` - New Distribution Capability
+        `SSG` - Sabre Sonic Group
+        `UNKNOWN` - Unknown
+      type: string
+      enum:
+        - LCC
+        - ATPCO
+        - NDC
+        - SSG
+        - UNKNOWN
+      example: LCC
+    RequestMode:
+      description: Identifies whether the request should be used for booking or for check-in.
+      type: string
+      enum:
+        - BOOKING
+        - CHECKIN
+      example: BOOKING
+      default: BOOKING
+    StationNameType:
+      description: The full name of the airport or station.
+      type: string
+      maxLength: 256
+      minLength: 1
+      pattern: ^[^\r\n\t\f\v ]+( [^\r\n\t\f\v ]+)*$
+      example: George Bush Intercontinental Airport
+    RowCharacteristicCodeType:
+      description: The row characteristic code. Refer to IATA's PADIS code list for data element 9825 for full list of values.
+      type: string
+      minLength: 1
+      maxLength: 2
+      pattern: ^[A-Z0-9]*$
+      example: "11"
+    SeatCharacteristicCodeType:
+      description: "The seat characteristic code. Refer to IATA's PADIS code list for data element 9825 for a full list of values."
+      type: string
+      pattern: ^[A-Z0-9]+$
+      example: AB
+    OccupationStatusCodeType:
+      description: The seat occupation status.
+      type: string
+      minLength: 1
+      maxLength: 1
+      pattern: ^[A-Z0-9]*$
+      example: T
+    Token:
+      description: A string compliant with `xsd:token`.
+      type: string
+      pattern: ^[^\r\n\t\f\v ]+( [^\r\n\t\f\v ]+)*$
+      example: ABC123456
+    CabinTypeCode:
+      description: The code of the cabin.
+      type: string
+      minLength: 1
+      maxLength: 1
+      pattern: ^[^\r\n\t\f\v ]+$
+      example: "Y"
+    IataCodeType:
+      description: The code used in the IATA code tables. Possible values include `1`, `101`, or `EQP`.
+      type: string
+      minLength: 1
+      maxLength: 3
+      pattern: ^[0-9A-Z]*$
+      example: EQP
+    DateTimeType:
+      description: The date and time in `yyyy-MM-ddTHH:mm:ss` format, with optional fractional seconds (`.ssss`) and an optional timezone (`Z` or offset `+/-HH:mm`).
+      type: string
+      pattern: ^[0-9]{4}-[0-1][0-9]-[0-3][0-9]([tT][0-2][0-9]:[0-5][0-9]:[0-6][0-9](.[0-9]{1,4})?)?([zZ]|([+\-][0-2][0-9]:[0-5][0-9]))?$
+      example: "2024-07-19T11:04:54.7299"
+    PtcCodeType:
+      description: Passenger Type Codes (PTC) are three-letter values that apply to the characteristic of the passenger, and typically drive pricing values.
+      type: string
+      minLength: 3
+      maxLength: 3
+      pattern: ^[0-9A-Z]*$
+      example: ADT
+    CountryCodeType:
+      description: The ISO 3166-1 currency code.
+      type: string
+      minLength: 2
+      maxLength: 2
+      pattern: ^[A-Za-z]*$
+      example: US
+    TransactionIdType:
+      description: Unique ID assigned to a given transaction.
+      type: string
+      pattern: ^[^\r\n\t\f\v ]+( [^\r\n\t\f\v ]+)*$
+      minLength: 1
+      maxLength: 32
+      example: 0c56af2182744b4e84c890ee3f3434af
+    CarrierFlightNumberType:
+      description: The numerical designation of a flight operated/marketed by a carrier.
+      type: string
+      minLength: 1
+      maxLength: 4
+      pattern: ^[0-9]*$
+      example: "0567"
+    IataCityOrStationCodeType:
+      description: The IATA defined code identifying a city or station.
+      type: string
+      minLength: 3
+      maxLength: 3
+      example: DFW
+    ShortString:
+      description: A string with a minimum length of 1 and a maximum length of 128.
+      type: string
+      minLength: 1
+      maxLength: 128
+      example: Example
+    TinyString:
+      description: A string with a minimum length of 1 and a maximum length of 32.
+      type: string
+      minLength: 1
+      maxLength: 32
+      example: Example
+    BookingCode:
+      description: Identifies a particular airline-assigned booking code.
+      type: string
+      example: S
+    KeyValuePair:
+      description: Contains key value pairs for use alongside any custom attributes.
+      type: object
+      required:
+        - key
+        - value
+      properties:
+        key:
+          type: string
+          minLength: 1
+          description: Name of a property.
+          example: Key
+        value:
+          type: string
+          minLength: 1
+          description: Value of a property.
+          example: Value
