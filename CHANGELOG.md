@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.10.0](https://github.com/djensen47/sabre-rest/compare/v0.9.0...v0.10.0) (2026-04-16)
+
+
+### Features
+
+* add get-ancillaries-v2 service ([#42](https://github.com/djensen47/sabre-rest/issues/42)) ([2d0863e](https://github.com/djensen47/sabre-rest/commit/2d0863ec6f5cb7101478bb8313cd4905a264cc6f))
+* add get-seats-v2 service ([#43](https://github.com/djensen47/sabre-rest/issues/43)) ([6de623a](https://github.com/djensen47/sabre-rest/commit/6de623a8fcdff1324ca15c0346b8f5fe983e8d47))
+* add revalidate-itinerary-v5 service ([#41](https://github.com/djensen47/sabre-rest/issues/41)) ([4f4efbd](https://github.com/djensen47/sabre-rest/commit/4f4efbd8c3ce70bcd0f71cfdf67e5097bd590dde))
+* **bfm:** surface baggage charges on priced itineraries ([#38](https://github.com/djensen47/sabre-rest/issues/38)) ([4e1fa6b](https://github.com/djensen47/sabre-rest/commit/4e1fa6bdc65f61594c6a7a02d17e901af2e9d377))
+* **bfm:** surface per-passenger tax breakdown on priced itineraries ([#40](https://github.com/djensen47/sabre-rest/issues/40)) ([419f9ed](https://github.com/djensen47/sabre-rest/commit/419f9ed0cc8b9d7871aa5275f33142f6f4f541c8))
+
 ## [0.9.0](https://github.com/djensen47/sabre-rest/compare/v0.8.0...v0.9.0) (2026-04-10)
 
 
