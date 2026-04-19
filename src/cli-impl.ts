@@ -22,6 +22,7 @@ import type {
   Airline,
   AirlineAlliance,
   CabinClass,
+  CreateBookingInput,
   GetAncillariesInput,
   GetSeatsInput,
   ItineraryLeg,
@@ -762,6 +763,11 @@ const GET_ANCILLARIES_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const CREATE_BOOKING_OPTIONS = {
+  ...COMMON_OPTIONS,
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 const GET_SEATS_OPTIONS = {
   ...COMMON_OPTIONS,
   body: { type: 'string' },
@@ -780,6 +786,7 @@ Commands:
   airline-lookup            Sabre Airline Lookup v1
   airline-alliance-lookup   Sabre Airline Alliance Lookup v1
   bargain-finder-max        Sabre Bargain Finder Max v5
+  create-booking            Sabre Booking Management v1 — Create Booking
   get-ancillaries           Sabre Get Ancillaries v2
   get-seats                 Sabre Get Seats v2
   revalidate-itinerary      Sabre Revalidate Itinerary v5
@@ -917,6 +924,25 @@ export function revalidateToTableRows(out: RevalidateItineraryOutput): {
   ]);
   return { headers: ['id', 'legs', 'total', 'carrier', 'model'], rows };
 }
+
+const CREATE_BOOKING_HELP = `Usage: sabre-rest create-booking [flags]
+
+Sabre Booking Management v1 — Create Booking. Creates an air booking
+(NDC, ATPCO, or LCC).
+
+The request body is complex (flights, travelers, payment, etc.), so use
+--body to supply the full JSON input.
+
+Flags:
+  --body <json>             Full JSON CreateBookingInput (required)
+  --base-url <url>          Override SABRE_BASE_URL
+  --format json|table       Output format (default: json)
+  --debug-request           Print the outbound HTTP request to stderr
+  -h, --help                Show this help
+
+Examples:
+  sabre-rest create-booking --body '{"flightDetails":{"flights":[{"flightNumber":100,"airlineCode":"AA","fromAirportCode":"DFW","toAirportCode":"LAX","departureDate":"2026-05-15","departureTime":"10:00","bookingClass":"Y"}]},"travelers":[{"givenName":"JOHN","surname":"DOE","passengerCode":"ADT"}],"contactInfo":{"phones":["1234567890"]}}'
+`;
 
 const GET_ANCILLARIES_HELP = `Usage: sabre-rest get-ancillaries [flags]
 
@@ -1100,6 +1126,33 @@ async function revalidateItineraryCommand(
   });
 }
 
+async function createBookingCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: CREATE_BOOKING_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(CREATE_BOOKING_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  if (values.body === undefined) {
+    throw new CliUsageError('create-booking requires --body with a full JSON input.');
+  }
+  const input = JSON.parse(values.body) as CreateBookingInput;
+  const result = await client.bookingManagementV1.createBooking(input);
+  emitResult(result, format, io, () => formatJson(result));
+}
+
 async function getAncillariesCommand(
   argv: readonly string[],
   env: CliEnvConfig,
@@ -1159,6 +1212,7 @@ export const COMMANDS: Record<
   'airline-lookup': airlineLookupCommand,
   'airline-alliance-lookup': airlineAllianceLookupCommand,
   'bargain-finder-max': bargainFinderMaxCommand,
+  'create-booking': createBookingCommand,
   'get-ancillaries': getAncillariesCommand,
   'get-seats': getSeatsCommand,
   'revalidate-itinerary': revalidateItineraryCommand,
