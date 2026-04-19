@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/djensen47/sabre-rest/compare/v0.10.0...v0.11.0) (2026-04-19)
+
+
+### Features
+
+* add booking-management-v1 createBooking service ([#44](https://github.com/djensen47/sabre-rest/issues/44)) ([ee8292b](https://github.com/djensen47/sabre-rest/commit/ee8292b69dde1e5319fe1e671937b8307b08fa21))
+
 ## [0.10.0](https://github.com/djensen47/sabre-rest/compare/v0.9.0...v0.10.0) (2026-04-16)
 
 
