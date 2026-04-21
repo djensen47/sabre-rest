@@ -2,6 +2,8 @@ import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type { ServiceDeps } from '../types.js';
 import * as mappers from './mappers.js';
 import type {
+  CancelBookingInput,
+  CancelBookingOutput,
   CreateBookingInput,
   CreateBookingOutput,
   GetBookingInput,
@@ -22,6 +24,7 @@ import type {
  *     - `createBooking` (`POST /v1/trip/orders/createBooking`)
  *     - `getBooking` (`POST /v1/trip/orders/getBooking`)
  *     - `modifyBooking` (`POST /v1/trip/orders/modifyBooking`)
+ *     - `cancelBooking` (`POST /v1/trip/orders/cancelBooking`)
  *   - Docs: https://developer.sabre.com/docs/rest_apis/trip/orders/booking_management
  *
  * Construct via {@link createSabreClient}; do not implement this interface
@@ -69,6 +72,23 @@ export interface BookingManagementV1Service {
    *   current booking state.
    */
   modifyBooking(input: ModifyBookingInput): Promise<ModifyBookingOutput>;
+
+  /**
+   * Cancel a booking or specific booking items, optionally voiding or
+   * refunding related flight tickets in the same call.
+   *
+   * Scope the cancellation via `cancelAll`, per-type references
+   * (`flights`, `hotels`, etc.), or `segments`. Use
+   * `flightTicketOperation` with `VOID` or `REFUND` to bundle ticket
+   * operations; set `retrieveBooking: true` to include the post-cancel
+   * booking state in the response.
+   *
+   * @param input Cancellation criteria, including the required
+   *   `confirmationId`.
+   * @returns Response metadata, ticket-level eligibility data, errors,
+   *   and (when requested) the current booking state.
+   */
+  cancelBooking(input: CancelBookingInput): Promise<CancelBookingOutput>;
 }
 
 /**
@@ -101,5 +121,11 @@ export class DefaultBookingManagementV1Service implements BookingManagementV1Ser
     const req = mappers.toModifyBookingRequest(this.#baseUrl, input);
     const res = await this.#request(req);
     return mappers.fromModifyBookingResponse(res);
+  }
+
+  async cancelBooking(input: CancelBookingInput): Promise<CancelBookingOutput> {
+    const req = mappers.toCancelBookingRequest(this.#baseUrl, input);
+    const res = await this.#request(req);
+    return mappers.fromCancelBookingResponse(res);
   }
 }

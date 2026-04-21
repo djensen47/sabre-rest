@@ -1959,6 +1959,11 @@ export interface BookingFareRulePenalty {
   hasNoShowCost?: boolean;
   /** No-show penalty amount. */
   noShowPenalty?: BookingMonetaryValue;
+  /**
+   * Source of the penalty rule. Present only for `cancelBooking` ticket
+   * penalties (derived from Sabre's `PenaltyItem`).
+   */
+  source?: BookingPenaltySource;
 }
 
 /** A monetary value with amount and currency. */
@@ -3451,4 +3456,292 @@ export interface OtherServiceToModify {
 export interface FareToModify {
   /** Fare source record ID. Uppercase alphanumeric. */
   recordId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// cancelBooking enums
+// ---------------------------------------------------------------------------
+
+/**
+ * Flight ticket operations that can be bundled with a cancellation
+ * request. `VOID` voids associated tickets; `REFUND` refunds them.
+ */
+export type CancelFlightTicketOperation = 'VOID' | 'REFUND';
+
+/**
+ * Error handling policy for the `cancelBooking` service. Spec default
+ * is `HALT_ON_ERROR`.
+ */
+export type CancelErrorPolicy = 'HALT_ON_ERROR' | 'ALLOW_PARTIAL_CANCEL';
+
+/**
+ * Type(s) of electronic documents to refund when `flightTicketOperation`
+ * is `REFUND`. Spec default is `Tickets`.
+ */
+export type CancelDocumentsType = 'Tickets' | 'EMDs' | 'Tickets and EMDs';
+
+// ---------------------------------------------------------------------------
+// cancelBooking input helper types
+// ---------------------------------------------------------------------------
+
+/** Reference to a flight item by its booking `itemId`. */
+export interface FlightReference {
+  /** The ID of the flight. Uppercase alphanumeric. */
+  itemId: string;
+}
+
+/** Reference to a hotel reservation by its booking `itemId`. */
+export interface HotelReference {
+  /** The ID of the hotel reservation. Uppercase alphanumeric. */
+  itemId: string;
+}
+
+/** Reference to a car reservation by its booking `itemId`. */
+export interface CarReference {
+  /** The ID of the car reservation. Uppercase alphanumeric. */
+  itemId: string;
+}
+
+/** Reference to a train reservation by its booking `itemId`. */
+export interface TrainReference {
+  /** The ID of the train reservation. Uppercase alphanumeric. */
+  itemId: string;
+}
+
+/** Reference to a cruise reservation by its booking `itemId`. */
+export interface CruiseReference {
+  /** The ID of the cruise reservation. Uppercase alphanumeric. */
+  itemId: string;
+}
+
+/**
+ * Reference to a booking segment for cancellation. Identified either by
+ * `sequence` or by `id`; supply one of the two.
+ */
+export interface SegmentReference {
+  /** Segment sequence number within the booking. */
+  sequence?: number;
+  /** Unique segment item ID. Uppercase alphanumeric. */
+  id?: string;
+}
+
+/** Hardcopy printer details used when designating printers. */
+export interface PrinterHardcopy {
+  /** Hardcopy printer LNIATA. 6 uppercase alphanumeric characters. */
+  address?: string;
+  /** Hardcopy printer spacing. `'1'` or `'2'`. */
+  spacing?: string;
+}
+
+/** Ticket printer details used when designating printers. */
+export interface PrinterTicket {
+  /** Ticket printer LNIATA. 6 uppercase alphanumeric characters. */
+  address?: string;
+  /** Two-character ticket stock country code. */
+  countryCode?: string;
+}
+
+/**
+ * Printer or printer profile designation. Provide `profileNumber` for a
+ * profile lookup, or the individual printer fields for explicit
+ * addressing.
+ */
+export interface PrinterAddress {
+  /** Printer profile number to be designated. */
+  profileNumber?: number;
+  /** Hardcopy printer designation. */
+  hardcopy?: PrinterHardcopy;
+  /** Invoice and itinerary printer LNIATA. 6 uppercase alphanumeric. */
+  invoiceItinerary?: string;
+  /** Ticket printer designation. */
+  ticket?: PrinterTicket;
+}
+
+// ---------------------------------------------------------------------------
+// cancelBooking input/output
+// ---------------------------------------------------------------------------
+
+/**
+ * Input for the `cancelBooking` operation.
+ *
+ * `confirmationId` is the only required field. Supply a combination of
+ * `cancelAll`, per-type references (`flights`, `hotels`, etc.), or
+ * `segments` to scope the cancellation. Use `flightTicketOperation` to
+ * optionally void or refund associated tickets in the same call.
+ */
+export interface CancelBookingInput {
+  /**
+   * The booking reference ID as shown in the source supplier/vendor
+   * system. For `SABRE`, this is the PNR Locator value. 6+ uppercase
+   * alphanumeric characters.
+   */
+  confirmationId: string;
+  /** Source of the booking. Defaults to `SABRE` when omitted. */
+  bookingSource?: BookingSource;
+  /**
+   * If `true`, the response includes the current state of the booking.
+   * Spec default: `false`.
+   */
+  retrieveBooking?: boolean;
+  /** The entity authorizing the changes in the booking. */
+  receivedFrom?: string;
+  /** Ticket operation to perform alongside the cancellation. */
+  flightTicketOperation?: CancelFlightTicketOperation;
+  /**
+   * Policy for handling errors. Spec default: `HALT_ON_ERROR`.
+   */
+  errorHandlingPolicy?: CancelErrorPolicy;
+  /**
+   * If `true`, cancels segments of all kinds (flights, hotels, cars,
+   * trains, cruises, and any other segments) — the per-type reference
+   * arrays are ignored. Spec default: `false`.
+   */
+  cancelAll?: boolean;
+  /** Flights to cancel. */
+  flights?: readonly FlightReference[];
+  /** Hotels to cancel. */
+  hotels?: readonly HotelReference[];
+  /** Cars to cancel. */
+  cars?: readonly CarReference[];
+  /** Trains to cancel. */
+  trains?: readonly TrainReference[];
+  /** Cruises to cancel. */
+  cruises?: readonly CruiseReference[];
+  /** Generic booking segments to cancel. */
+  segments?: readonly SegmentReference[];
+  /**
+   * Pseudo city code for the target location. Context is not reverted
+   * after the cancellation completes. 3–4 alphanumeric characters.
+   */
+  targetPcc?: string;
+  /** Post-operation notification configuration. */
+  notification?: BookNotification;
+  /** Printers or printer profiles to designate. */
+  designatePrinters?: readonly PrinterAddress[];
+  /**
+   * Offer ID for a void or refund offer obtained from
+   * `checkFlightTicketsResponse`. Applicable only for NDC orders.
+   */
+  offerItemId?: string;
+  /**
+   * Retention date to keep the booking active past the last itinerary
+   * item. After this date the booking is set for purging. Format:
+   * `YYYY-MM-DD`.
+   */
+  retentionEndDate?: string;
+  /** Label associated with the retention date. 0–215 characters. */
+  retentionLabel?: string;
+  /**
+   * If `true`, nonelectronic (paper) tickets are included in the void
+   * process. Spec default: `false`.
+   */
+  voidNonElectronicTickets?: boolean;
+  /**
+   * Type of electronic documents to refund. Applicable when
+   * `flightTicketOperation` is `REFUND`. Spec default: `Tickets`.
+   */
+  refundDocumentsType?: CancelDocumentsType;
+}
+
+/**
+ * Output of the `cancelBooking` operation.
+ *
+ * `booking` is populated only when the request was made with
+ * `retrieveBooking: true`. `voidedTickets`, `refundedTickets`, and
+ * `flightRefunds` are populated based on the ticket operation
+ * performed.
+ */
+export interface CancelBookingOutput {
+  /** Response timestamp in UTC. Format: `YYYY-MM-DDTHH:MM:SSZ`. */
+  timestamp?: string;
+  /** Echo of the request that produced this response. */
+  request?: CancelBookingInput;
+  /**
+   * Current booking state. Present when `retrieveBooking` was `true`
+   * in the request.
+   */
+  booking?: Booking;
+  /**
+   * Per-ticket cancellation eligibility and refundable amounts, in the
+   * order of the request.
+   */
+  tickets?: readonly CancelBookingTicket[];
+  /**
+   * Errors encountered while processing the cancellation. Not present
+   * on fully successful responses.
+   */
+  errors?: readonly BookingError[];
+  /** Numbers of tickets that were successfully voided. */
+  voidedTickets?: readonly string[];
+  /** Numbers of tickets that were successfully refunded. */
+  refundedTickets?: readonly string[];
+  /** Per-flight refund details for successfully refunded bookings. */
+  flightRefunds?: readonly CancelFlightRefund[];
+}
+
+/**
+ * Cancellation eligibility, refundable amounts, and exchangeability
+ * data for a single ticket returned by `cancelBooking`.
+ */
+export interface CancelBookingTicket {
+  /** The electronic flight ticket number. */
+  number?: string;
+  /**
+   * If `true`, the ticket meets the requirements for the void
+   * procedure.
+   */
+  isVoidable?: boolean;
+  /**
+   * If `true`, the ticket is fully or partially refundable. Refer to
+   * `refundPenalties` for details. Not guaranteed when the penalty
+   * source indicates `Category 16`.
+   */
+  isRefundable?: boolean;
+  /**
+   * If `true`, the ticket meets the requirements for an automated
+   * refund.
+   */
+  isAutomatedRefundsEligible?: boolean;
+  /**
+   * Estimated refund-penalty details. Estimates assume the highest
+   * possible refund penalty is applied.
+   */
+  refundPenalties?: readonly BookingFareRulePenalty[];
+  /**
+   * Tax information associated with a refund. Applicable to automated
+   * refunds only.
+   */
+  refundTaxes?: readonly CancelRefundTax[];
+  /** Refundable totals for the ticket. */
+  refundTotals?: BookingTotalValues;
+  /**
+   * If `true`, the fare can be exchanged (with or without additional
+   * cost). Not guaranteed when the penalty source indicates
+   * `Category 16`.
+   */
+  isChangeable?: boolean;
+  /**
+   * Estimated exchange-penalty details. Estimates assume that all fare
+   * components are changed and the highest applicable penalty is
+   * applied.
+   */
+  exchangePenalties?: readonly BookingFareRulePenalty[];
+}
+
+/** A single refundable tax code and amount. */
+export interface CancelRefundTax {
+  /** Two-character tax code. */
+  taxCode: string;
+  /** Tax amount as a decimal string in the original ticket's currency. */
+  amount: string;
+}
+
+/** A per-flight refund entry in the `cancelBooking` response. */
+export interface CancelFlightRefund {
+  /** Two-letter IATA airline code of the marketing airline. */
+  airlineCode?: string;
+  /** Booking reference ID in the supplier/vendor system. */
+  confirmationId?: string;
+  /** Total refund amounts for this flight. */
+  refundTotals: BookingTotalValues;
 }

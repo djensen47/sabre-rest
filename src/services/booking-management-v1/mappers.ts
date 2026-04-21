@@ -13,8 +13,10 @@ import type {
   BookFormOfPayment,
   BookHotel,
   BookNotification,
+  BookNotificationEmail,
   BookOtherService,
   BookPayment,
+  BookQueue,
   BookRemark,
   BookTraveler,
   BookTravelerEmployer,
@@ -62,15 +64,27 @@ import type {
   BookingTotalValues,
   BookingTrain,
   BookingTraveler,
+  CancelBookingInput,
+  CancelBookingOutput,
+  CancelBookingTicket,
+  CancelDocumentsType,
+  CancelErrorPolicy,
+  CancelFlightRefund,
+  CancelFlightTicketOperation,
+  CancelRefundTax,
+  CarReference,
   CreateBookingInput,
   CreateBookingOutput,
   CreationDetailsToModify,
+  CruiseReference,
   FareToModify,
+  FlightReference,
   FlightReferenceToModify,
   FlightToModify,
   GetBookingExtraFeatures,
   GetBookingInput,
   GetBookingOutput,
+  HotelReference,
   HotelToModify,
   IdentityDocumentToModify,
   ModifyBookingExtraFeatures,
@@ -78,16 +92,20 @@ import type {
   ModifyBookingOutput,
   OtherServiceToModify,
   PaymentToModify,
+  PrinterAddress,
   RemarkToModify,
   RoomToModify,
   SeatToModify,
+  SegmentReference,
   SpecialServiceToModify,
+  TrainReference,
   TravelerToModify,
 } from './types.js';
 
 const CREATE_BOOKING_PATH = 'v1/trip/orders/createBooking';
 const GET_BOOKING_PATH = 'v1/trip/orders/getBooking';
 const MODIFY_BOOKING_PATH = 'v1/trip/orders/modifyBooking';
+const CANCEL_BOOKING_PATH = 'v1/trip/orders/cancelBooking';
 
 /**
  * Builds the outgoing {@link SabreRequest} for the `createBooking`
@@ -329,6 +347,278 @@ export function fromModifyBookingResponse(res: SabreResponse): ModifyBookingOutp
     out.errors = parsed.errors.map(buildBookingError);
   }
 
+  return out;
+}
+
+/**
+ * Builds the outgoing {@link SabreRequest} for the `cancelBooking`
+ * operation.
+ *
+ * The request body matches the `CancelBookingRequest` schema.
+ * `confirmationId` is the only field Sabre marks as required. Fields
+ * with spec-defined defaults (`retrieveBooking`, `cancelAll`,
+ * `voidNonElectronicTickets`, `errorHandlingPolicy`,
+ * `refundDocumentsType`) are always sent.
+ */
+export function toCancelBookingRequest(baseUrl: string, input: CancelBookingInput): SabreRequest {
+  const url = new URL(CANCEL_BOOKING_PATH, ensureTrailingSlash(baseUrl));
+
+  const body: Record<string, unknown> = {
+    confirmationId: input.confirmationId,
+    retrieveBooking: input.retrieveBooking ?? false,
+    cancelAll: input.cancelAll ?? false,
+    voidNonElectronicTickets: input.voidNonElectronicTickets ?? false,
+    errorHandlingPolicy: input.errorHandlingPolicy ?? 'HALT_ON_ERROR',
+    refundDocumentsType: input.refundDocumentsType ?? 'Tickets',
+  };
+
+  if (input.bookingSource !== undefined) body.bookingSource = input.bookingSource;
+  if (input.receivedFrom !== undefined) body.receivedFrom = input.receivedFrom;
+  if (input.flightTicketOperation !== undefined) {
+    body.flightTicketOperation = input.flightTicketOperation;
+  }
+  if (input.flights && input.flights.length > 0) {
+    body.flights = input.flights.map((f) => ({ itemId: f.itemId }));
+  }
+  if (input.hotels && input.hotels.length > 0) {
+    body.hotels = input.hotels.map((h) => ({ itemId: h.itemId }));
+  }
+  if (input.cars && input.cars.length > 0) {
+    body.cars = input.cars.map((c) => ({ itemId: c.itemId }));
+  }
+  if (input.trains && input.trains.length > 0) {
+    body.trains = input.trains.map((t) => ({ itemId: t.itemId }));
+  }
+  if (input.cruises && input.cruises.length > 0) {
+    body.cruises = input.cruises.map((c) => ({ itemId: c.itemId }));
+  }
+  if (input.segments && input.segments.length > 0) {
+    body.segments = input.segments.map(buildSegmentReferenceBody);
+  }
+  if (input.targetPcc !== undefined) body.targetPcc = input.targetPcc;
+  if (input.notification !== undefined) {
+    body.notification = buildNotificationBody(input.notification);
+  }
+  if (input.designatePrinters && input.designatePrinters.length > 0) {
+    body.designatePrinters = input.designatePrinters.map(buildPrinterAddressBody);
+  }
+  if (input.offerItemId !== undefined) body.offerItemId = input.offerItemId;
+  if (input.retentionEndDate !== undefined) body.retentionEndDate = input.retentionEndDate;
+  if (input.retentionLabel !== undefined) body.retentionLabel = input.retentionLabel;
+
+  return {
+    method: 'POST',
+    url: url.toString(),
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+/**
+ * Parses the `cancelBooking` response into the public output shape.
+ *
+ * Throws {@link SabreParseError} when the body is not valid JSON or
+ * not an object.
+ */
+export function fromCancelBookingResponse(res: SabreResponse): CancelBookingOutput {
+  let parsed: components['schemas']['CancelBookingResponse'];
+  try {
+    parsed = JSON.parse(res.body) as components['schemas']['CancelBookingResponse'];
+  } catch (err) {
+    throw new SabreParseError('Failed to parse Cancel Booking response as JSON', res.body, {
+      cause: err,
+    });
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new SabreParseError('Cancel Booking response was not a JSON object', parsed);
+  }
+
+  const out: CancelBookingOutput = {};
+
+  if (parsed.timestamp !== undefined) out.timestamp = parsed.timestamp;
+  if (parsed.request !== undefined) {
+    out.request = buildCancelBookingRequestEcho(parsed.request);
+  }
+  if (parsed.booking !== undefined) out.booking = buildBooking(parsed.booking);
+  if (parsed.tickets !== undefined) {
+    out.tickets = parsed.tickets.map(buildCancelBookingTicket);
+  }
+  if (parsed.errors !== undefined && parsed.errors.length > 0) {
+    out.errors = parsed.errors.map(buildBookingError);
+  }
+  if (parsed.voidedTickets !== undefined) {
+    out.voidedTickets = [...parsed.voidedTickets];
+  }
+  if (parsed.refundedTickets !== undefined) {
+    out.refundedTickets = [...parsed.refundedTickets];
+  }
+  if (parsed.flightRefunds !== undefined) {
+    out.flightRefunds = parsed.flightRefunds.map(buildFlightRefund);
+  }
+
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// cancelBooking helpers
+// ---------------------------------------------------------------------------
+
+function buildSegmentReferenceBody(s: SegmentReference): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (s.sequence !== undefined) out.sequence = s.sequence;
+  if (s.id !== undefined) out.id = s.id;
+  return out;
+}
+
+function buildPrinterAddressBody(p: PrinterAddress): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (p.profileNumber !== undefined) out.profileNumber = p.profileNumber;
+  if (p.hardcopy !== undefined) {
+    const h: Record<string, unknown> = {};
+    if (p.hardcopy.address !== undefined) h.address = p.hardcopy.address;
+    if (p.hardcopy.spacing !== undefined) h.spacing = p.hardcopy.spacing;
+    out.hardcopy = h;
+  }
+  if (p.invoiceItinerary !== undefined) out.invoiceItinerary = p.invoiceItinerary;
+  if (p.ticket !== undefined) {
+    const t: Record<string, unknown> = {};
+    if (p.ticket.address !== undefined) t.address = p.ticket.address;
+    if (p.ticket.countryCode !== undefined) t.countryCode = p.ticket.countryCode;
+    out.ticket = t;
+  }
+  return out;
+}
+
+function buildCancelBookingRequestEcho(
+  req: components['schemas']['CancelBookingRequest'],
+): CancelBookingInput {
+  const out: CancelBookingInput = {
+    confirmationId: req.confirmationId,
+    retrieveBooking: req.retrieveBooking,
+    cancelAll: req.cancelAll,
+    voidNonElectronicTickets: req.voidNonElectronicTickets,
+  };
+  if (req.bookingSource !== undefined) out.bookingSource = req.bookingSource as BookingSource;
+  if (req.receivedFrom !== undefined) out.receivedFrom = req.receivedFrom;
+  if (req.flightTicketOperation !== undefined) {
+    out.flightTicketOperation = req.flightTicketOperation as CancelFlightTicketOperation;
+  }
+  if (req.errorHandlingPolicy !== undefined) {
+    out.errorHandlingPolicy = req.errorHandlingPolicy as CancelErrorPolicy;
+  }
+  if (req.refundDocumentsType !== undefined) {
+    out.refundDocumentsType = req.refundDocumentsType as CancelDocumentsType;
+  }
+  if (req.flights !== undefined) {
+    out.flights = req.flights.map((f): FlightReference => ({ itemId: f.itemId }));
+  }
+  if (req.hotels !== undefined) {
+    out.hotels = req.hotels.map((h): HotelReference => ({ itemId: h.itemId }));
+  }
+  if (req.cars !== undefined) {
+    out.cars = req.cars.map((c): CarReference => ({ itemId: c.itemId }));
+  }
+  if (req.trains !== undefined) {
+    out.trains = req.trains.map((t): TrainReference => ({ itemId: t.itemId }));
+  }
+  if (req.cruises !== undefined) {
+    out.cruises = req.cruises.map((c): CruiseReference => ({ itemId: c.itemId }));
+  }
+  if (req.segments !== undefined) {
+    out.segments = req.segments.map((s): SegmentReference => {
+      const ref: SegmentReference = {};
+      if (s.sequence !== undefined) ref.sequence = s.sequence;
+      if (s.id !== undefined) ref.id = s.id;
+      return ref;
+    });
+  }
+  if (req.targetPcc !== undefined) out.targetPcc = req.targetPcc;
+  if (req.notification !== undefined) {
+    const n: BookNotification = {};
+    if (req.notification.email !== undefined) {
+      n.email = req.notification.email as BookNotificationEmail;
+    }
+    if (req.notification.queuePlacement !== undefined) {
+      n.queuePlacement = req.notification.queuePlacement as readonly BookQueue[];
+    }
+    out.notification = n;
+  }
+  if (req.designatePrinters !== undefined) {
+    out.designatePrinters = req.designatePrinters.map((p): PrinterAddress => {
+      const pa: PrinterAddress = {};
+      if (p.profileNumber !== undefined) pa.profileNumber = p.profileNumber;
+      if (p.hardcopy !== undefined) {
+        const h: PrinterAddress['hardcopy'] = {};
+        if (p.hardcopy.address !== undefined) h.address = p.hardcopy.address;
+        if (p.hardcopy.spacing !== undefined) h.spacing = p.hardcopy.spacing;
+        pa.hardcopy = h;
+      }
+      if (p.invoiceItinerary !== undefined) pa.invoiceItinerary = p.invoiceItinerary;
+      if (p.ticket !== undefined) {
+        const t: PrinterAddress['ticket'] = {};
+        if (p.ticket.address !== undefined) t.address = p.ticket.address;
+        if (p.ticket.countryCode !== undefined) t.countryCode = p.ticket.countryCode;
+        pa.ticket = t;
+      }
+      return pa;
+    });
+  }
+  if (req.offerItemId !== undefined) out.offerItemId = req.offerItemId;
+  if (req.retentionEndDate !== undefined) out.retentionEndDate = req.retentionEndDate;
+  if (req.retentionLabel !== undefined) out.retentionLabel = req.retentionLabel;
+  return out;
+}
+
+function buildCancelBookingTicket(t: components['schemas']['Ticket']): CancelBookingTicket {
+  const out: CancelBookingTicket = {};
+  if (t.number !== undefined) out.number = t.number;
+  if (t.isVoidable !== undefined) out.isVoidable = t.isVoidable;
+  if (t.isRefundable !== undefined) out.isRefundable = t.isRefundable;
+  if (t.isAutomatedRefundsEligible !== undefined) {
+    out.isAutomatedRefundsEligible = t.isAutomatedRefundsEligible;
+  }
+  if (t.refundPenalties !== undefined) {
+    out.refundPenalties = t.refundPenalties.map(buildPenaltyItem);
+  }
+  if (t.refundTaxes !== undefined) {
+    out.refundTaxes = t.refundTaxes.map(buildCancelRefundTax);
+  }
+  if (t.refundTotals !== undefined) out.refundTotals = buildTotalValues(t.refundTotals);
+  if (t.isChangeable !== undefined) out.isChangeable = t.isChangeable;
+  if (t.exchangePenalties !== undefined) {
+    out.exchangePenalties = t.exchangePenalties.map(buildPenaltyItem);
+  }
+  return out;
+}
+
+function buildPenaltyItem(p: components['schemas']['PenaltyItem']): BookingFareRulePenalty {
+  const out: BookingFareRulePenalty = {
+    applicability: p.applicability,
+    conditionsApply: p.conditionsApply,
+    penalty: buildMonetaryValue(p.penalty),
+  };
+  if (p.hasNoShowCost !== undefined) out.hasNoShowCost = p.hasNoShowCost;
+  if (p.noShowPenalty?.penalty !== undefined) {
+    out.noShowPenalty = buildMonetaryValue(p.noShowPenalty.penalty);
+  }
+  if (p.source !== undefined) out.source = p.source;
+  return out;
+}
+
+function buildCancelRefundTax(t: components['schemas']['Tax']): CancelRefundTax {
+  return { taxCode: t.taxCode, amount: t.amount };
+}
+
+function buildFlightRefund(f: components['schemas']['FlightRefund']): CancelFlightRefund {
+  const out: CancelFlightRefund = {
+    refundTotals: buildTotalValues(f.refundTotals),
+  };
+  if (f.airlineCode !== undefined) out.airlineCode = f.airlineCode;
+  if (f.confirmationId !== undefined) out.confirmationId = f.confirmationId;
   return out;
 }
 
