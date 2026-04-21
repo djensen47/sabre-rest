@@ -99,7 +99,9 @@ export type {
   BookingPayments,
   BookingProfile,
   BookingRemark,
+  BookingReturnOnly,
   BookingSegment,
+  BookingSource,
   BookingSpecialService,
   BookingTotalValues,
   BookingTrain,
@@ -107,6 +109,9 @@ export type {
   BookingTravelersGroup,
   CreateBookingInput,
   CreateBookingOutput,
+  GetBookingExtraFeatures,
+  GetBookingInput,
+  GetBookingOutput,
 } from './services/booking-management-v1/types.js';
 export type { BargainFinderMaxV5Service } from './services/bargain-finder-max-v5/service.js';
 export type { GetAncillariesV2Service } from './services/get-ancillaries-v2/service.js';

@@ -50,7 +50,9 @@ import type {
   BookingNonElectronicTicket,
   BookingPayments,
   BookingRemark,
+  BookingReturnOnly,
   BookingSegment,
+  BookingSource,
   BookingSpecialService,
   BookingTaxComponent,
   BookingTicketCoupon,
@@ -59,9 +61,13 @@ import type {
   BookingTraveler,
   CreateBookingInput,
   CreateBookingOutput,
+  GetBookingExtraFeatures,
+  GetBookingInput,
+  GetBookingOutput,
 } from './types.js';
 
-const PATH = 'v1/trip/orders/createBooking';
+const CREATE_BOOKING_PATH = 'v1/trip/orders/createBooking';
+const GET_BOOKING_PATH = 'v1/trip/orders/getBooking';
 
 /**
  * Builds the outgoing {@link SabreRequest} for the `createBooking`
@@ -72,7 +78,7 @@ const PATH = 'v1/trip/orders/createBooking';
  * are always sent.
  */
 export function toCreateBookingRequest(baseUrl: string, input: CreateBookingInput): SabreRequest {
-  const url = new URL(PATH, ensureTrailingSlash(baseUrl));
+  const url = new URL(CREATE_BOOKING_PATH, ensureTrailingSlash(baseUrl));
 
   const body: Record<string, unknown> = {
     receivedFrom: input.receivedFrom ?? 'Create Booking',
@@ -152,6 +158,131 @@ export function fromCreateBookingResponse(res: SabreResponse): CreateBookingOutp
     out.errors = parsed.errors.map(buildBookingError);
   }
 
+  return out;
+}
+
+/**
+ * Builds the outgoing {@link SabreRequest} for the `getBooking` operation.
+ *
+ * `confirmationId` is required; all other fields are forwarded only when
+ * supplied by the caller. No fields in `GetBookingRequest` carry a
+ * spec-defined default, so there is nothing to send on behalf of an
+ * omitted value.
+ */
+export function toGetBookingRequest(baseUrl: string, input: GetBookingInput): SabreRequest {
+  const url = new URL(GET_BOOKING_PATH, ensureTrailingSlash(baseUrl));
+
+  const body: Record<string, unknown> = {
+    confirmationId: input.confirmationId,
+  };
+
+  if (input.bookingSource !== undefined) body.bookingSource = input.bookingSource;
+  if (input.targetPcc !== undefined) body.targetPcc = input.targetPcc;
+  if (input.givenName !== undefined) body.givenName = input.givenName;
+  if (input.middleName !== undefined) body.middleName = input.middleName;
+  if (input.surname !== undefined) body.surname = input.surname;
+  if (input.returnOnly && input.returnOnly.length > 0) {
+    body.returnOnly = [...input.returnOnly];
+  }
+  if (input.extraFeatures !== undefined) {
+    body.extraFeatures = buildExtraFeaturesBody(input.extraFeatures);
+  }
+  if (input.unmaskPaymentCardNumbers !== undefined) {
+    body.unmaskPaymentCardNumbers = input.unmaskPaymentCardNumbers;
+  }
+
+  return {
+    method: 'POST',
+    url: url.toString(),
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+/**
+ * Parses the `getBooking` response into the public output shape.
+ *
+ * The response wire format is `Booking & { timestamp, bookingSignature,
+ * request, errors }`; this function maps both the booking fields and the
+ * response-level metadata. Throws {@link SabreParseError} when the body
+ * is not valid JSON or not an object.
+ */
+export function fromGetBookingResponse(res: SabreResponse): GetBookingOutput {
+  let parsed: components['schemas']['GetBookingResponse'];
+  try {
+    parsed = JSON.parse(res.body) as components['schemas']['GetBookingResponse'];
+  } catch (err) {
+    throw new SabreParseError('Failed to parse Get Booking response as JSON', res.body, {
+      cause: err,
+    });
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new SabreParseError('Get Booking response was not a JSON object', parsed);
+  }
+
+  const booking = buildBooking(parsed);
+  const out: GetBookingOutput = { ...booking };
+
+  if (parsed.timestamp !== undefined) out.timestamp = parsed.timestamp;
+  if (parsed.bookingSignature !== undefined) out.bookingSignature = parsed.bookingSignature;
+  if (parsed.request !== undefined) out.request = buildGetBookingRequestEcho(parsed.request);
+  if (parsed.errors !== undefined && parsed.errors.length > 0) {
+    out.errors = parsed.errors.map(buildBookingError);
+  }
+
+  return out;
+}
+
+function buildExtraFeaturesBody(features: GetBookingExtraFeatures): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (features.returnFrequentRenter !== undefined) {
+    out.returnFrequentRenter = features.returnFrequentRenter;
+  }
+  if (features.returnWalletFormsOfPayment !== undefined) {
+    out.returnWalletFormsOfPayment = features.returnWalletFormsOfPayment;
+  }
+  if (features.returnFiscalId !== undefined) out.returnFiscalId = features.returnFiscalId;
+  if (features.returnEmptySeatObjects !== undefined) {
+    out.returnEmptySeatObjects = features.returnEmptySeatObjects;
+  }
+  return out;
+}
+
+function buildGetBookingRequestEcho(
+  req: components['schemas']['GetBookingRequest'],
+): GetBookingInput {
+  const out: GetBookingInput = { confirmationId: req.confirmationId };
+  if (req.bookingSource !== undefined) out.bookingSource = req.bookingSource as BookingSource;
+  if (req.targetPcc !== undefined) out.targetPcc = req.targetPcc;
+  if (req.givenName !== undefined) out.givenName = req.givenName;
+  if (req.middleName !== undefined) out.middleName = req.middleName;
+  if (req.surname !== undefined) out.surname = req.surname;
+  if (req.returnOnly !== undefined) {
+    out.returnOnly = req.returnOnly as readonly BookingReturnOnly[];
+  }
+  if (req.extraFeatures !== undefined) {
+    const ef: GetBookingExtraFeatures = {};
+    if (req.extraFeatures.returnFrequentRenter !== undefined) {
+      ef.returnFrequentRenter = req.extraFeatures.returnFrequentRenter;
+    }
+    if (req.extraFeatures.returnWalletFormsOfPayment !== undefined) {
+      ef.returnWalletFormsOfPayment = req.extraFeatures.returnWalletFormsOfPayment;
+    }
+    if (req.extraFeatures.returnFiscalId !== undefined) {
+      ef.returnFiscalId = req.extraFeatures.returnFiscalId;
+    }
+    if (req.extraFeatures.returnEmptySeatObjects !== undefined) {
+      ef.returnEmptySeatObjects = req.extraFeatures.returnEmptySeatObjects;
+    }
+    out.extraFeatures = ef;
+  }
+  if (req.unmaskPaymentCardNumbers !== undefined) {
+    out.unmaskPaymentCardNumbers = req.unmaskPaymentCardNumbers;
+  }
   return out;
 }
 

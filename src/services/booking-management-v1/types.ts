@@ -2864,3 +2864,163 @@ export interface BookingProfile {
   /** Traveler index. */
   travelerIndex?: number;
 }
+
+// ---------------------------------------------------------------------------
+// getBooking
+// ---------------------------------------------------------------------------
+
+/**
+ * Identifies a portion of the Get Booking response that should be included.
+ *
+ * When `GetBookingInput.returnOnly` is supplied, only the listed sections
+ * are populated in the response. Useful for reducing payload size and
+ * latency when a caller only needs a subset of the booking data.
+ */
+export type BookingReturnOnly =
+  | 'FLIGHTS'
+  | 'FLIGHT_PENALTY'
+  | 'BAGGAGE_POLICY'
+  | 'JOURNEYS'
+  | 'HOTELS'
+  | 'HOTEL_ADDRESS'
+  | 'CARS'
+  | 'CAR_RENTAL_ADDRESS'
+  | 'CAR_RENTAL_PENALTY'
+  | 'TRAINS'
+  | 'CRUISES'
+  | 'ALL_SEGMENTS'
+  | 'TRAVELERS'
+  | 'TICKETS'
+  | 'PAYMENTS'
+  | 'PENALTIES'
+  | 'REMARKS'
+  | 'IS_CANCELABLE'
+  | 'IS_TICKETED'
+  | 'CONTACT_INFO'
+  | 'OTHER_SERVICES'
+  | 'SPECIAL_SERVICES'
+  | 'FARES'
+  | 'CREATION_DETAILS'
+  | 'ANCILLARIES'
+  | 'FORMS_OF_PAYMENT'
+  | 'RETENTION_DATE'
+  | 'ACCOUNTING_ITEMS'
+  | 'NON_ELECTRONIC_TICKETS'
+  | 'TRAVELERS_EMPLOYERS'
+  | 'PROFILES';
+
+/**
+ * Additional Get Booking features whose use requires explicit opt-in for
+ * backward compatibility. All fields default to Sabre's documented defaults
+ * when omitted; these will be folded into a future major version of the API.
+ */
+export interface GetBookingExtraFeatures {
+  /**
+   * If `true`, the additional loyalty program type `FREQUENT_RENTER` is
+   * supported. Spec default: `false`.
+   */
+  returnFrequentRenter?: boolean;
+  /**
+   * If `true`, returns the additional forms of payment `DOCKET`,
+   * `GOVERNMENT_TRAVEL_REQUEST`, and `INVOICE`. Spec default: `false`.
+   */
+  returnWalletFormsOfPayment?: boolean;
+  /**
+   * If `true`, the additional identity document `FISCAL_ID` is supported.
+   * Spec default: `false`.
+   */
+  returnFiscalId?: boolean;
+  /**
+   * If `true`, a lack of seat assignation to the corresponding traveler
+   * is marked as an empty `Seat` object. If `false`, empty objects are
+   * replaced with `null` values. Applies to NDC content only. Spec
+   * default: `true`.
+   */
+  returnEmptySeatObjects?: boolean;
+}
+
+/**
+ * Input for the `getBooking` operation.
+ *
+ * `confirmationId` is required; everything else narrows or tunes the
+ * response.
+ */
+export interface GetBookingInput {
+  /**
+   * The booking reference ID as shown in the source supplier/vendor
+   * system. For `SABRE`, this is the PNR Locator value. 6+ uppercase
+   * alphanumeric characters.
+   */
+  confirmationId: string;
+
+  /**
+   * Source of the booking. Defaults to `SABRE` when omitted.
+   */
+  bookingSource?: BookingSource;
+
+  /**
+   * The pseudo city code of the target destination in which the booking
+   * retrieval is requested. 3–4 uppercase alphanumeric characters.
+   */
+  targetPcc?: string;
+
+  /** The traveler's first name. */
+  givenName?: string;
+
+  /** The middle name or initial of the traveler. */
+  middleName?: string;
+
+  /** The traveler's last name. */
+  surname?: string;
+
+  /**
+   * Restrict the response to the listed sections only. If omitted or
+   * empty, the full structure is returned. Using this option can
+   * significantly improve response time by skipping downstream calls.
+   */
+  returnOnly?: readonly BookingReturnOnly[];
+
+  /**
+   * Additional features to enable on the response. See
+   * {@link GetBookingExtraFeatures} for per-field defaults.
+   */
+  extraFeatures?: GetBookingExtraFeatures;
+
+  /**
+   * If `true`, payment card numbers stored in the booking are returned
+   * unmasked. Requires the Employee Profile Record (EPR) to include the
+   * `CCVIEW` keyword.
+   */
+  unmaskPaymentCardNumbers?: boolean;
+}
+
+/**
+ * Output of the `getBooking` operation.
+ *
+ * Extends {@link Booking} with response-level metadata. All booking
+ * fields are optional because their presence depends on the booking's
+ * contents and the `returnOnly` filter in the request.
+ */
+export interface GetBookingOutput extends Booking {
+  /** Response timestamp in UTC. Format: `YYYY-MM-DDTHH:MM:SSZ`. */
+  timestamp?: string;
+
+  /**
+   * Unique ID of the Get Booking response. Used to verify the booking
+   * state during subsequent modification. Available only when retrieval
+   * did not produce any errors.
+   */
+  bookingSignature?: string;
+
+  /**
+   * Echo of the request that produced this response. Useful for tracing
+   * and debugging.
+   */
+  request?: GetBookingInput;
+
+  /**
+   * Errors encountered while retrieving the booking. Not present on
+   * successful responses.
+   */
+  errors?: readonly BookingError[];
+}

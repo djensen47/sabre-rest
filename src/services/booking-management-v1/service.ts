@@ -1,7 +1,12 @@
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type { ServiceDeps } from '../types.js';
 import * as mappers from './mappers.js';
-import type { CreateBookingInput, CreateBookingOutput } from './types.js';
+import type {
+  CreateBookingInput,
+  CreateBookingOutput,
+  GetBookingInput,
+  GetBookingOutput,
+} from './types.js';
 
 /**
  * Sabre Booking Management v1.
@@ -11,7 +16,9 @@ import type { CreateBookingInput, CreateBookingOutput } from './types.js';
  * bookings and flight tickets.
  *
  * Source: Sabre API "Booking Management API" v1.32
- *   - Operation: `createBooking` (`POST /v1/trip/orders/createBooking`)
+ *   - Operations:
+ *     - `createBooking` (`POST /v1/trip/orders/createBooking`)
+ *     - `getBooking` (`POST /v1/trip/orders/getBooking`)
  *   - Docs: https://developer.sabre.com/docs/rest_apis/trip/orders/booking_management
  *
  * Construct via {@link createSabreClient}; do not implement this interface
@@ -29,6 +36,19 @@ export interface BookingManagementV1Service {
    * @returns The confirmation ID, full booking state, and any errors.
    */
   createBooking(input: CreateBookingInput): Promise<CreateBookingOutput>;
+
+  /**
+   * Retrieve comprehensive booking details by confirmation ID.
+   *
+   * Use `returnOnly` to restrict the response to specific sections
+   * (flights, travelers, payments, etc.) for faster responses and
+   * smaller payloads. Use `extraFeatures` to opt into backward-
+   * compatible response additions.
+   *
+   * @param input Retrieval criteria, including the required `confirmationId`.
+   * @returns The booking state, response metadata, and any errors.
+   */
+  getBooking(input: GetBookingInput): Promise<GetBookingOutput>;
 }
 
 /**
@@ -49,5 +69,11 @@ export class DefaultBookingManagementV1Service implements BookingManagementV1Ser
     const req = mappers.toCreateBookingRequest(this.#baseUrl, input);
     const res = await this.#request(req);
     return mappers.fromCreateBookingResponse(res);
+  }
+
+  async getBooking(input: GetBookingInput): Promise<GetBookingOutput> {
+    const req = mappers.toGetBookingRequest(this.#baseUrl, input);
+    const res = await this.#request(req);
+    return mappers.fromGetBookingResponse(res);
   }
 }

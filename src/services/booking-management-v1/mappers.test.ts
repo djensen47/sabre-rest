@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { SabreParseError } from '../../errors/sabre-parse-error.js';
 import type { SabreResponse } from '../../http/types.js';
-import { fromCreateBookingResponse, toCreateBookingRequest } from './mappers.js';
-import type { CreateBookingInput } from './types.js';
+import {
+  fromCreateBookingResponse,
+  fromGetBookingResponse,
+  toCreateBookingRequest,
+  toGetBookingRequest,
+} from './mappers.js';
+import type { CreateBookingInput, GetBookingInput } from './types.js';
 
 const okResponse = (body: unknown): SabreResponse => ({
   status: 200,
@@ -346,5 +351,183 @@ describe('fromCreateBookingResponse', () => {
 
   it('throws SabreParseError for array body', () => {
     expect(() => fromCreateBookingResponse(okResponse('[]'))).toThrow(SabreParseError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toGetBookingRequest
+// ---------------------------------------------------------------------------
+
+describe('toGetBookingRequest', () => {
+  const minimalGetInput: GetBookingInput = { confirmationId: 'GLEBNY' };
+
+  it('builds a POST to the getBooking path with JSON headers', () => {
+    const req = toGetBookingRequest('https://api.cert.platform.sabre.com', minimalGetInput);
+    expect(req.method).toBe('POST');
+    expect(req.url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/getBooking');
+    expect(req.headers.Accept).toBe('application/json');
+    expect(req.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('handles a base URL with a trailing slash', () => {
+    const req = toGetBookingRequest('https://api.cert.platform.sabre.com/', minimalGetInput);
+    expect(req.url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/getBooking');
+  });
+
+  it('sends only confirmationId when no other fields are supplied', () => {
+    const req = toGetBookingRequest('https://api.cert.platform.sabre.com', minimalGetInput);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body).toEqual({ confirmationId: 'GLEBNY' });
+  });
+
+  it('omits an empty returnOnly list', () => {
+    const req = toGetBookingRequest('https://api.cert.platform.sabre.com', {
+      confirmationId: 'GLEBNY',
+      returnOnly: [],
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect('returnOnly' in body).toBe(false);
+  });
+
+  it('forwards returnOnly as an array', () => {
+    const req = toGetBookingRequest('https://api.cert.platform.sabre.com', {
+      confirmationId: 'GLEBNY',
+      returnOnly: ['FLIGHTS', 'TRAVELERS'],
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.returnOnly).toEqual(['FLIGHTS', 'TRAVELERS']);
+  });
+
+  it('forwards optional identity and PCC fields when supplied', () => {
+    const req = toGetBookingRequest('https://api.cert.platform.sabre.com', {
+      confirmationId: 'GLEBNY',
+      bookingSource: 'SABRE_ORDER',
+      targetPcc: 'G7HE',
+      givenName: 'John',
+      middleName: 'W',
+      surname: 'Smith',
+      unmaskPaymentCardNumbers: true,
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.bookingSource).toBe('SABRE_ORDER');
+    expect(body.targetPcc).toBe('G7HE');
+    expect(body.givenName).toBe('John');
+    expect(body.middleName).toBe('W');
+    expect(body.surname).toBe('Smith');
+    expect(body.unmaskPaymentCardNumbers).toBe(true);
+  });
+
+  it('only forwards the extraFeatures flags the caller supplied', () => {
+    const req = toGetBookingRequest('https://api.cert.platform.sabre.com', {
+      confirmationId: 'GLEBNY',
+      extraFeatures: {
+        returnFrequentRenter: true,
+        returnEmptySeatObjects: false,
+      },
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    const ef = body.extraFeatures as Record<string, unknown>;
+    expect(ef).toEqual({
+      returnFrequentRenter: true,
+      returnEmptySeatObjects: false,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fromGetBookingResponse
+// ---------------------------------------------------------------------------
+
+describe('fromGetBookingResponse', () => {
+  it('maps a booking response with top-level metadata', () => {
+    const result = fromGetBookingResponse(
+      okResponse({
+        timestamp: '2026-05-01T12:00:00Z',
+        bookingSignature: 'sig-123',
+        bookingId: 'GLEBNY',
+        isTicketed: true,
+        isCancelable: false,
+        flights: [
+          {
+            itemId: '1',
+            flightNumber: 100,
+            airlineCode: 'AA',
+            fromAirportCode: 'DFW',
+            toAirportCode: 'LAX',
+            departureDate: '2026-05-15',
+            departureTime: '10:00',
+            arrivalDate: '2026-05-15',
+            arrivalTime: '12:00',
+          },
+        ],
+        travelers: [{ givenName: 'JOHN', surname: 'DOE' }],
+      }),
+    );
+
+    expect(result.timestamp).toBe('2026-05-01T12:00:00Z');
+    expect(result.bookingSignature).toBe('sig-123');
+    expect(result.bookingId).toBe('GLEBNY');
+    expect(result.isTicketed).toBe(true);
+    expect(result.isCancelable).toBe(false);
+    expect(result.flights).toHaveLength(1);
+    expect(result.flights?.[0]?.airlineCode).toBe('AA');
+    expect(result.travelers).toHaveLength(1);
+    expect(result.travelers?.[0]?.givenName).toBe('JOHN');
+  });
+
+  it('maps the echoed request', () => {
+    const result = fromGetBookingResponse(
+      okResponse({
+        bookingId: 'GLEBNY',
+        request: {
+          confirmationId: 'GLEBNY',
+          bookingSource: 'SABRE',
+          returnOnly: ['FLIGHTS', 'TRAVELERS'],
+          extraFeatures: { returnFrequentRenter: true },
+        },
+      }),
+    );
+
+    expect(result.request?.confirmationId).toBe('GLEBNY');
+    expect(result.request?.bookingSource).toBe('SABRE');
+    expect(result.request?.returnOnly).toEqual(['FLIGHTS', 'TRAVELERS']);
+    expect(result.request?.extraFeatures?.returnFrequentRenter).toBe(true);
+  });
+
+  it('maps errors when present', () => {
+    const result = fromGetBookingResponse(
+      okResponse({
+        errors: [
+          {
+            category: 'NOT_FOUND',
+            type: 'BOOKING_NOT_FOUND',
+            description: 'No booking with that confirmationId',
+          },
+        ],
+      }),
+    );
+
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors?.[0]?.category).toBe('NOT_FOUND');
+    expect(result.errors?.[0]?.type).toBe('BOOKING_NOT_FOUND');
+  });
+
+  it('maps an empty booking payload', () => {
+    const result = fromGetBookingResponse(okResponse({}));
+    expect(result.bookingId).toBeUndefined();
+    expect(result.flights).toBeUndefined();
+    expect(result.errors).toBeUndefined();
+  });
+
+  it('throws SabreParseError for non-JSON body', () => {
+    expect(() => fromGetBookingResponse(okResponse('not json'))).toThrow(SabreParseError);
+  });
+
+  it('throws SabreParseError for null body', () => {
+    expect(() => fromGetBookingResponse(okResponse('null'))).toThrow(SabreParseError);
+  });
+
+  it('throws SabreParseError for array body', () => {
+    expect(() => fromGetBookingResponse(okResponse('[]'))).toThrow(SabreParseError);
   });
 });
