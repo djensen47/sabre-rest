@@ -2,14 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { SabreParseError } from '../../errors/sabre-parse-error.js';
 import type { SabreResponse } from '../../http/types.js';
 import {
+  fromCancelBookingResponse,
   fromCreateBookingResponse,
   fromGetBookingResponse,
   fromModifyBookingResponse,
+  toCancelBookingRequest,
   toCreateBookingRequest,
   toGetBookingRequest,
   toModifyBookingRequest,
 } from './mappers.js';
-import type { CreateBookingInput, GetBookingInput, ModifyBookingInput } from './types.js';
+import type {
+  CancelBookingInput,
+  CreateBookingInput,
+  GetBookingInput,
+  ModifyBookingInput,
+} from './types.js';
 
 const okResponse = (body: unknown): SabreResponse => ({
   status: 200,
@@ -823,5 +830,246 @@ describe('fromModifyBookingResponse', () => {
 
   it('throws SabreParseError for array body', () => {
     expect(() => fromModifyBookingResponse(okResponse('[]'))).toThrow(SabreParseError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toCancelBookingRequest
+// ---------------------------------------------------------------------------
+
+const minimalCancelInput: CancelBookingInput = { confirmationId: 'GLEBNY' };
+
+describe('toCancelBookingRequest', () => {
+  it('builds a POST to the cancelBooking path with JSON headers', () => {
+    const req = toCancelBookingRequest('https://api.cert.platform.sabre.com', minimalCancelInput);
+    expect(req.method).toBe('POST');
+    expect(req.url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/cancelBooking');
+    expect(req.headers.Accept).toBe('application/json');
+    expect(req.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('tolerates a base URL with a trailing slash', () => {
+    const req = toCancelBookingRequest('https://api.cert.platform.sabre.com/', minimalCancelInput);
+    expect(req.url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/cancelBooking');
+  });
+
+  it('sends spec-defined defaults for unspecified defaulted fields', () => {
+    const req = toCancelBookingRequest('https://api.cert.platform.sabre.com', minimalCancelInput);
+    const body = JSON.parse(req.body as string) as Record<string, unknown>;
+    expect(body).toEqual({
+      confirmationId: 'GLEBNY',
+      retrieveBooking: false,
+      cancelAll: false,
+      voidNonElectronicTickets: false,
+      errorHandlingPolicy: 'HALT_ON_ERROR',
+      refundDocumentsType: 'Tickets',
+    });
+  });
+
+  it('forwards per-type item references and segment references', () => {
+    const req = toCancelBookingRequest('https://api.cert.platform.sabre.com', {
+      confirmationId: 'GLEBNY',
+      cancelAll: false,
+      flights: [{ itemId: '1' }],
+      hotels: [{ itemId: '2' }],
+      cars: [{ itemId: '3' }],
+      trains: [{ itemId: '4' }],
+      cruises: [{ itemId: '5' }],
+      segments: [{ sequence: 1 }, { id: 'A' }],
+    });
+    const body = JSON.parse(req.body as string) as Record<string, unknown>;
+    expect(body.flights).toEqual([{ itemId: '1' }]);
+    expect(body.hotels).toEqual([{ itemId: '2' }]);
+    expect(body.cars).toEqual([{ itemId: '3' }]);
+    expect(body.trains).toEqual([{ itemId: '4' }]);
+    expect(body.cruises).toEqual([{ itemId: '5' }]);
+    expect(body.segments).toEqual([{ sequence: 1 }, { id: 'A' }]);
+  });
+
+  it('omits empty reference arrays', () => {
+    const req = toCancelBookingRequest('https://api.cert.platform.sabre.com', {
+      confirmationId: 'GLEBNY',
+      flights: [],
+      hotels: [],
+    });
+    const body = JSON.parse(req.body as string) as Record<string, unknown>;
+    expect(body.flights).toBeUndefined();
+    expect(body.hotels).toBeUndefined();
+  });
+
+  it('forwards ticket operation, notification, and printer designations', () => {
+    const req = toCancelBookingRequest('https://api.cert.platform.sabre.com', {
+      confirmationId: 'GLEBNY',
+      flightTicketOperation: 'VOID',
+      notification: { email: 'INVOICE', queuePlacement: [{ prefatoryInstructionCode: 11 }] },
+      designatePrinters: [
+        {
+          profileNumber: 1,
+          hardcopy: { address: 'EF34GH', spacing: '1' },
+          invoiceItinerary: 'AB12CD',
+          ticket: { address: 'IJ56KL', countryCode: 'US' },
+        },
+      ],
+    });
+    const body = JSON.parse(req.body as string) as Record<string, unknown>;
+    expect(body.flightTicketOperation).toBe('VOID');
+    expect(body.notification).toEqual({
+      email: 'INVOICE',
+      queuePlacement: [{ prefatoryInstructionCode: 11 }],
+    });
+    expect(body.designatePrinters).toEqual([
+      {
+        profileNumber: 1,
+        hardcopy: { address: 'EF34GH', spacing: '1' },
+        invoiceItinerary: 'AB12CD',
+        ticket: { address: 'IJ56KL', countryCode: 'US' },
+      },
+    ]);
+  });
+
+  it('respects consumer overrides of defaulted fields', () => {
+    const req = toCancelBookingRequest('https://api.cert.platform.sabre.com', {
+      confirmationId: 'GLEBNY',
+      retrieveBooking: true,
+      cancelAll: true,
+      voidNonElectronicTickets: true,
+      errorHandlingPolicy: 'ALLOW_PARTIAL_CANCEL',
+      refundDocumentsType: 'Tickets and EMDs',
+    });
+    const body = JSON.parse(req.body as string) as Record<string, unknown>;
+    expect(body.retrieveBooking).toBe(true);
+    expect(body.cancelAll).toBe(true);
+    expect(body.voidNonElectronicTickets).toBe(true);
+    expect(body.errorHandlingPolicy).toBe('ALLOW_PARTIAL_CANCEL');
+    expect(body.refundDocumentsType).toBe('Tickets and EMDs');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fromCancelBookingResponse
+// ---------------------------------------------------------------------------
+
+describe('fromCancelBookingResponse', () => {
+  it('maps response metadata, voided and refunded tickets, and flight refunds', () => {
+    const result = fromCancelBookingResponse(
+      okResponse({
+        timestamp: '2026-05-01T12:00:00Z',
+        voidedTickets: ['0017544536141'],
+        refundedTickets: ['0017544536142'],
+        flightRefunds: [
+          {
+            airlineCode: 'AA',
+            confirmationId: 'GLEBNY',
+            refundTotals: { total: '120.00', currencyCode: 'USD' },
+          },
+        ],
+      }),
+    );
+    expect(result.timestamp).toBe('2026-05-01T12:00:00Z');
+    expect(result.voidedTickets).toEqual(['0017544536141']);
+    expect(result.refundedTickets).toEqual(['0017544536142']);
+    expect(result.flightRefunds?.[0]?.airlineCode).toBe('AA');
+    expect(result.flightRefunds?.[0]?.refundTotals.total).toBe('120.00');
+  });
+
+  it('maps ticket eligibility with refund penalties and taxes', () => {
+    const result = fromCancelBookingResponse(
+      okResponse({
+        tickets: [
+          {
+            number: '0017544536141',
+            isVoidable: true,
+            isRefundable: true,
+            isAutomatedRefundsEligible: false,
+            refundPenalties: [
+              {
+                applicability: 'BEFORE_DEPARTURE',
+                conditionsApply: false,
+                penalty: { amount: '25.00', currencyCode: 'USD' },
+                source: 'Category 33',
+                noShowPenalty: { penalty: { amount: '50.00', currencyCode: 'USD' } },
+              },
+            ],
+            refundTaxes: [{ taxCode: 'XY', amount: '5.00' }],
+            refundTotals: { total: '100.00', currencyCode: 'USD' },
+            isChangeable: true,
+            exchangePenalties: [
+              {
+                applicability: 'AFTER_DEPARTURE',
+                conditionsApply: true,
+                penalty: { amount: '75.00', currencyCode: 'USD' },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const ticket = result.tickets?.[0];
+    expect(ticket?.number).toBe('0017544536141');
+    expect(ticket?.isVoidable).toBe(true);
+    expect(ticket?.refundPenalties?.[0]?.applicability).toBe('BEFORE_DEPARTURE');
+    expect(ticket?.refundPenalties?.[0]?.source).toBe('Category 33');
+    expect(ticket?.refundPenalties?.[0]?.noShowPenalty?.amount).toBe('50.00');
+    expect(ticket?.refundTaxes).toEqual([{ taxCode: 'XY', amount: '5.00' }]);
+    expect(ticket?.refundTotals?.total).toBe('100.00');
+    expect(ticket?.exchangePenalties?.[0]?.applicability).toBe('AFTER_DEPARTURE');
+  });
+
+  it('maps the request echo back into CancelBookingInput', () => {
+    const result = fromCancelBookingResponse(
+      okResponse({
+        request: {
+          confirmationId: 'GLEBNY',
+          retrieveBooking: true,
+          cancelAll: false,
+          voidNonElectronicTickets: false,
+          errorHandlingPolicy: 'ALLOW_PARTIAL_CANCEL',
+          flightTicketOperation: 'REFUND',
+          flights: [{ itemId: '1' }],
+          segments: [{ sequence: 1 }, { id: 'A' }],
+          targetPcc: 'G7HE',
+        },
+      }),
+    );
+    expect(result.request?.confirmationId).toBe('GLEBNY');
+    expect(result.request?.retrieveBooking).toBe(true);
+    expect(result.request?.errorHandlingPolicy).toBe('ALLOW_PARTIAL_CANCEL');
+    expect(result.request?.flightTicketOperation).toBe('REFUND');
+    expect(result.request?.flights).toEqual([{ itemId: '1' }]);
+    expect(result.request?.segments).toEqual([{ sequence: 1 }, { id: 'A' }]);
+    expect(result.request?.targetPcc).toBe('G7HE');
+  });
+
+  it('maps errors', () => {
+    const result = fromCancelBookingResponse(
+      okResponse({
+        errors: [{ category: 'BAD_REQUEST', type: 'INVALID_CONFIRMATION_ID' }],
+      }),
+    );
+    expect(result.errors?.[0]?.category).toBe('BAD_REQUEST');
+  });
+
+  it('maps an empty response body', () => {
+    const result = fromCancelBookingResponse(okResponse({}));
+    expect(result.timestamp).toBeUndefined();
+    expect(result.booking).toBeUndefined();
+    expect(result.tickets).toBeUndefined();
+    expect(result.voidedTickets).toBeUndefined();
+    expect(result.refundedTickets).toBeUndefined();
+    expect(result.flightRefunds).toBeUndefined();
+    expect(result.errors).toBeUndefined();
+    expect(result.request).toBeUndefined();
+  });
+
+  it('throws SabreParseError for non-JSON body', () => {
+    expect(() => fromCancelBookingResponse(okResponse('not json'))).toThrow(SabreParseError);
+  });
+
+  it('throws SabreParseError for null body', () => {
+    expect(() => fromCancelBookingResponse(okResponse('null'))).toThrow(SabreParseError);
+  });
+
+  it('throws SabreParseError for array body', () => {
+    expect(() => fromCancelBookingResponse(okResponse('[]'))).toThrow(SabreParseError);
   });
 });
