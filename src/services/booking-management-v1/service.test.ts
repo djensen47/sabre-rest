@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TokenProvider } from '../../auth/types.js';
 import { createSabreClient } from '../../client.js';
-import type { CreateBookingInput, GetBookingInput } from './types.js';
+import type { CreateBookingInput, GetBookingInput, ModifyBookingInput } from './types.js';
 
 const fakeProvider = (): TokenProvider => ({
   getToken: vi.fn(async () => 'TEST_TOKEN'),
@@ -204,6 +204,97 @@ describe('BookingManagementV1Service.getBooking', () => {
     await expect(client.bookingManagementV1.getBooking(minimalGetInput)).rejects.toMatchObject({
       name: 'SabreApiResponseError',
       statusCode: 404,
+    });
+  });
+});
+
+describe('BookingManagementV1Service.modifyBooking', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const minimalModifyInput: ModifyBookingInput = {
+    confirmationId: 'GLEBNY',
+    bookingSignature: 'sig-abc',
+    before: {},
+    after: { remarks: [{ type: 'GENERAL', text: 'new note' }] },
+  };
+
+  const modifyResponseBody = {
+    timestamp: '2026-05-01T12:00:00Z',
+    booking: {
+      bookingId: 'GLEBNY',
+      isTicketed: false,
+      isCancelable: true,
+      remarks: [{ type: 'GENERAL', text: 'new note' }],
+    },
+  };
+
+  it('POSTs to the modifyBooking URL with bearer auth and JSON headers', async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      () =>
+        new Response(JSON.stringify(modifyResponseBody), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createSabreClient({
+      baseUrl: 'https://api.cert.platform.sabre.com',
+      auth: fakeProvider(),
+    });
+
+    const result = await client.bookingManagementV1.modifyBooking(minimalModifyInput);
+
+    expect(result.timestamp).toBe('2026-05-01T12:00:00Z');
+    expect(result.booking?.bookingId).toBe('GLEBNY');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/modifyBooking');
+
+    const requestInit = init as RequestInit;
+    expect(requestInit.method).toBe('POST');
+    const headers = requestInit.headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer TEST_TOKEN');
+    expect(headers.Accept).toBe('application/json');
+    expect(headers['Content-Type']).toBe('application/json');
+
+    const body = JSON.parse((requestInit.body as string) ?? '{}') as Record<string, unknown>;
+    expect(body.confirmationId).toBe('GLEBNY');
+    expect(body.bookingSignature).toBe('sig-abc');
+    expect(body.retrieveBooking).toBe(false);
+    expect(body.receivedFrom).toBe('Modify Booking');
+  });
+
+  it('surfaces a non-2xx response as SabreApiResponseError', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(
+        () =>
+          new Response(
+            JSON.stringify({
+              errors: [{ category: 'CONFLICT', type: 'SIGNATURE_MISMATCH' }],
+            }),
+            { status: 409, statusText: 'Conflict' },
+          ),
+      ),
+    );
+
+    const client = createSabreClient({
+      baseUrl: 'https://api.cert.platform.sabre.com',
+      auth: fakeProvider(),
+    });
+
+    await expect(
+      client.bookingManagementV1.modifyBooking(minimalModifyInput),
+    ).rejects.toMatchObject({
+      name: 'SabreApiResponseError',
+      statusCode: 409,
     });
   });
 });

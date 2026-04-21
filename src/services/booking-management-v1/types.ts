@@ -3024,3 +3024,431 @@ export interface GetBookingOutput extends Booking {
    */
   errors?: readonly BookingError[];
 }
+
+// ---------------------------------------------------------------------------
+// modifyBooking — input / output and sub-types
+// ---------------------------------------------------------------------------
+
+/**
+ * Additional Modify Booking features whose use requires explicit opt-in for
+ * backward compatibility. Defaults follow Sabre's documented defaults when
+ * the field is omitted; these will be folded into a future major version.
+ */
+export interface ModifyBookingExtraFeatures {
+  /**
+   * If `true`, the additional loyalty program type `FREQUENT_RENTER` is
+   * supported. Spec default: `false`.
+   */
+  returnFrequentRenter?: boolean;
+  /**
+   * If `true`, returns the additional forms of payment `DOCKET`,
+   * `GOVERNMENT_TRAVEL_REQUEST`, and `INVOICE`. Spec default: `false`.
+   */
+  returnWalletFormsOfPayment?: boolean;
+  /**
+   * If `true`, the additional identity document `FISCAL_ID` is supported.
+   * Spec default: `false`.
+   */
+  returnFiscalId?: boolean;
+}
+
+/**
+ * Input for the `modifyBooking` operation.
+ *
+ * The API diffs `before` and `after` and performs the appropriate add,
+ * update, or delete operations on the booking. `before` should reflect
+ * the current state (typically as returned by `getBooking`); `after`
+ * reflects the target state. `bookingSignature` is the value returned by
+ * the preceding `getBooking` call and is used to verify that the booking
+ * has not changed since.
+ */
+export interface ModifyBookingInput {
+  /**
+   * The booking reference ID as shown in the source supplier/vendor
+   * system. For `SABRE`, this is the PNR Locator value. 6+ uppercase
+   * alphanumeric characters.
+   */
+  confirmationId: string;
+
+  /**
+   * The unique identifier of a booking, obtained via `getBooking`. Used
+   * to verify the state of the booking prior to a modification operation.
+   */
+  bookingSignature: string;
+
+  /** Original booking details, prior to modification. */
+  before: BookingToModify;
+
+  /** Target booking details after the modification has been applied. */
+  after: BookingToModify;
+
+  /** Source of the booking. Defaults to `SABRE` when omitted. */
+  bookingSource?: BookingSource;
+
+  /**
+   * If `true`, the response includes the current state of the booking.
+   * Spec default: `false`.
+   */
+  retrieveBooking?: boolean;
+
+  /**
+   * The entity authorizing the changes in the booking. Defaults to
+   * `'Modify Booking'` when omitted.
+   */
+  receivedFrom?: string;
+
+  /**
+   * Pseudo city code for the target location. The API does not revert
+   * context after completing the modification. 3–4 alphanumeric
+   * characters.
+   */
+  targetPcc?: string;
+
+  /**
+   * If `true`, unmasks payment card information during the
+   * `bookingSignature` verification step. Requires the Employee Profile
+   * Record (EPR) to include the `CCVIEW` keyword.
+   */
+  unmaskPaymentCardNumbers?: boolean;
+
+  /**
+   * Additional features to enable on the response. See
+   * {@link ModifyBookingExtraFeatures} for per-field defaults.
+   */
+  extraFeatures?: ModifyBookingExtraFeatures;
+}
+
+/**
+ * Output of the `modifyBooking` operation.
+ *
+ * `booking` is populated only when the request was made with
+ * `retrieveBooking: true` (or when Sabre otherwise returns booking
+ * contents for this modification).
+ */
+export interface ModifyBookingOutput {
+  /** Response timestamp in UTC. Format: `YYYY-MM-DDTHH:MM:SSZ`. */
+  timestamp?: string;
+
+  /**
+   * Current booking state. Present when `retrieveBooking` was `true`
+   * in the request.
+   */
+  booking?: Booking;
+
+  /**
+   * Echo of the request that produced this response. Useful for tracing
+   * and debugging.
+   */
+  request?: ModifyBookingInput;
+
+  /**
+   * Errors encountered while processing the modification. Not present
+   * on fully successful responses.
+   */
+  errors?: readonly BookingError[];
+}
+
+/**
+ * A snapshot of booking contents used in the `before` or `after` fields
+ * of a {@link ModifyBookingInput}. All fields are optional — supply
+ * only the sections that participate in the modification.
+ */
+export interface BookingToModify {
+  /** Agency customer/DK number. */
+  agencyCustomerNumber?: string;
+  /** Booking creation details. */
+  creationDetails?: CreationDetailsToModify;
+  /** Flights associated with the booking. */
+  flights?: readonly FlightToModify[];
+  /**
+   * Remarks stored in the booking. The `FORM_OF_PAYMENT` remark type is
+   * handled automatically by Sabre and should not be set manually.
+   */
+  remarks?: readonly RemarkToModify[];
+  /** Hotels associated with the booking. */
+  hotels?: readonly HotelToModify[];
+  /** Payment information. */
+  payments?: PaymentToModify;
+  /** Special service requests (SSRs). */
+  specialServices?: readonly SpecialServiceToModify[];
+  /** Travelers in the booking. */
+  travelers?: readonly TravelerToModify[];
+  /**
+   * Retention date to keep the booking active past the last itinerary
+   * item. After this date the booking is set for purging. Format:
+   * `YYYY-MM-DD`.
+   */
+  retentionEndDate?: string;
+  /** Label associated with the retention date. */
+  retentionLabel?: string;
+  /** Other Service Information (OSI) messages. */
+  otherServices?: readonly OtherServiceToModify[];
+  /** Saved fares. */
+  fares?: readonly FareToModify[];
+}
+
+/** Creation details that can be modified. */
+export interface CreationDetailsToModify {
+  /** IATA-accredited agency number (7 or 8 digits). */
+  agencyIataNumber?: string;
+}
+
+/** A flight to modify. Identifies seats to assign or change. */
+export interface FlightToModify {
+  /**
+   * Seats assigned to the travelers. The array index matches the
+   * traveler index in the `travelers` array. A `null` entry indicates
+   * no seat for the corresponding traveler — to produce such entries
+   * from `getBooking`, set `extraFeatures.returnEmptySeatObjects` to
+   * `false`. Combined with `changeOfGaugeSeats`, this array represents
+   * seats on the first aircraft of a change-of-gauge or funnel flight.
+   */
+  seats?: readonly (SeatToModify | null)[];
+  /**
+   * Seats for the departing aircraft on a change-of-gauge or funnel
+   * flight. Indexed the same way as `seats`.
+   */
+  changeOfGaugeSeats?: readonly (SeatToModify | null)[];
+}
+
+/** A seat assignment to modify. */
+export interface SeatToModify {
+  /** Assigned seat number (e.g., `'13A'`). */
+  number: string;
+  /** NDC seat availability offer item ID. */
+  offerItemId?: string;
+}
+
+/**
+ * A hotel reservation to modify, referenced by `itemId`. Retain the
+ * values of required fields (`room`, `numberOfGuests`,
+ * `leadTravelerIndex`, `paymentPolicy`) from the source booking; supply
+ * `bookingKey` only when changing room type, guest count, or a date
+ * outside the original range.
+ */
+export interface HotelToModify {
+  /** The ID of the hotel reservation. Uppercase alphanumeric. */
+  itemId: string;
+  /**
+   * Booking key from the Hotel Price Check API. Required when
+   * modifying room type, guest count, or check-in/check-out dates
+   * outside the original range. 1–240 characters.
+   */
+  bookingKey?: string;
+  /** Check-in date in the hotel's local time zone. `YYYY-MM-DD`. */
+  checkInDate?: string;
+  /** Check-out date in the hotel's local time zone. `YYYY-MM-DD`. */
+  checkOutDate?: string;
+  /** Corporate discount code (usually tied to a negotiated rate). */
+  corporateDiscountCode?: number;
+  /**
+   * Index (1-based) of the lead traveler in the `travelers` array.
+   * Required when modifying the hotel.
+   */
+  leadTravelerIndex: number;
+  /** Room details. Required when modifying the hotel. */
+  room: RoomToModify;
+  /** Special instructions for the property. */
+  specialInstructions?: string;
+  /** Number of guests. Required when modifying the hotel. */
+  numberOfGuests: number;
+  /** Flight details associated with the hotel booking. */
+  associatedFlightDetails?: AssociatedFlightDetailsToModify;
+  /**
+   * Payment policy. Required when modifying the hotel.
+   * Applicable forms: `PAYMENTCARD`, `AGENCY_NAME`, `AGENCY_IATA`,
+   * `CORPORATE`, `COMPANY_NAME`, `VIRTUAL_CARD`.
+   */
+  paymentPolicy: BookHotelPaymentPolicy;
+  /** Index (1-based) of the payment type in `payments.formsOfPayment`. */
+  formOfPaymentIndex?: number;
+}
+
+/** A hotel room to modify. */
+export interface RoomToModify {
+  /** Inventory block code returned by the hotel supplier. */
+  productCode?: string;
+  /** Indices (1-based) of travelers assigned to the room. 1+ items. */
+  travelerIndices: readonly number[];
+}
+
+/** Flight details associated with a hotel or car booking to modify. */
+export interface AssociatedFlightDetailsToModify {
+  /** Arrival airline code. */
+  arrivalAirlineCode?: string;
+  /** Arrival flight number. */
+  arrivalFlightNumber?: number;
+  /** Arrival time in `HH:MM`. */
+  arrivalTime?: string;
+  /** Departure airline code. */
+  departureAirlineCode?: string;
+  /** Departure flight number. */
+  departureFlightNumber?: number;
+  /** Departure time in `HH:MM`. */
+  departureTime?: string;
+}
+
+/** Payment information to modify. */
+export interface PaymentToModify {
+  /**
+   * Forms of payment associated with the booking. 1–10 items. Uses
+   * the same shape as {@link BookFormOfPayment}.
+   */
+  formsOfPayment?: readonly BookFormOfPayment[];
+}
+
+/**
+ * A special service request (SSR) to modify. `code` is required; use
+ * `travelerIndices` and `flights` to narrow the scope of the SSR.
+ */
+export interface SpecialServiceToModify {
+  /** Four-letter SSR code (e.g., `'WCHR'`). */
+  code: string;
+  /** Indices (1-based) of associated travelers. */
+  travelerIndices?: readonly number[];
+  /** Flights referenced by `itemId`. */
+  flights?: readonly FlightReferenceToModify[];
+  /** Free-text SSR detail (e.g., `'/PREPAID'`). */
+  message?: string;
+}
+
+/** A flight reference, used by SSRs and identity documents. */
+export interface FlightReferenceToModify {
+  /** The `itemId` of a flight as returned by `getBooking`. */
+  itemId: string;
+}
+
+/** A traveler to modify. All fields are optional for partial updates. */
+export interface TravelerToModify {
+  /** Traveler's first name. */
+  givenName?: string;
+  /** Traveler's middle name (NDC content only). */
+  middleName?: string;
+  /** Traveler's last name. */
+  surname?: string;
+  /** Traveler's birth date in `YYYY-MM-DD` format. */
+  birthDate?: string;
+  /** Passenger type code (e.g., `'ADT'`, `'CNN'`). */
+  passengerCode?: string;
+  /** Optional identifier used for accounting (MAN number). */
+  nameReferenceCode?: string;
+  /** If `true`, the traveler is associated with a group booking. */
+  isGrouped?: boolean;
+  /** Email addresses. */
+  emails?: readonly string[];
+  /** Phone numbers. */
+  phones?: readonly BookPhone[];
+  /** Remarks associated with this traveler. */
+  remarks?: readonly RemarkToModify[];
+  /** Identity documents applicable to the traveler. */
+  identityDocuments?: readonly IdentityDocumentToModify[];
+  /** Loyalty programs the traveler participates in. */
+  loyaltyPrograms?: readonly BookLoyaltyProgram[];
+  /** Ancillaries to be added or deleted. */
+  ancillaries?: readonly AncillaryToModify[];
+}
+
+/**
+ * An identity document to modify. `documentType` is required per the
+ * spec; all other fields are optional for partial updates.
+ */
+export interface IdentityDocumentToModify {
+  /** Document type (passport, visa, etc.). */
+  documentType: BookDocumentType;
+  /** Document number. Alphanumeric. */
+  documentNumber?: string;
+  /** Document expiry date in `YYYY-MM-DD` format. */
+  expiryDate?: string;
+  /** Issuing country code (2–3 letter ISO 3166). */
+  issuingCountryCode?: string;
+  /** Residence country code (2–3 letter ISO 3166). */
+  residenceCountryCode?: string;
+  /** Place of issue (ISO 3166 code or place name). */
+  placeOfIssue?: string;
+  /** Place of birth. */
+  placeOfBirth?: string;
+  /** Host country code for visas. */
+  hostCountryCode?: string;
+  /** Issue date in `YYYY-MM-DD` format. */
+  issueDate?: string;
+  /** First name on the document. */
+  givenName?: string;
+  /** Middle name on the document. */
+  middleName?: string;
+  /** Surname on the document. */
+  surname?: string;
+  /** Birth date on the document in `YYYY-MM-DD` format. */
+  birthDate?: string;
+  /** Gender on the document. */
+  gender?: BookGender;
+  /** If `true`, this document belongs to the primary holder. */
+  isPrimaryDocumentHolder?: boolean;
+  /** Flights this document is associated with. */
+  flights?: readonly FlightReferenceToModify[];
+}
+
+/** An ancillary to add or delete during modification. */
+export interface AncillaryToModify {
+  /** Existing ancillary item ID (required to reference an ancillary for deletion). */
+  itemId?: string;
+  /** NDC offer item ID (for NDC content). */
+  offerId?: string;
+  /** Free-text description of the ancillary (NDC content only). */
+  description?: string;
+  /** Commercial name of the ancillary (ATPCO only). */
+  commercialName?: string;
+  /** Quantity to book (ATPCO only). */
+  numberOfItems?: number;
+  /** Issuance subcode (RFISC); e.g., `'05Z'`. ATPCO only. */
+  subcode?: string;
+  /** Two-letter airline code owning the service. ATPCO only. */
+  airlineCode?: string;
+  /** Two-letter airline code providing the service. ATPCO only. */
+  vendorCode?: string;
+  /** Ancillary source. ATPCO only. */
+  source?: BookAncillarySource;
+  /** Tax entries. 1–99 items. ATPCO only. */
+  taxes?: readonly BookTax[];
+  /** First valid travel date in `YYYY-MM-DD`. */
+  firstTravelDate?: string;
+  /** Last valid travel date in `YYYY-MM-DD`. */
+  lastTravelDate?: string;
+  /** Latest allowed purchase datetime in ISO 8601. */
+  purchaseDateTime?: string;
+  /** Two-letter IATA group code (e.g., `'BG'`). ATPCO only. */
+  groupCode?: string;
+  /** Flights associated with the ancillary. */
+  flights?: readonly FlightReferenceToModify[];
+  /** EMD or document type. */
+  electronicMiscellaneousDocumentType?: BookElectronicMiscellaneousDocumentType;
+  /** Reason For Issuance Code (RFIC). */
+  reasonForIssuanceCode?: string;
+  /** Reason For Issuance enumeration. */
+  reasonForIssuanceName?: BookReasonForIssuance;
+}
+
+/** A remark to modify. */
+export interface RemarkToModify {
+  /** Remark type. */
+  type?: BookRemarkType;
+  /** Single-letter code for `ALPHA_CODED` remarks. */
+  alphaCode?: string;
+  /** Remark text. */
+  text?: string;
+}
+
+/** Other Service Information (OSI) to modify. */
+export interface OtherServiceToModify {
+  /** Two-letter IATA airline code. */
+  airlineCode?: string;
+  /** Index (1-based) of the associated traveler. */
+  travelerIndex?: number;
+  /** Text of the OSI message. */
+  serviceMessage?: string;
+}
+
+/** A saved fare to modify, referenced by its source record ID. */
+export interface FareToModify {
+  /** Fare source record ID. Uppercase alphanumeric. */
+  recordId?: string;
+}

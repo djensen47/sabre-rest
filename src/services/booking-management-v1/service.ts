@@ -6,6 +6,8 @@ import type {
   CreateBookingOutput,
   GetBookingInput,
   GetBookingOutput,
+  ModifyBookingInput,
+  ModifyBookingOutput,
 } from './types.js';
 
 /**
@@ -19,6 +21,7 @@ import type {
  *   - Operations:
  *     - `createBooking` (`POST /v1/trip/orders/createBooking`)
  *     - `getBooking` (`POST /v1/trip/orders/getBooking`)
+ *     - `modifyBooking` (`POST /v1/trip/orders/modifyBooking`)
  *   - Docs: https://developer.sabre.com/docs/rest_apis/trip/orders/booking_management
  *
  * Construct via {@link createSabreClient}; do not implement this interface
@@ -49,6 +52,23 @@ export interface BookingManagementV1Service {
    * @returns The booking state, response metadata, and any errors.
    */
   getBooking(input: GetBookingInput): Promise<GetBookingOutput>;
+
+  /**
+   * Modify non-itinerary data in an existing booking.
+   *
+   * The API diffs the `before` and `after` snapshots and applies the
+   * appropriate add, update, or delete operations. Supply a
+   * `bookingSignature` obtained via `getBooking` so Sabre can verify
+   * that the booking has not changed since it was read. Set
+   * `retrieveBooking: true` to include the current booking state in
+   * the response.
+   *
+   * @param input Modification criteria, including the required
+   *   `confirmationId`, `bookingSignature`, `before`, and `after`.
+   * @returns Response metadata, any errors, and (when requested) the
+   *   current booking state.
+   */
+  modifyBooking(input: ModifyBookingInput): Promise<ModifyBookingOutput>;
 }
 
 /**
@@ -75,5 +95,11 @@ export class DefaultBookingManagementV1Service implements BookingManagementV1Ser
     const req = mappers.toGetBookingRequest(this.#baseUrl, input);
     const res = await this.#request(req);
     return mappers.fromGetBookingResponse(res);
+  }
+
+  async modifyBooking(input: ModifyBookingInput): Promise<ModifyBookingOutput> {
+    const req = mappers.toModifyBookingRequest(this.#baseUrl, input);
+    const res = await this.#request(req);
+    return mappers.fromModifyBookingResponse(res);
   }
 }
