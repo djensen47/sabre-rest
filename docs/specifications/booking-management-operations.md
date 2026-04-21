@@ -10,7 +10,7 @@ Booking
 -------
 [x] getBooking       POST /getBooking       — Retrieve comprehensive booking details by confirmation ID
 [x] createBooking    POST /createBooking    — Create an air booking (NDC/ATPCO/LCC)
-[ ] modifyBooking    POST /modifyBooking    — Modify non-itinerary data in an existing booking
+[x] modifyBooking    POST /modifyBooking    — Modify non-itinerary data in an existing booking
 [ ] cancelBooking    POST /cancelBooking    — Cancel a booking or specified items, optionally void/refund tickets
 
 Flight Tickets

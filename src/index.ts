@@ -52,6 +52,8 @@ export type {
 } from './services/airline-alliance-lookup-v1/types.js';
 export type { BookingManagementV1Service } from './services/booking-management-v1/service.js';
 export type {
+  AncillaryToModify,
+  AssociatedFlightDetailsToModify,
   BookAddress,
   BookAgency,
   BookAncillary,
@@ -103,15 +105,32 @@ export type {
   BookingSegment,
   BookingSource,
   BookingSpecialService,
+  BookingToModify,
   BookingTotalValues,
   BookingTrain,
   BookingTraveler,
   BookingTravelersGroup,
   CreateBookingInput,
   CreateBookingOutput,
+  CreationDetailsToModify,
+  FareToModify,
+  FlightReferenceToModify,
+  FlightToModify,
   GetBookingExtraFeatures,
   GetBookingInput,
   GetBookingOutput,
+  HotelToModify,
+  IdentityDocumentToModify,
+  ModifyBookingExtraFeatures,
+  ModifyBookingInput,
+  ModifyBookingOutput,
+  OtherServiceToModify,
+  PaymentToModify,
+  RemarkToModify,
+  RoomToModify,
+  SeatToModify,
+  SpecialServiceToModify,
+  TravelerToModify,
 } from './services/booking-management-v1/types.js';
 export type { BargainFinderMaxV5Service } from './services/bargain-finder-max-v5/service.js';
 export type { GetAncillariesV2Service } from './services/get-ancillaries-v2/service.js';

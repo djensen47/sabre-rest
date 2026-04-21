@@ -4,10 +4,12 @@ import type { SabreResponse } from '../../http/types.js';
 import {
   fromCreateBookingResponse,
   fromGetBookingResponse,
+  fromModifyBookingResponse,
   toCreateBookingRequest,
   toGetBookingRequest,
+  toModifyBookingRequest,
 } from './mappers.js';
-import type { CreateBookingInput, GetBookingInput } from './types.js';
+import type { CreateBookingInput, GetBookingInput, ModifyBookingInput } from './types.js';
 
 const okResponse = (body: unknown): SabreResponse => ({
   status: 200,
@@ -529,5 +531,297 @@ describe('fromGetBookingResponse', () => {
 
   it('throws SabreParseError for array body', () => {
     expect(() => fromGetBookingResponse(okResponse('[]'))).toThrow(SabreParseError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toModifyBookingRequest
+// ---------------------------------------------------------------------------
+
+describe('toModifyBookingRequest', () => {
+  const minimalModifyInput: ModifyBookingInput = {
+    confirmationId: 'GLEBNY',
+    bookingSignature: 'sig-abc-123',
+    before: {},
+    after: {},
+  };
+
+  it('builds a POST to the modifyBooking path with JSON headers', () => {
+    const req = toModifyBookingRequest('https://api.cert.platform.sabre.com', minimalModifyInput);
+    expect(req.method).toBe('POST');
+    expect(req.url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/modifyBooking');
+    expect(req.headers.Accept).toBe('application/json');
+    expect(req.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('handles a base URL with a trailing slash', () => {
+    const req = toModifyBookingRequest('https://api.cert.platform.sabre.com/', minimalModifyInput);
+    expect(req.url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/modifyBooking');
+  });
+
+  it('sends required fields and spec defaults', () => {
+    const req = toModifyBookingRequest('https://api.cert.platform.sabre.com', minimalModifyInput);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.confirmationId).toBe('GLEBNY');
+    expect(body.bookingSignature).toBe('sig-abc-123');
+    expect(body.retrieveBooking).toBe(false);
+    expect(body.receivedFrom).toBe('Modify Booking');
+    expect(body.before).toEqual({});
+    expect(body.after).toEqual({});
+  });
+
+  it('allows overriding retrieveBooking and receivedFrom', () => {
+    const req = toModifyBookingRequest('https://api.cert.platform.sabre.com', {
+      ...minimalModifyInput,
+      retrieveBooking: true,
+      receivedFrom: 'My Application',
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.retrieveBooking).toBe(true);
+    expect(body.receivedFrom).toBe('My Application');
+  });
+
+  it('omits optional top-level fields when not provided', () => {
+    const req = toModifyBookingRequest('https://api.cert.platform.sabre.com', minimalModifyInput);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect('bookingSource' in body).toBe(false);
+    expect('targetPcc' in body).toBe(false);
+    expect('unmaskPaymentCardNumbers' in body).toBe(false);
+    expect('extraFeatures' in body).toBe(false);
+  });
+
+  it('forwards optional top-level fields when provided', () => {
+    const req = toModifyBookingRequest('https://api.cert.platform.sabre.com', {
+      ...minimalModifyInput,
+      bookingSource: 'SABRE_ORDER',
+      targetPcc: 'G7HE',
+      unmaskPaymentCardNumbers: true,
+      extraFeatures: { returnFrequentRenter: true },
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.bookingSource).toBe('SABRE_ORDER');
+    expect(body.targetPcc).toBe('G7HE');
+    expect(body.unmaskPaymentCardNumbers).toBe(true);
+    expect(body.extraFeatures).toEqual({ returnFrequentRenter: true });
+  });
+
+  it('builds a flight seat assignment in the after snapshot', () => {
+    const req = toModifyBookingRequest('https://api.cert.platform.sabre.com', {
+      ...minimalModifyInput,
+      before: { flights: [{ seats: [null, { number: '14B' }] }] },
+      after: { flights: [{ seats: [{ number: '13A' }, { number: '14B' }] }] },
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    const before = body.before as Record<string, unknown>;
+    const beforeFlights = before.flights as Record<string, unknown>[];
+    expect((beforeFlights?.[0]?.seats as unknown[])?.[0]).toBeNull();
+    expect((beforeFlights?.[0]?.seats as Record<string, unknown>[])?.[1]?.number).toBe('14B');
+    const after = body.after as Record<string, unknown>;
+    const afterFlights = after.flights as Record<string, unknown>[];
+    expect((afterFlights?.[0]?.seats as Record<string, unknown>[])?.[0]?.number).toBe('13A');
+  });
+
+  it('builds a remark change in the after snapshot', () => {
+    const req = toModifyBookingRequest('https://api.cert.platform.sabre.com', {
+      ...minimalModifyInput,
+      before: { remarks: [{ type: 'GENERAL', text: 'Original remark' }] },
+      after: { remarks: [{ type: 'GENERAL', text: 'Updated remark' }] },
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    const after = body.after as Record<string, unknown>;
+    const remarks = after.remarks as Record<string, unknown>[];
+    expect(remarks?.[0]?.text).toBe('Updated remark');
+    expect(remarks?.[0]?.type).toBe('GENERAL');
+  });
+
+  it('builds hotel modification with required fields', () => {
+    const req = toModifyBookingRequest('https://api.cert.platform.sabre.com', {
+      ...minimalModifyInput,
+      after: {
+        hotels: [
+          {
+            itemId: '12',
+            leadTravelerIndex: 1,
+            numberOfGuests: 2,
+            paymentPolicy: 'GUARANTEE',
+            room: { travelerIndices: [1, 2] },
+            checkInDate: '2026-07-09',
+            checkOutDate: '2026-07-12',
+          },
+        ],
+      },
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    const after = body.after as Record<string, unknown>;
+    const hotel = (after.hotels as Record<string, unknown>[])?.[0];
+    expect(hotel?.itemId).toBe('12');
+    expect(hotel?.leadTravelerIndex).toBe(1);
+    expect(hotel?.numberOfGuests).toBe(2);
+    expect(hotel?.paymentPolicy).toBe('GUARANTEE');
+    expect((hotel?.room as Record<string, unknown>)?.travelerIndices).toEqual([1, 2]);
+    expect(hotel?.checkInDate).toBe('2026-07-09');
+  });
+
+  it('builds traveler changes with identity documents and loyalty programs', () => {
+    const req = toModifyBookingRequest('https://api.cert.platform.sabre.com', {
+      ...minimalModifyInput,
+      after: {
+        travelers: [
+          {
+            givenName: 'JANE',
+            surname: 'DOE',
+            identityDocuments: [
+              {
+                documentType: 'PASSPORT',
+                documentNumber: 'A1234567',
+                flights: [{ itemId: '1' }],
+              },
+            ],
+            loyaltyPrograms: [{ supplierCode: 'AA', programNumber: '111222333' }],
+          },
+        ],
+      },
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    const after = body.after as Record<string, unknown>;
+    const traveler = (after.travelers as Record<string, unknown>[])?.[0];
+    expect(traveler?.givenName).toBe('JANE');
+    const docs = traveler?.identityDocuments as Record<string, unknown>[];
+    expect(docs?.[0]?.documentType).toBe('PASSPORT');
+    expect(docs?.[0]?.documentNumber).toBe('A1234567');
+    expect((docs?.[0]?.flights as Record<string, unknown>[])?.[0]?.itemId).toBe('1');
+    const programs = traveler?.loyaltyPrograms as Record<string, unknown>[];
+    expect(programs?.[0]?.supplierCode).toBe('AA');
+    expect(programs?.[0]?.programNumber).toBe('111222333');
+  });
+
+  it('builds a special service addition', () => {
+    const req = toModifyBookingRequest('https://api.cert.platform.sabre.com', {
+      ...minimalModifyInput,
+      after: {
+        specialServices: [
+          {
+            code: 'WCHR',
+            travelerIndices: [1],
+            flights: [{ itemId: '1' }],
+            message: '/PREPAID',
+          },
+        ],
+      },
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    const after = body.after as Record<string, unknown>;
+    const ssr = (after.specialServices as Record<string, unknown>[])?.[0];
+    expect(ssr?.code).toBe('WCHR');
+    expect(ssr?.travelerIndices).toEqual([1]);
+    expect(ssr?.message).toBe('/PREPAID');
+    expect((ssr?.flights as Record<string, unknown>[])?.[0]?.itemId).toBe('1');
+  });
+
+  it('builds retention date changes', () => {
+    const req = toModifyBookingRequest('https://api.cert.platform.sabre.com', {
+      ...minimalModifyInput,
+      after: { retentionEndDate: '2026-12-31', retentionLabel: 'HOLD FOR APPROVAL' },
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    const after = body.after as Record<string, unknown>;
+    expect(after.retentionEndDate).toBe('2026-12-31');
+    expect(after.retentionLabel).toBe('HOLD FOR APPROVAL');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fromModifyBookingResponse
+// ---------------------------------------------------------------------------
+
+describe('fromModifyBookingResponse', () => {
+  it('maps a response with timestamp and booking contents', () => {
+    const result = fromModifyBookingResponse(
+      okResponse({
+        timestamp: '2026-05-01T12:00:00Z',
+        booking: {
+          bookingId: 'GLEBNY',
+          isTicketed: false,
+          isCancelable: true,
+          flights: [
+            {
+              itemId: '1',
+              flightNumber: 100,
+              airlineCode: 'AA',
+              fromAirportCode: 'DFW',
+              toAirportCode: 'LAX',
+              departureDate: '2026-05-15',
+              departureTime: '10:00',
+              arrivalDate: '2026-05-15',
+              arrivalTime: '12:00',
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(result.timestamp).toBe('2026-05-01T12:00:00Z');
+    expect(result.booking?.bookingId).toBe('GLEBNY');
+    expect(result.booking?.flights).toHaveLength(1);
+    expect(result.booking?.flights?.[0]?.airlineCode).toBe('AA');
+  });
+
+  it('maps errors when present', () => {
+    const result = fromModifyBookingResponse(
+      okResponse({
+        errors: [
+          {
+            category: 'CONFLICT',
+            type: 'SIGNATURE_MISMATCH',
+            description: 'Booking has changed since the signature was issued',
+          },
+        ],
+      }),
+    );
+
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors?.[0]?.category).toBe('CONFLICT');
+    expect(result.errors?.[0]?.type).toBe('SIGNATURE_MISMATCH');
+    expect(result.booking).toBeUndefined();
+  });
+
+  it('maps the echoed request', () => {
+    const result = fromModifyBookingResponse(
+      okResponse({
+        request: {
+          confirmationId: 'GLEBNY',
+          bookingSignature: 'sig-abc',
+          before: {},
+          after: { remarks: [{ type: 'GENERAL', text: 'new remark' }] },
+          retrieveBooking: true,
+          receivedFrom: 'Modify Booking',
+        },
+      }),
+    );
+
+    expect(result.request?.confirmationId).toBe('GLEBNY');
+    expect(result.request?.bookingSignature).toBe('sig-abc');
+    expect(result.request?.retrieveBooking).toBe(true);
+    expect(result.request?.after.remarks?.[0]?.text).toBe('new remark');
+  });
+
+  it('maps an empty response body', () => {
+    const result = fromModifyBookingResponse(okResponse({}));
+    expect(result.timestamp).toBeUndefined();
+    expect(result.booking).toBeUndefined();
+    expect(result.errors).toBeUndefined();
+    expect(result.request).toBeUndefined();
+  });
+
+  it('throws SabreParseError for non-JSON body', () => {
+    expect(() => fromModifyBookingResponse(okResponse('not json'))).toThrow(SabreParseError);
+  });
+
+  it('throws SabreParseError for null body', () => {
+    expect(() => fromModifyBookingResponse(okResponse('null'))).toThrow(SabreParseError);
+  });
+
+  it('throws SabreParseError for array body', () => {
+    expect(() => fromModifyBookingResponse(okResponse('[]'))).toThrow(SabreParseError);
   });
 });

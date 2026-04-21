@@ -2,6 +2,8 @@ import { SabreParseError } from '../../errors/sabre-parse-error.js';
 import type { components } from '../../generated/booking-management.js';
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type {
+  AncillaryToModify,
+  AssociatedFlightDetailsToModify,
   BookAncillary,
   BookCar,
   BookContactInfo,
@@ -56,18 +58,36 @@ import type {
   BookingSpecialService,
   BookingTaxComponent,
   BookingTicketCoupon,
+  BookingToModify,
   BookingTotalValues,
   BookingTrain,
   BookingTraveler,
   CreateBookingInput,
   CreateBookingOutput,
+  CreationDetailsToModify,
+  FareToModify,
+  FlightReferenceToModify,
+  FlightToModify,
   GetBookingExtraFeatures,
   GetBookingInput,
   GetBookingOutput,
+  HotelToModify,
+  IdentityDocumentToModify,
+  ModifyBookingExtraFeatures,
+  ModifyBookingInput,
+  ModifyBookingOutput,
+  OtherServiceToModify,
+  PaymentToModify,
+  RemarkToModify,
+  RoomToModify,
+  SeatToModify,
+  SpecialServiceToModify,
+  TravelerToModify,
 } from './types.js';
 
 const CREATE_BOOKING_PATH = 'v1/trip/orders/createBooking';
 const GET_BOOKING_PATH = 'v1/trip/orders/getBooking';
+const MODIFY_BOOKING_PATH = 'v1/trip/orders/modifyBooking';
 
 /**
  * Builds the outgoing {@link SabreRequest} for the `createBooking`
@@ -235,6 +255,381 @@ export function fromGetBookingResponse(res: SabreResponse): GetBookingOutput {
   }
 
   return out;
+}
+
+/**
+ * Builds the outgoing {@link SabreRequest} for the `modifyBooking`
+ * operation.
+ *
+ * The request body matches the `ModifyBookingRequest` schema. Fields
+ * with spec-defined defaults (`receivedFrom`, `retrieveBooking`) are
+ * always sent. `confirmationId`, `bookingSignature`, `before`, and
+ * `after` are required by the spec and passed through verbatim.
+ */
+export function toModifyBookingRequest(baseUrl: string, input: ModifyBookingInput): SabreRequest {
+  const url = new URL(MODIFY_BOOKING_PATH, ensureTrailingSlash(baseUrl));
+
+  const body: Record<string, unknown> = {
+    confirmationId: input.confirmationId,
+    bookingSignature: input.bookingSignature,
+    before: buildBookingToModifyBody(input.before),
+    after: buildBookingToModifyBody(input.after),
+    retrieveBooking: input.retrieveBooking ?? false,
+    receivedFrom: input.receivedFrom ?? 'Modify Booking',
+  };
+
+  if (input.bookingSource !== undefined) body.bookingSource = input.bookingSource;
+  if (input.targetPcc !== undefined) body.targetPcc = input.targetPcc;
+  if (input.unmaskPaymentCardNumbers !== undefined) {
+    body.unmaskPaymentCardNumbers = input.unmaskPaymentCardNumbers;
+  }
+  if (input.extraFeatures !== undefined) {
+    body.extraFeatures = buildModifyExtraFeaturesBody(input.extraFeatures);
+  }
+
+  return {
+    method: 'POST',
+    url: url.toString(),
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+/**
+ * Parses the `modifyBooking` response into the public output shape.
+ *
+ * Throws {@link SabreParseError} when the body is not valid JSON or
+ * not an object.
+ */
+export function fromModifyBookingResponse(res: SabreResponse): ModifyBookingOutput {
+  let parsed: components['schemas']['ModifyBookingResponse'];
+  try {
+    parsed = JSON.parse(res.body) as components['schemas']['ModifyBookingResponse'];
+  } catch (err) {
+    throw new SabreParseError('Failed to parse Modify Booking response as JSON', res.body, {
+      cause: err,
+    });
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new SabreParseError('Modify Booking response was not a JSON object', parsed);
+  }
+
+  const out: ModifyBookingOutput = {};
+
+  if (parsed.timestamp !== undefined) out.timestamp = parsed.timestamp;
+  if (parsed.booking !== undefined) out.booking = buildBooking(parsed.booking);
+  if (parsed.request !== undefined) {
+    out.request = buildModifyBookingRequestEcho(parsed.request);
+  }
+  if (parsed.errors !== undefined && parsed.errors.length > 0) {
+    out.errors = parsed.errors.map(buildBookingError);
+  }
+
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// modifyBooking request body builders
+// ---------------------------------------------------------------------------
+
+function buildModifyExtraFeaturesBody(
+  features: ModifyBookingExtraFeatures,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (features.returnFrequentRenter !== undefined) {
+    out.returnFrequentRenter = features.returnFrequentRenter;
+  }
+  if (features.returnWalletFormsOfPayment !== undefined) {
+    out.returnWalletFormsOfPayment = features.returnWalletFormsOfPayment;
+  }
+  if (features.returnFiscalId !== undefined) out.returnFiscalId = features.returnFiscalId;
+  return out;
+}
+
+function buildBookingToModifyBody(snapshot: BookingToModify): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (snapshot.agencyCustomerNumber !== undefined) {
+    out.agencyCustomerNumber = snapshot.agencyCustomerNumber;
+  }
+  if (snapshot.creationDetails !== undefined) {
+    out.creationDetails = buildCreationDetailsToModifyBody(snapshot.creationDetails);
+  }
+  if (snapshot.flights !== undefined) {
+    out.flights = snapshot.flights.map(buildFlightToModifyBody);
+  }
+  if (snapshot.remarks !== undefined) {
+    out.remarks = snapshot.remarks.map(buildRemarkToModifyBody);
+  }
+  if (snapshot.hotels !== undefined) {
+    out.hotels = snapshot.hotels.map(buildHotelToModifyBody);
+  }
+  if (snapshot.payments !== undefined) {
+    out.payments = buildPaymentToModifyBody(snapshot.payments);
+  }
+  if (snapshot.specialServices !== undefined) {
+    out.specialServices = snapshot.specialServices.map(buildSpecialServiceToModifyBody);
+  }
+  if (snapshot.travelers !== undefined) {
+    out.travelers = snapshot.travelers.map(buildTravelerToModifyBody);
+  }
+  if (snapshot.retentionEndDate !== undefined) out.retentionEndDate = snapshot.retentionEndDate;
+  if (snapshot.retentionLabel !== undefined) out.retentionLabel = snapshot.retentionLabel;
+  if (snapshot.otherServices !== undefined) {
+    out.otherServices = snapshot.otherServices.map(buildOtherServiceToModifyBody);
+  }
+  if (snapshot.fares !== undefined) {
+    out.fares = snapshot.fares.map(buildFareToModifyBody);
+  }
+  return out;
+}
+
+function buildCreationDetailsToModifyBody(
+  details: CreationDetailsToModify,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (details.agencyIataNumber !== undefined) out.agencyIataNumber = details.agencyIataNumber;
+  return out;
+}
+
+function buildFlightToModifyBody(flight: FlightToModify): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (flight.seats !== undefined) {
+    out.seats = flight.seats.map((seat) => (seat === null ? null : buildSeatToModifyBody(seat)));
+  }
+  if (flight.changeOfGaugeSeats !== undefined) {
+    out.changeOfGaugeSeats = flight.changeOfGaugeSeats.map((seat) =>
+      seat === null ? null : buildSeatToModifyBody(seat),
+    );
+  }
+  return out;
+}
+
+function buildSeatToModifyBody(seat: SeatToModify): Record<string, unknown> {
+  const out: Record<string, unknown> = { number: seat.number };
+  if (seat.offerItemId !== undefined) out.offerItemId = seat.offerItemId;
+  return out;
+}
+
+function buildRemarkToModifyBody(remark: RemarkToModify): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (remark.type !== undefined) out.type = remark.type;
+  if (remark.alphaCode !== undefined) out.alphaCode = remark.alphaCode;
+  if (remark.text !== undefined) out.text = remark.text;
+  return out;
+}
+
+function buildHotelToModifyBody(hotel: HotelToModify): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    itemId: hotel.itemId,
+    leadTravelerIndex: hotel.leadTravelerIndex,
+    room: buildRoomToModifyBody(hotel.room),
+    numberOfGuests: hotel.numberOfGuests,
+    paymentPolicy: hotel.paymentPolicy,
+  };
+  if (hotel.bookingKey !== undefined) out.bookingKey = hotel.bookingKey;
+  if (hotel.checkInDate !== undefined) out.checkInDate = hotel.checkInDate;
+  if (hotel.checkOutDate !== undefined) out.checkOutDate = hotel.checkOutDate;
+  if (hotel.corporateDiscountCode !== undefined) {
+    out.corporateDiscountCode = hotel.corporateDiscountCode;
+  }
+  if (hotel.specialInstructions !== undefined) out.specialInstructions = hotel.specialInstructions;
+  if (hotel.associatedFlightDetails !== undefined) {
+    out.associatedFlightDetails = buildAssociatedFlightDetailsToModifyBody(
+      hotel.associatedFlightDetails,
+    );
+  }
+  if (hotel.formOfPaymentIndex !== undefined) out.formOfPaymentIndex = hotel.formOfPaymentIndex;
+  return out;
+}
+
+function buildRoomToModifyBody(room: RoomToModify): Record<string, unknown> {
+  const out: Record<string, unknown> = { travelerIndices: [...room.travelerIndices] };
+  if (room.productCode !== undefined) out.productCode = room.productCode;
+  return out;
+}
+
+function buildAssociatedFlightDetailsToModifyBody(
+  details: AssociatedFlightDetailsToModify,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (details.arrivalAirlineCode !== undefined) out.arrivalAirlineCode = details.arrivalAirlineCode;
+  if (details.arrivalFlightNumber !== undefined) {
+    out.arrivalFlightNumber = details.arrivalFlightNumber;
+  }
+  if (details.arrivalTime !== undefined) out.arrivalTime = details.arrivalTime;
+  if (details.departureAirlineCode !== undefined) {
+    out.departureAirlineCode = details.departureAirlineCode;
+  }
+  if (details.departureFlightNumber !== undefined) {
+    out.departureFlightNumber = details.departureFlightNumber;
+  }
+  if (details.departureTime !== undefined) out.departureTime = details.departureTime;
+  return out;
+}
+
+function buildPaymentToModifyBody(payment: PaymentToModify): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (payment.formsOfPayment !== undefined) {
+    out.formsOfPayment = payment.formsOfPayment.map(buildFormOfPaymentBody);
+  }
+  return out;
+}
+
+function buildSpecialServiceToModifyBody(service: SpecialServiceToModify): Record<string, unknown> {
+  const out: Record<string, unknown> = { code: service.code };
+  if (service.travelerIndices !== undefined) {
+    out.travelerIndices = [...service.travelerIndices];
+  }
+  if (service.flights !== undefined) {
+    out.flights = service.flights.map(buildFlightReferenceToModifyBody);
+  }
+  if (service.message !== undefined) out.message = service.message;
+  return out;
+}
+
+function buildFlightReferenceToModifyBody(ref: FlightReferenceToModify): Record<string, unknown> {
+  return { itemId: ref.itemId };
+}
+
+function buildTravelerToModifyBody(traveler: TravelerToModify): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (traveler.givenName !== undefined) out.givenName = traveler.givenName;
+  if (traveler.middleName !== undefined) out.middleName = traveler.middleName;
+  if (traveler.surname !== undefined) out.surname = traveler.surname;
+  if (traveler.birthDate !== undefined) out.birthDate = traveler.birthDate;
+  if (traveler.passengerCode !== undefined) out.passengerCode = traveler.passengerCode;
+  if (traveler.nameReferenceCode !== undefined) out.nameReferenceCode = traveler.nameReferenceCode;
+  if (traveler.isGrouped !== undefined) out.isGrouped = traveler.isGrouped;
+  if (traveler.emails !== undefined) out.emails = [...traveler.emails];
+  if (traveler.phones !== undefined) out.phones = traveler.phones.map((p) => ({ ...p }));
+  if (traveler.remarks !== undefined) {
+    out.remarks = traveler.remarks.map(buildRemarkToModifyBody);
+  }
+  if (traveler.identityDocuments !== undefined) {
+    out.identityDocuments = traveler.identityDocuments.map(buildIdentityDocumentToModifyBody);
+  }
+  if (traveler.loyaltyPrograms !== undefined) {
+    out.loyaltyPrograms = traveler.loyaltyPrograms.map((lp) => ({ ...lp }));
+  }
+  if (traveler.ancillaries !== undefined) {
+    out.ancillaries = traveler.ancillaries.map(buildAncillaryToModifyBody);
+  }
+  return out;
+}
+
+function buildIdentityDocumentToModifyBody(doc: IdentityDocumentToModify): Record<string, unknown> {
+  const out: Record<string, unknown> = { documentType: doc.documentType };
+  if (doc.documentNumber !== undefined) out.documentNumber = doc.documentNumber;
+  if (doc.expiryDate !== undefined) out.expiryDate = doc.expiryDate;
+  if (doc.issuingCountryCode !== undefined) out.issuingCountryCode = doc.issuingCountryCode;
+  if (doc.residenceCountryCode !== undefined) out.residenceCountryCode = doc.residenceCountryCode;
+  if (doc.placeOfIssue !== undefined) out.placeOfIssue = doc.placeOfIssue;
+  if (doc.placeOfBirth !== undefined) out.placeOfBirth = doc.placeOfBirth;
+  if (doc.hostCountryCode !== undefined) out.hostCountryCode = doc.hostCountryCode;
+  if (doc.issueDate !== undefined) out.issueDate = doc.issueDate;
+  if (doc.givenName !== undefined) out.givenName = doc.givenName;
+  if (doc.middleName !== undefined) out.middleName = doc.middleName;
+  if (doc.surname !== undefined) out.surname = doc.surname;
+  if (doc.birthDate !== undefined) out.birthDate = doc.birthDate;
+  if (doc.gender !== undefined) out.gender = doc.gender;
+  if (doc.isPrimaryDocumentHolder !== undefined) {
+    out.isPrimaryDocumentHolder = doc.isPrimaryDocumentHolder;
+  }
+  if (doc.flights !== undefined) {
+    out.flights = doc.flights.map(buildFlightReferenceToModifyBody);
+  }
+  return out;
+}
+
+function buildAncillaryToModifyBody(anc: AncillaryToModify): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (anc.itemId !== undefined) out.itemId = anc.itemId;
+  if (anc.offerId !== undefined) out.offerId = anc.offerId;
+  if (anc.description !== undefined) out.description = anc.description;
+  if (anc.commercialName !== undefined) out.commercialName = anc.commercialName;
+  if (anc.numberOfItems !== undefined) out.numberOfItems = anc.numberOfItems;
+  if (anc.subcode !== undefined) out.subcode = anc.subcode;
+  if (anc.airlineCode !== undefined) out.airlineCode = anc.airlineCode;
+  if (anc.vendorCode !== undefined) out.vendorCode = anc.vendorCode;
+  if (anc.source !== undefined) out.source = anc.source;
+  if (anc.taxes !== undefined) out.taxes = anc.taxes.map((t) => ({ ...t }));
+  if (anc.firstTravelDate !== undefined) out.firstTravelDate = anc.firstTravelDate;
+  if (anc.lastTravelDate !== undefined) out.lastTravelDate = anc.lastTravelDate;
+  if (anc.purchaseDateTime !== undefined) out.purchaseDateTime = anc.purchaseDateTime;
+  if (anc.groupCode !== undefined) out.groupCode = anc.groupCode;
+  if (anc.flights !== undefined) {
+    out.flights = anc.flights.map(buildFlightReferenceToModifyBody);
+  }
+  if (anc.electronicMiscellaneousDocumentType !== undefined) {
+    out.electronicMiscellaneousDocumentType = anc.electronicMiscellaneousDocumentType;
+  }
+  if (anc.reasonForIssuanceCode !== undefined) {
+    out.reasonForIssuanceCode = anc.reasonForIssuanceCode;
+  }
+  if (anc.reasonForIssuanceName !== undefined) {
+    out.reasonForIssuanceName = anc.reasonForIssuanceName;
+  }
+  return out;
+}
+
+function buildOtherServiceToModifyBody(osi: OtherServiceToModify): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (osi.airlineCode !== undefined) out.airlineCode = osi.airlineCode;
+  if (osi.travelerIndex !== undefined) out.travelerIndex = osi.travelerIndex;
+  if (osi.serviceMessage !== undefined) out.serviceMessage = osi.serviceMessage;
+  return out;
+}
+
+function buildFareToModifyBody(fare: FareToModify): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (fare.recordId !== undefined) out.recordId = fare.recordId;
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// modifyBooking response echo (request roundtrip)
+// ---------------------------------------------------------------------------
+
+function buildModifyBookingRequestEcho(
+  req: components['schemas']['ModifyBookingRequest'],
+): ModifyBookingInput {
+  const out: ModifyBookingInput = {
+    confirmationId: req.confirmationId,
+    bookingSignature: req.bookingSignature,
+    before: buildBookingToModifyFromResponse(req.before),
+    after: buildBookingToModifyFromResponse(req.after),
+  };
+  if (req.bookingSource !== undefined) out.bookingSource = req.bookingSource as BookingSource;
+  if (req.retrieveBooking !== undefined) out.retrieveBooking = req.retrieveBooking;
+  if (req.receivedFrom !== undefined) out.receivedFrom = req.receivedFrom;
+  if (req.targetPcc !== undefined) out.targetPcc = req.targetPcc;
+  if (req.unmaskPaymentCardNumbers !== undefined) {
+    out.unmaskPaymentCardNumbers = req.unmaskPaymentCardNumbers;
+  }
+  if (req.extraFeatures !== undefined) {
+    const ef: ModifyBookingExtraFeatures = {};
+    if (req.extraFeatures.returnFrequentRenter !== undefined) {
+      ef.returnFrequentRenter = req.extraFeatures.returnFrequentRenter;
+    }
+    if (req.extraFeatures.returnWalletFormsOfPayment !== undefined) {
+      ef.returnWalletFormsOfPayment = req.extraFeatures.returnWalletFormsOfPayment;
+    }
+    if (req.extraFeatures.returnFiscalId !== undefined) {
+      ef.returnFiscalId = req.extraFeatures.returnFiscalId;
+    }
+    out.extraFeatures = ef;
+  }
+  return out;
+}
+
+function buildBookingToModifyFromResponse(
+  snapshot: components['schemas']['BookingToModify'],
+): BookingToModify {
+  return snapshot as unknown as BookingToModify;
 }
 
 function buildExtraFeaturesBody(features: GetBookingExtraFeatures): Record<string, unknown> {
