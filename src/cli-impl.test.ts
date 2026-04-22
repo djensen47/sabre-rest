@@ -8,7 +8,10 @@ import {
   buildAirlineAllianceLookupInput,
   buildAirlineLookupInput,
   buildBfmInput,
+  buildCancelBookingInput,
   buildGetAncillariesInput,
+  buildGetBookingInput,
+  buildModifyBookingInput,
   buildRevalidateInput,
   formatJson,
   formatTotalFare,
@@ -922,10 +925,148 @@ describe('COMMANDS dispatch table', () => {
       'airline-alliance-lookup',
       'airline-lookup',
       'bargain-finder-max',
+      'cancel-booking',
       'create-booking',
       'get-ancillaries',
+      'get-booking',
       'get-seats',
+      'modify-booking',
       'revalidate-itinerary',
     ]);
+  });
+});
+
+describe('buildGetBookingInput', () => {
+  it('builds input from --confirmation-id', () => {
+    const out = buildGetBookingInput({ 'confirmation-id': 'GLEBNY' });
+    expect(out).toEqual({ confirmationId: 'GLEBNY' });
+  });
+
+  it('forwards optional verification and filter flags', () => {
+    const out = buildGetBookingInput({
+      'confirmation-id': 'GLEBNY',
+      'booking-source': 'SABRE_ORDER',
+      'target-pcc': 'G7HE',
+      'given-name': 'JOHN',
+      'middle-name': 'Q',
+      surname: 'DOE',
+      'return-only': 'FLIGHTS,TRAVELERS',
+      'unmask-payment-card-numbers': true,
+    });
+    expect(out.bookingSource).toBe('SABRE_ORDER');
+    expect(out.targetPcc).toBe('G7HE');
+    expect(out.givenName).toBe('JOHN');
+    expect(out.middleName).toBe('Q');
+    expect(out.surname).toBe('DOE');
+    expect(out.returnOnly).toEqual(['FLIGHTS', 'TRAVELERS']);
+    expect(out.unmaskPaymentCardNumbers).toBe(true);
+  });
+
+  it('throws for missing --confirmation-id', () => {
+    expect(() => buildGetBookingInput({})).toThrow(CliUsageError);
+  });
+
+  it('throws for invalid --booking-source', () => {
+    expect(() =>
+      buildGetBookingInput({ 'confirmation-id': 'GLEBNY', 'booking-source': 'NOPE' }),
+    ).toThrow(CliUsageError);
+  });
+
+  it('parses --body as JSON and returns it verbatim', () => {
+    const body = JSON.stringify({ confirmationId: 'FROM-BODY', targetPcc: 'G7HE' });
+    const out = buildGetBookingInput({ body });
+    expect(out.confirmationId).toBe('FROM-BODY');
+    expect(out.targetPcc).toBe('G7HE');
+  });
+});
+
+describe('buildModifyBookingInput', () => {
+  it('throws without --body', () => {
+    expect(() => buildModifyBookingInput({})).toThrow(CliUsageError);
+  });
+
+  it('parses --body verbatim', () => {
+    const body = JSON.stringify({
+      confirmationId: 'GLEBNY',
+      bookingSignature: 'sig',
+      before: { remarks: [] },
+      after: { remarks: [{ type: 'GENERAL', text: 'note' }] },
+    });
+    const out = buildModifyBookingInput({ body });
+    expect(out.confirmationId).toBe('GLEBNY');
+    expect(out.bookingSignature).toBe('sig');
+    expect(out.after.remarks?.[0]?.text).toBe('note');
+  });
+});
+
+describe('buildCancelBookingInput', () => {
+  it('builds minimal input from --confirmation-id', () => {
+    const out = buildCancelBookingInput({ 'confirmation-id': 'GLEBNY' });
+    expect(out).toEqual({ confirmationId: 'GLEBNY' });
+  });
+
+  it('maps comma-separated item lists into per-type references', () => {
+    const out = buildCancelBookingInput({
+      'confirmation-id': 'GLEBNY',
+      flights: '1,2',
+      hotels: '3',
+      cars: '4',
+      trains: '5',
+      cruises: '6',
+    });
+    expect(out.flights).toEqual([{ itemId: '1' }, { itemId: '2' }]);
+    expect(out.hotels).toEqual([{ itemId: '3' }]);
+    expect(out.cars).toEqual([{ itemId: '4' }]);
+    expect(out.trains).toEqual([{ itemId: '5' }]);
+    expect(out.cruises).toEqual([{ itemId: '6' }]);
+  });
+
+  it('forwards boolean and enum flags', () => {
+    const out = buildCancelBookingInput({
+      'confirmation-id': 'GLEBNY',
+      'cancel-all': true,
+      'retrieve-booking': true,
+      'flight-ticket-operation': 'REFUND',
+      'error-handling-policy': 'ALLOW_PARTIAL_CANCEL',
+      'booking-source': 'SABRE',
+      'target-pcc': 'G7HE',
+      'received-from': 'smoke-test',
+    });
+    expect(out.cancelAll).toBe(true);
+    expect(out.retrieveBooking).toBe(true);
+    expect(out.flightTicketOperation).toBe('REFUND');
+    expect(out.errorHandlingPolicy).toBe('ALLOW_PARTIAL_CANCEL');
+    expect(out.bookingSource).toBe('SABRE');
+    expect(out.targetPcc).toBe('G7HE');
+    expect(out.receivedFrom).toBe('smoke-test');
+  });
+
+  it('throws for missing --confirmation-id', () => {
+    expect(() => buildCancelBookingInput({})).toThrow(CliUsageError);
+  });
+
+  it('throws for invalid --flight-ticket-operation', () => {
+    expect(() =>
+      buildCancelBookingInput({
+        'confirmation-id': 'GLEBNY',
+        'flight-ticket-operation': 'NOPE',
+      }),
+    ).toThrow(CliUsageError);
+  });
+
+  it('throws for invalid --error-handling-policy', () => {
+    expect(() =>
+      buildCancelBookingInput({
+        'confirmation-id': 'GLEBNY',
+        'error-handling-policy': 'NOPE',
+      }),
+    ).toThrow(CliUsageError);
+  });
+
+  it('parses --body verbatim', () => {
+    const body = JSON.stringify({ confirmationId: 'FROM-BODY', cancelAll: true });
+    const out = buildCancelBookingInput({ body });
+    expect(out.confirmationId).toBe('FROM-BODY');
+    expect(out.cancelAll).toBe(true);
   });
 });
