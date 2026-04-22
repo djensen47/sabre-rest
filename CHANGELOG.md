@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.12.0](https://github.com/djensen47/sabre-rest/compare/v0.11.0...v0.12.0) (2026-04-22)
+
+
+### Features
+
+* add assertBookingSucceeded opt-in helper ([#54](https://github.com/djensen47/sabre-rest/issues/54)) ([b37c3aa](https://github.com/djensen47/sabre-rest/commit/b37c3aa7b180b95278770f0b9e5da7e434f54adb))
+* add booking-management-v1 cancelBooking operation ([#49](https://github.com/djensen47/sabre-rest/issues/49)) ([0a9b98a](https://github.com/djensen47/sabre-rest/commit/0a9b98af014f49c8adf4caa3631e873879ab7dd8))
+* add booking-management-v1 getBooking operation ([#46](https://github.com/djensen47/sabre-rest/issues/46)) ([7eb00c4](https://github.com/djensen47/sabre-rest/commit/7eb00c45925228b015ec075004e868d5e74c7631))
+* add booking-management-v1 modifyBooking operation ([#48](https://github.com/djensen47/sabre-rest/issues/48)) ([a5281ca](https://github.com/djensen47/sabre-rest/commit/a5281cab5214fe78caf8f1ad0336886ce92c4979))
+* **cli:** add get-booking, modify-booking, cancel-booking commands ([#51](https://github.com/djensen47/sabre-rest/issues/51)) ([b110b82](https://github.com/djensen47/sabre-rest/commit/b110b827930de12081563f4be2103d2e91be35b2))
+
 ## [0.11.0](https://github.com/djensen47/sabre-rest/compare/v0.10.0...v0.11.0) (2026-04-19)
 
 
