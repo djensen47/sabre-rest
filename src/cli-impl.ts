@@ -21,15 +21,22 @@ import type { Middleware, SabreRequest } from './http/types.js';
 import type {
   Airline,
   AirlineAlliance,
+  BookingReturnOnly,
+  BookingSource,
   CabinClass,
+  CancelBookingInput,
+  CancelErrorPolicy,
+  CancelFlightTicketOperation,
   CreateBookingInput,
   GetAncillariesInput,
+  GetBookingInput,
   GetSeatsInput,
   ItineraryLeg,
   LookupAirlineAlliancesInput,
   LookupAirlineAlliancesOutput,
   LookupAirlinesInput,
   LookupAirlinesOutput,
+  ModifyBookingInput,
   PassengerCount,
   PricedItinerary,
   RevalidateItineraryInput,
@@ -703,6 +710,158 @@ export function buildGetAncillariesInput(values: {
   return input;
 }
 
+const BOOKING_SOURCES: ReadonlySet<BookingSource> = new Set(['SABRE', 'SABRE_ORDER']);
+const FLIGHT_TICKET_OPERATIONS: ReadonlySet<CancelFlightTicketOperation> = new Set([
+  'VOID',
+  'REFUND',
+]);
+const CANCEL_ERROR_POLICIES: ReadonlySet<CancelErrorPolicy> = new Set([
+  'HALT_ON_ERROR',
+  'ALLOW_PARTIAL_CANCEL',
+]);
+
+function parseBookingSource(raw: string | undefined): BookingSource | undefined {
+  if (raw === undefined) return undefined;
+  if (!BOOKING_SOURCES.has(raw as BookingSource)) {
+    throw new CliUsageError(
+      `Invalid --booking-source '${raw}'. Expected one of: ${[...BOOKING_SOURCES].join(', ')}.`,
+    );
+  }
+  return raw as BookingSource;
+}
+
+function parseFlightTicketOperation(
+  raw: string | undefined,
+): CancelFlightTicketOperation | undefined {
+  if (raw === undefined) return undefined;
+  if (!FLIGHT_TICKET_OPERATIONS.has(raw as CancelFlightTicketOperation)) {
+    throw new CliUsageError(
+      `Invalid --flight-ticket-operation '${raw}'. Expected one of: ${[
+        ...FLIGHT_TICKET_OPERATIONS,
+      ].join(', ')}.`,
+    );
+  }
+  return raw as CancelFlightTicketOperation;
+}
+
+function parseCancelErrorPolicy(raw: string | undefined): CancelErrorPolicy | undefined {
+  if (raw === undefined) return undefined;
+  if (!CANCEL_ERROR_POLICIES.has(raw as CancelErrorPolicy)) {
+    throw new CliUsageError(
+      `Invalid --error-handling-policy '${raw}'. Expected one of: ${[...CANCEL_ERROR_POLICIES].join(
+        ', ',
+      )}.`,
+    );
+  }
+  return raw as CancelErrorPolicy;
+}
+
+/**
+ * Builds the input for `bookingManagementV1.getBooking` from the CLI
+ * flags. `--body` wins if present; otherwise `--confirmation-id` is
+ * required and everything else is optional.
+ */
+export function buildGetBookingInput(values: {
+  'confirmation-id'?: string;
+  'booking-source'?: string;
+  'target-pcc'?: string;
+  'given-name'?: string;
+  'middle-name'?: string;
+  surname?: string;
+  'return-only'?: string;
+  'unmask-payment-card-numbers'?: boolean;
+  body?: string;
+}): GetBookingInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as GetBookingInput;
+  }
+  if (!values['confirmation-id']) {
+    throw new CliUsageError(
+      'get-booking requires --confirmation-id. (Or supply --body with a full JSON input.)',
+    );
+  }
+  const input: GetBookingInput = { confirmationId: values['confirmation-id'] };
+  const bookingSource = parseBookingSource(values['booking-source']);
+  if (bookingSource !== undefined) input.bookingSource = bookingSource;
+  if (values['target-pcc'] !== undefined) input.targetPcc = values['target-pcc'];
+  if (values['given-name'] !== undefined) input.givenName = values['given-name'];
+  if (values['middle-name'] !== undefined) input.middleName = values['middle-name'];
+  if (values.surname !== undefined) input.surname = values.surname;
+  const returnOnly = splitCommaList(values['return-only']);
+  if (returnOnly) input.returnOnly = returnOnly as readonly BookingReturnOnly[];
+  if (values['unmask-payment-card-numbers'] === true) input.unmaskPaymentCardNumbers = true;
+  return input;
+}
+
+/**
+ * Builds the input for `bookingManagementV1.modifyBooking` from the CLI
+ * flags. `modifyBooking` requires paired `before`/`after` snapshots and
+ * a `bookingSignature`; that's too much for individual flags, so this
+ * command is body-only.
+ */
+export function buildModifyBookingInput(values: { body?: string }): ModifyBookingInput {
+  if (values.body === undefined) {
+    throw new CliUsageError(
+      'modify-booking requires --body with a full JSON input (confirmationId, bookingSignature, before, after).',
+    );
+  }
+  return JSON.parse(values.body) as ModifyBookingInput;
+}
+
+/**
+ * Builds the input for `bookingManagementV1.cancelBooking` from the CLI
+ * flags. `--body` wins if present; otherwise `--confirmation-id` is
+ * required and per-type references accept comma-separated `itemId`
+ * lists.
+ */
+export function buildCancelBookingInput(values: {
+  'confirmation-id'?: string;
+  'booking-source'?: string;
+  'target-pcc'?: string;
+  'received-from'?: string;
+  'cancel-all'?: boolean;
+  'retrieve-booking'?: boolean;
+  'flight-ticket-operation'?: string;
+  'error-handling-policy'?: string;
+  flights?: string;
+  hotels?: string;
+  cars?: string;
+  trains?: string;
+  cruises?: string;
+  body?: string;
+}): CancelBookingInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as CancelBookingInput;
+  }
+  if (!values['confirmation-id']) {
+    throw new CliUsageError(
+      'cancel-booking requires --confirmation-id. (Or supply --body with a full JSON input.)',
+    );
+  }
+  const input: CancelBookingInput = { confirmationId: values['confirmation-id'] };
+  const bookingSource = parseBookingSource(values['booking-source']);
+  if (bookingSource !== undefined) input.bookingSource = bookingSource;
+  if (values['target-pcc'] !== undefined) input.targetPcc = values['target-pcc'];
+  if (values['received-from'] !== undefined) input.receivedFrom = values['received-from'];
+  if (values['cancel-all'] === true) input.cancelAll = true;
+  if (values['retrieve-booking'] === true) input.retrieveBooking = true;
+  const op = parseFlightTicketOperation(values['flight-ticket-operation']);
+  if (op !== undefined) input.flightTicketOperation = op;
+  const policy = parseCancelErrorPolicy(values['error-handling-policy']);
+  if (policy !== undefined) input.errorHandlingPolicy = policy;
+  const flights = splitCommaList(values.flights);
+  if (flights) input.flights = flights.map((itemId) => ({ itemId }));
+  const hotels = splitCommaList(values.hotels);
+  if (hotels) input.hotels = hotels.map((itemId) => ({ itemId }));
+  const cars = splitCommaList(values.cars);
+  if (cars) input.cars = cars.map((itemId) => ({ itemId }));
+  const trains = splitCommaList(values.trains);
+  if (trains) input.trains = trains.map((itemId) => ({ itemId }));
+  const cruises = splitCommaList(values.cruises);
+  if (cruises) input.cruises = cruises.map((itemId) => ({ itemId }));
+  return input;
+}
+
 // ---------------------------------------------------------------------------
 // parseArgs option configurations
 // ---------------------------------------------------------------------------
@@ -768,6 +927,42 @@ const CREATE_BOOKING_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const GET_BOOKING_OPTIONS = {
+  ...COMMON_OPTIONS,
+  'confirmation-id': { type: 'string' },
+  'booking-source': { type: 'string' },
+  'target-pcc': { type: 'string' },
+  'given-name': { type: 'string' },
+  'middle-name': { type: 'string' },
+  surname: { type: 'string' },
+  'return-only': { type: 'string' },
+  'unmask-payment-card-numbers': { type: 'boolean' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
+const MODIFY_BOOKING_OPTIONS = {
+  ...COMMON_OPTIONS,
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
+const CANCEL_BOOKING_OPTIONS = {
+  ...COMMON_OPTIONS,
+  'confirmation-id': { type: 'string' },
+  'booking-source': { type: 'string' },
+  'target-pcc': { type: 'string' },
+  'received-from': { type: 'string' },
+  'cancel-all': { type: 'boolean' },
+  'retrieve-booking': { type: 'boolean' },
+  'flight-ticket-operation': { type: 'string' },
+  'error-handling-policy': { type: 'string' },
+  flights: { type: 'string' },
+  hotels: { type: 'string' },
+  cars: { type: 'string' },
+  trains: { type: 'string' },
+  cruises: { type: 'string' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 const GET_SEATS_OPTIONS = {
   ...COMMON_OPTIONS,
   body: { type: 'string' },
@@ -786,9 +981,12 @@ Commands:
   airline-lookup            Sabre Airline Lookup v1
   airline-alliance-lookup   Sabre Airline Alliance Lookup v1
   bargain-finder-max        Sabre Bargain Finder Max v5
+  cancel-booking            Sabre Booking Management v1 — Cancel Booking
   create-booking            Sabre Booking Management v1 — Create Booking
   get-ancillaries           Sabre Get Ancillaries v2
+  get-booking               Sabre Booking Management v1 — Get Booking
   get-seats                 Sabre Get Seats v2
+  modify-booking            Sabre Booking Management v1 — Modify Booking
   revalidate-itinerary      Sabre Revalidate Itinerary v5
 
 Common flags:
@@ -963,6 +1161,82 @@ Flags:
 Examples:
   sabre-rest get-ancillaries --order-id SRVC-2B88-4C33-9787-9461114BC9BE
   sabre-rest get-ancillaries --order-id SRVC-2B88 --group-code BG
+`;
+
+const GET_BOOKING_HELP = `Usage: sabre-rest get-booking [flags]
+
+Sabre Booking Management v1 — Get Booking. Retrieves comprehensive
+booking details by confirmation ID.
+
+Flags:
+  --confirmation-id <id>        Confirmation ID / PNR locator (required unless --body)
+  --booking-source <src>        SABRE | SABRE_ORDER (defaults to SABRE)
+  --target-pcc <pcc>            Pseudo city code for the call context
+  --given-name <name>           Traveler given name for verification
+  --middle-name <name>          Traveler middle name for verification
+  --surname <name>              Traveler surname for verification
+  --return-only <list>          Comma-separated response section filter (e.g. FLIGHTS,TRAVELERS)
+  --unmask-payment-card-numbers Unmask payment card numbers (requires CCVIEW EPR)
+  --body <json>                 Override input with raw JSON (ignores other flags)
+  --base-url <url>              Override SABRE_BASE_URL
+  --format json|table           Output format (default: json)
+  --debug-request               Print the outbound HTTP request to stderr
+  -h, --help                    Show this help
+
+Examples:
+  sabre-rest get-booking --confirmation-id GLEBNY
+  sabre-rest get-booking --confirmation-id GLEBNY --return-only FLIGHTS,TRAVELERS
+`;
+
+const MODIFY_BOOKING_HELP = `Usage: sabre-rest modify-booking [flags]
+
+Sabre Booking Management v1 — Modify Booking. Applies non-itinerary
+changes to an existing booking by diffing before/after snapshots.
+
+The request body requires paired before/after snapshots plus a
+bookingSignature obtained via get-booking, so this command is
+body-only.
+
+Flags:
+  --body <json>             Full JSON ModifyBookingInput (required)
+  --base-url <url>          Override SABRE_BASE_URL
+  --format json|table       Output format (default: json)
+  --debug-request           Print the outbound HTTP request to stderr
+  -h, --help                Show this help
+
+Examples:
+  sabre-rest modify-booking --body '{"confirmationId":"GLEBNY","bookingSignature":"sig-abc","before":{"remarks":[]},"after":{"remarks":[{"type":"GENERAL","text":"flow-test note"}]},"retrieveBooking":true}'
+`;
+
+const CANCEL_BOOKING_HELP = `Usage: sabre-rest cancel-booking [flags]
+
+Sabre Booking Management v1 — Cancel Booking. Cancels a booking or
+specified booking items, optionally voiding or refunding related
+flight tickets in the same call.
+
+Flags:
+  --confirmation-id <id>              Confirmation ID / PNR locator (required unless --body)
+  --cancel-all                        Cancel all segments of all kinds
+  --retrieve-booking                  Include post-cancel booking state in the response
+  --flight-ticket-operation <op>      VOID | REFUND — bundle ticket operation with cancellation
+  --error-handling-policy <policy>    HALT_ON_ERROR (default) | ALLOW_PARTIAL_CANCEL
+  --flights <list>                    Comma-separated flight itemIds to cancel
+  --hotels <list>                     Comma-separated hotel itemIds
+  --cars <list>                       Comma-separated car itemIds
+  --trains <list>                     Comma-separated train itemIds
+  --cruises <list>                    Comma-separated cruise itemIds
+  --booking-source <src>              SABRE | SABRE_ORDER
+  --target-pcc <pcc>                  Pseudo city code for the call context
+  --received-from <string>            Entity authorizing the changes
+  --body <json>                       Override input with raw JSON (ignores other flags)
+  --base-url <url>                    Override SABRE_BASE_URL
+  --format json|table                 Output format (default: json)
+  --debug-request                     Print the outbound HTTP request to stderr
+  -h, --help                          Show this help
+
+Examples:
+  sabre-rest cancel-booking --confirmation-id GLEBNY --cancel-all
+  sabre-rest cancel-booking --confirmation-id GLEBNY --flights 1,2 --flight-ticket-operation VOID
 `;
 
 const GET_SEATS_HELP = `Usage: sabre-rest get-seats [flags]
@@ -1153,6 +1427,78 @@ async function createBookingCommand(
   emitResult(result, format, io, () => formatJson(result));
 }
 
+async function getBookingCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: GET_BOOKING_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(GET_BOOKING_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildGetBookingInput(values);
+  const result = await client.bookingManagementV1.getBooking(input);
+  emitResult(result, format, io, () => formatJson(result));
+}
+
+async function modifyBookingCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: MODIFY_BOOKING_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(MODIFY_BOOKING_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildModifyBookingInput(values);
+  const result = await client.bookingManagementV1.modifyBooking(input);
+  emitResult(result, format, io, () => formatJson(result));
+}
+
+async function cancelBookingCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: CANCEL_BOOKING_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(CANCEL_BOOKING_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildCancelBookingInput(values);
+  const result = await client.bookingManagementV1.cancelBooking(input);
+  emitResult(result, format, io, () => formatJson(result));
+}
+
 async function getAncillariesCommand(
   argv: readonly string[],
   env: CliEnvConfig,
@@ -1212,9 +1558,12 @@ export const COMMANDS: Record<
   'airline-lookup': airlineLookupCommand,
   'airline-alliance-lookup': airlineAllianceLookupCommand,
   'bargain-finder-max': bargainFinderMaxCommand,
+  'cancel-booking': cancelBookingCommand,
   'create-booking': createBookingCommand,
   'get-ancillaries': getAncillariesCommand,
+  'get-booking': getBookingCommand,
   'get-seats': getSeatsCommand,
+  'modify-booking': modifyBookingCommand,
   'revalidate-itinerary': revalidateItineraryCommand,
 };
 
