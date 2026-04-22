@@ -1375,7 +1375,10 @@ export interface BookTravelerEmployer {
  */
 export interface CreateBookingOutput {
   /**
-   * Response timestamp in UTC. Format: `YYYY-MM-DDTHH:MM:SSZ`.
+   * Response timestamp, UTC. Nominal format `YYYY-MM-DDTHH:MM:SSZ`,
+   * but cert has been observed to return the value without the
+   * trailing `Z` (e.g. `2026-04-22T21:16:58`). Treat the timezone as
+   * UTC regardless.
    */
   timestamp?: string;
 
@@ -1389,8 +1392,13 @@ export interface CreateBookingOutput {
   booking?: Booking;
 
   /**
-   * Errors from the response. Only present when errors occurred
-   * during booking creation.
+   * Errors Sabre returned alongside this response. Present on *some*
+   * 200-OK responses — Sabre uses `errors[]` for both hard failures
+   * (e.g. `APPLICATION_ERROR / TIMEOUT`, `BAD_REQUEST`) and benign
+   * entries (warnings, informational rule ids). The library does not
+   * classify or throw on these by default; consumers that want
+   * "looks-like-a-failure → throw" semantics can call
+   * `assertBookingSucceeded(result)` at their gateway layer.
    */
   errors?: readonly BookingError[];
 }
@@ -1438,7 +1446,16 @@ export interface Booking {
   /** Booking end date in `YYYY-MM-DD` format. */
   endDate?: string;
 
-  /** If `true`, the booking is cancelable (in full or by segment). */
+  /**
+   * If `true`, the booking is cancelable (in full or by segment).
+   *
+   * Note: after a successful `cancelBooking` call, Sabre may continue
+   * to return the booking with `isCancelable: true` on subsequent
+   * `getBooking` retrievals. Do not rely on this flag alone to
+   * determine whether a prior cancellation succeeded — use the
+   * response of the `cancelBooking` call itself (and
+   * `assertBookingSucceeded`) instead.
+   */
   isCancelable?: boolean;
 
   /** If `true`, at least one ticket has been issued. */
@@ -3007,7 +3024,12 @@ export interface GetBookingInput {
  * contents and the `returnOnly` filter in the request.
  */
 export interface GetBookingOutput extends Booking {
-  /** Response timestamp in UTC. Format: `YYYY-MM-DDTHH:MM:SSZ`. */
+  /**
+   * Response timestamp, UTC. Nominal format `YYYY-MM-DDTHH:MM:SSZ`,
+   * but cert has been observed to return the value without the
+   * trailing `Z` (e.g. `2026-04-22T21:16:58`). Treat the timezone as
+   * UTC regardless.
+   */
   timestamp?: string;
 
   /**
@@ -3024,8 +3046,11 @@ export interface GetBookingOutput extends Booking {
   request?: GetBookingInput;
 
   /**
-   * Errors encountered while retrieving the booking. Not present on
-   * successful responses.
+   * Errors Sabre returned alongside this response. Sabre uses
+   * `errors[]` for both hard failures and benign entries (warnings,
+   * informational) on 200-OK responses — see
+   * `assertBookingSucceeded` for the opt-in helper that throws on
+   * hard failures.
    */
   errors?: readonly BookingError[];
 }
@@ -3131,7 +3156,12 @@ export interface ModifyBookingInput {
  * contents for this modification).
  */
 export interface ModifyBookingOutput {
-  /** Response timestamp in UTC. Format: `YYYY-MM-DDTHH:MM:SSZ`. */
+  /**
+   * Response timestamp, UTC. Nominal format `YYYY-MM-DDTHH:MM:SSZ`,
+   * but cert has been observed to return the value without the
+   * trailing `Z` (e.g. `2026-04-22T21:16:58`). Treat the timezone as
+   * UTC regardless.
+   */
   timestamp?: string;
 
   /**
@@ -3147,8 +3177,11 @@ export interface ModifyBookingOutput {
   request?: ModifyBookingInput;
 
   /**
-   * Errors encountered while processing the modification. Not present
-   * on fully successful responses.
+   * Errors Sabre returned alongside this response. Sabre uses
+   * `errors[]` for both hard failures and benign entries (warnings,
+   * informational) on 200-OK responses — see
+   * `assertBookingSucceeded` for the opt-in helper that throws on
+   * hard failures.
    */
   errors?: readonly BookingError[];
 }
@@ -3652,7 +3685,12 @@ export interface CancelBookingInput {
  * performed.
  */
 export interface CancelBookingOutput {
-  /** Response timestamp in UTC. Format: `YYYY-MM-DDTHH:MM:SSZ`. */
+  /**
+   * Response timestamp, UTC. Nominal format `YYYY-MM-DDTHH:MM:SSZ`,
+   * but cert has been observed to return the value without the
+   * trailing `Z` (e.g. `2026-04-22T21:16:58`). Treat the timezone as
+   * UTC regardless.
+   */
   timestamp?: string;
   /** Echo of the request that produced this response. */
   request?: CancelBookingInput;
@@ -3667,8 +3705,15 @@ export interface CancelBookingOutput {
    */
   tickets?: readonly CancelBookingTicket[];
   /**
-   * Errors encountered while processing the cancellation. Not present
-   * on fully successful responses.
+   * Errors Sabre returned alongside this response. Sabre uses
+   * `errors[]` for both hard failures and benign entries (warnings,
+   * informational) on 200-OK responses. Additionally, a successful
+   * `ALLOW_PARTIAL_CANCEL` response can legitimately carry per-item
+   * errors describing the items that were not cancelled — so
+   * non-empty `errors[]` is not by itself proof of failure. See
+   * `assertBookingSucceeded` for the opt-in helper (and its
+   * overridable classification predicate) that throws on hard
+   * failures.
    */
   errors?: readonly BookingError[];
   /** Numbers of tickets that were successfully voided. */
