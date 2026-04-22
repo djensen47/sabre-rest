@@ -30,6 +30,7 @@ export { createErrorMappingMiddleware } from './middleware/error-mapping.js';
 export {
   SabreApiResponseError,
   SabreAuthenticationError,
+  SabreBookingErrorResponseError,
   SabreError,
   SabreNetworkError,
   SabreParseError,
@@ -51,6 +52,15 @@ export type {
   LookupAirlineAlliancesOutput,
 } from './services/airline-alliance-lookup-v1/types.js';
 export type { BookingManagementV1Service } from './services/booking-management-v1/service.js';
+export {
+  assertBookingSucceeded,
+  defaultBookingHardFailurePredicate,
+} from './services/booking-management-v1/assertions.js';
+export type {
+  AssertBookingSucceededInput,
+  AssertBookingSucceededOptions,
+  BookingErrorPredicate,
+} from './services/booking-management-v1/assertions.js';
 export type {
   AncillaryToModify,
   AssociatedFlightDetailsToModify,

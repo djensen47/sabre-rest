@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   SabreApiResponseError,
   SabreAuthenticationError,
+  SabreBookingErrorResponseError,
   SabreError,
   SabreNetworkError,
   SabreParseError,
@@ -82,5 +83,27 @@ describe('SabreParseError', () => {
     expect(err).toBeInstanceOf(SabreError);
     expect(err.responseBody).toBe('not-json');
     expect(err.name).toBe('SabreParseError');
+  });
+});
+
+describe('SabreBookingErrorResponseError', () => {
+  it('carries the errors array and summarises them in the message', () => {
+    const err = new SabreBookingErrorResponseError([
+      { category: 'APPLICATION_ERROR', type: 'TIMEOUT' },
+      { category: 'BAD_REQUEST', type: 'VALIDATION_ERROR' },
+    ]);
+    expect(err).toBeInstanceOf(SabreError);
+    expect(err.name).toBe('SabreBookingErrorResponseError');
+    expect(err.errors).toHaveLength(2);
+    expect(err.message).toContain('APPLICATION_ERROR/TIMEOUT');
+    expect(err.message).toContain('BAD_REQUEST/VALIDATION_ERROR');
+  });
+
+  it('preserves cause', () => {
+    const cause = new Error('underlying');
+    const err = new SabreBookingErrorResponseError([{ category: 'BAD_REQUEST', type: 'X' }], {
+      cause,
+    });
+    expect(err.cause).toBe(cause);
   });
 });
