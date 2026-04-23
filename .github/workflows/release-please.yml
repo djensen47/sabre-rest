@@ -13,10 +13,13 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
+      # Use a PAT (RELEASE_PLEASE_TOKEN) rather than GITHUB_TOKEN so that
+      # PRs/tags created by release-please trigger downstream workflows
+      # like CI. Workflows triggered via GITHUB_TOKEN do not cascade.
       - uses: googleapis/release-please-action@v4
         id: release
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
