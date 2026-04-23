@@ -13,10 +13,19 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
+      # Use a GitHub App token so that PRs/tags/commits created by
+      # release-please are attributed to the app (not GITHUB_TOKEN) and
+      # therefore do trigger downstream workflows like CI.
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+
       - uses: googleapis/release-please-action@v4
         id: release
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
