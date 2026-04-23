@@ -6,6 +6,8 @@ import type {
   CancelBookingOutput,
   CreateBookingInput,
   CreateBookingOutput,
+  FulfillTicketsInput,
+  FulfillTicketsOutput,
   GetBookingInput,
   GetBookingOutput,
   ModifyBookingInput,
@@ -25,6 +27,7 @@ import type {
  *     - `getBooking` (`POST /v1/trip/orders/getBooking`)
  *     - `modifyBooking` (`POST /v1/trip/orders/modifyBooking`)
  *     - `cancelBooking` (`POST /v1/trip/orders/cancelBooking`)
+ *     - `fulfillTickets` (`POST /v1/trip/orders/fulfillFlightTickets`)
  *   - Docs: https://developer.sabre.com/docs/rest_apis/trip/orders/booking_management
  *
  * Construct via {@link createSabreClient}; do not implement this interface
@@ -89,6 +92,25 @@ export interface BookingManagementV1Service {
    *   and (when requested) the current booking state.
    */
   cancelBooking(input: CancelBookingInput): Promise<CancelBookingOutput>;
+
+  /**
+   * Fulfill flight tickets and Electronic Miscellaneous Documents
+   * (EMDs) for an existing booking.
+   *
+   * `confirmationId` and `fulfillments` are required. Each entry in
+   * `fulfillments` targets either a ticket or an EMD (via
+   * `ancillaryIds`), with optional per-document `ticketingQualifiers`
+   * and payment distribution. Spec-defined defaults for
+   * `retainAccounting`, `receivedFrom`, `generateSingleInvoice`,
+   * `commitTicketToBookingWaitTime`, `acceptNegotiatedFare`, and
+   * `acceptPriceChanges` are always sent on the wire.
+   *
+   * @param input Fulfillment criteria, including the required
+   *   `confirmationId` and `fulfillments` array.
+   * @returns Issued ticket/EMD details, the echoed request, and any
+   *   errors Sabre returned.
+   */
+  fulfillTickets(input: FulfillTicketsInput): Promise<FulfillTicketsOutput>;
 }
 
 /**
@@ -127,5 +149,11 @@ export class DefaultBookingManagementV1Service implements BookingManagementV1Ser
     const req = mappers.toCancelBookingRequest(this.#baseUrl, input);
     const res = await this.#request(req);
     return mappers.fromCancelBookingResponse(res);
+  }
+
+  async fulfillTickets(input: FulfillTicketsInput): Promise<FulfillTicketsOutput> {
+    const req = mappers.toFulfillTicketsRequest(this.#baseUrl, input);
+    const res = await this.#request(req);
+    return mappers.fromFulfillTicketsResponse(res);
   }
 }

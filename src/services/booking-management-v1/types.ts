@@ -3790,3 +3790,524 @@ export interface CancelFlightRefund {
   /** Total refund amounts for this flight. */
   refundTotals: BookingTotalValues;
 }
+
+// ---------------------------------------------------------------------------
+// fulfillTickets enums
+// ---------------------------------------------------------------------------
+
+/**
+ * Error handling policies for the Fulfill Flight Tickets service.
+ *
+ * - `ALLOW_PARTIAL_FULFILLMENT` — continues processing upon encountering
+ *   any error from downline services during ticket issuance. Spec
+ *   default.
+ * - `HALT_ON_INVALID_MINIMUM_CONNECTING_TIME_ERROR` — stops processing
+ *   if the minimum connecting time between flights is not met.
+ */
+export type FulfillErrorPolicy =
+  | 'ALLOW_PARTIAL_FULFILLMENT'
+  | 'HALT_ON_INVALID_MINIMUM_CONNECTING_TIME_ERROR';
+
+/**
+ * Form-of-payment types supported by Fulfill Flight Tickets.
+ *
+ * `MISCELLANEOUS` must be activated by the agency and requires a
+ * specific credit code; `INSTALLMENTS` applies only to BSP Brazil
+ * customers (payment by card installments, "parcelado").
+ */
+export type FulfillFormOfPaymentType =
+  | 'PAYMENTCARD'
+  | 'CASH'
+  | 'CHECK'
+  | 'MISCELLANEOUS'
+  | 'INSTALLMENTS'
+  | 'VIRTUAL_CARD'
+  | 'INVOICE';
+
+/** Document type to print during the fulfillment process. */
+export type FulfillDocumentsType = 'Invoice' | 'Electronic Ticketing Receipt' | 'All';
+
+/**
+ * Method for handling expired Price Quotes (PQ) or Price Quotes with a
+ * back date price.
+ */
+export type FulfillPriceQuoteMethod = 'Reprice' | 'Override' | 'Quit';
+
+/**
+ * Penalty type associated with a fare. `Either or` allows either
+ * refundable or changeable fare options.
+ */
+export type FulfillTicketPenaltyType = 'Changeable' | 'Either or' | 'Refundable';
+
+// ---------------------------------------------------------------------------
+// fulfillTickets input helper types
+// ---------------------------------------------------------------------------
+
+/** Generic address used by the Fulfill Flight Tickets agency section. */
+export interface FulfillAgencyAddress {
+  /** Street address line. */
+  street?: string;
+  /** City name. */
+  city?: string;
+  /** State or province. */
+  stateProvince?: string;
+  /** Postal code. */
+  postalCode?: string;
+  /** Two- or three-letter ISO 3166 country code. */
+  countryCode?: string;
+  /** Name of the person or company/organization. */
+  name?: string;
+  /** Full address as free text (alternative when a structured address is unavailable). */
+  freeText?: string;
+}
+
+/** Agency contact information. */
+export interface FulfillAgencyContacts {
+  /** Email addresses. */
+  emails?: readonly string[];
+  /** Formatted phone numbers. */
+  phones?: readonly string[];
+  /**
+   * If `true`, an agency label is attached to each phone number. Spec
+   * default: `false`.
+   */
+  includePhoneLabel?: boolean;
+}
+
+/** Basic agency information. */
+export interface FulfillAgency {
+  /** Agency address. */
+  address?: FulfillAgencyAddress;
+  /** Agency contact information. */
+  contactInfo?: FulfillAgencyContacts;
+}
+
+/** Traveler full name used with the `travelers` array. */
+export interface FulfillTraveler {
+  /** First name. */
+  givenName: string;
+  /** Middle name. */
+  middleName?: string;
+  /** Last name. */
+  surname: string;
+}
+
+/** Strong customer authentication details for a payment card. */
+export interface FulfillStrongCustomerAuthentication {
+  /**
+   * Channel in which the payment transaction was initiated. `MO` (Mail
+   * Order), `TO` (Telephone Order), or `EC` (eCommerce). 2 uppercase
+   * alphanumeric characters.
+   */
+  channelCode?: string;
+}
+
+/** A form of payment used during the fulfillment process. */
+export interface FulfillFormOfPayment {
+  /** Payment method type. */
+  type: FulfillFormOfPaymentType;
+  /** Card vendor code (e.g., `VI` for Visa). Two letters. Use with `PAYMENTCARD`. */
+  cardTypeCode?: string;
+  /** Card number (12–19 digits, or masked format). Use with `PAYMENTCARD`. */
+  cardNumber?: string;
+  /** Card security code (3–4 digits). Use with `PAYMENTCARD`. */
+  cardSecurityCode?: string;
+  /** Card expiration date in `YYYY-MM` format. Use with `PAYMENTCARD`. */
+  expiryDate?: string;
+  /**
+   * Number of months for extended payment (1–96). Use with
+   * `PAYMENTCARD` or `MISCELLANEOUS`.
+   */
+  extendedPayment?: number;
+  /** Miscellaneous credit code (2–18 characters). Use with `MISCELLANEOUS`. */
+  miscellaneousCreditCode?: string;
+  /** Number of installments (1–96). Use with `INSTALLMENTS`. */
+  numberOfInstallments?: number;
+  /** Airline plan code. Use with `INSTALLMENTS`. */
+  airlinePlanCode?: string;
+  /** First installment amount. Decimal string. Use with `INSTALLMENTS`. */
+  installmentAmount?: string;
+  /** Manual approval code (up to 6 characters). Use with `PAYMENTCARD`. */
+  manualApprovalCode?: string;
+  /** Customer account code of a virtual card. Use with `VIRTUAL_CARD`. */
+  virtualCardCode?: string;
+  /** Strong customer authentication details. 1–10 items. Use with `PAYMENTCARD`. */
+  authentications?: readonly FulfillStrongCustomerAuthentication[];
+  /** Agency invoice description (free text). Use with `INVOICE`. */
+  invoiceDescription?: string;
+  /**
+   * If `true`, the invoice description is prefixed with `INV/`. Use
+   * with `INVOICE` and `invoiceDescription`.
+   */
+  addInvoiceDescriptionPrefix?: boolean;
+}
+
+/**
+ * Distribution of the fare across up to two forms of payment from the
+ * parent `formsOfPayment` array. Multiple forms of payment may only be
+ * defined where BSP reporting is used and the point-of-sale country
+ * does not prohibit it.
+ */
+export interface FulfillPaymentMethod {
+  /** 1-based index of the primary form of payment in `formsOfPayment` (1–11). */
+  primaryFormOfPayment: number;
+  /** 1-based index of the secondary form of payment in `formsOfPayment` (1–11). */
+  secondaryFormOfPayment?: number;
+  /**
+   * Base fare amount charged to the secondary form of payment. Decimal
+   * string. Applicable only when two forms of payment are requested.
+   */
+  amountOnSecondFormOfPayment?: string;
+}
+
+/**
+ * Miscellaneous Intelligent Service Fee (MISF) details. Applicable to
+ * Canadian customers only; the amount is pulled from the travel
+ * journal record (TJR).
+ */
+export interface FulfillMiscellaneousServiceFee {
+  /** Override amount for the service fee. Decimal string. */
+  overrideAmount?: string;
+  /** Three-letter ISO 4217 currency code. */
+  currencyCode?: string;
+  /** Description of the service fee. 1–86 characters. */
+  description?: string;
+  /** Customer reference. 1–27 uppercase alphanumeric. */
+  customerReference?: string;
+}
+
+/** Fare endorsement information that replaces the text stored during pricing. */
+export interface FulfillEndorsements {
+  /** Original endorsement text. */
+  description?: string;
+  /**
+   * If `true`, overrides all pre-programmed endorsements and prints
+   * special endorsements of the fare.
+   */
+  useOverride?: boolean;
+}
+
+/** A desired brand code, optionally scoped to specific flights. */
+export interface FulfillBrandedFare {
+  /** Desired brand code. */
+  brandCode: string;
+  /** Flights the brand code applies to, referenced by their `itemId`. */
+  flights?: readonly FlightReference[];
+}
+
+/**
+ * A desired fare basis code with complete auto-pricing validation,
+ * optionally scoped to specific flights.
+ */
+export interface FulfillSpecificFare {
+  /** Fare basis code. */
+  fareBasisCode: string;
+  /** Flights the fare basis applies to, referenced by their `itemId`. */
+  flights?: readonly FlightReference[];
+}
+
+/** Ticket validity period and the flights it covers. */
+export interface FulfillValidityPeriod {
+  /** ISO 8601 start date of the validity period. */
+  startDate?: string;
+  /** ISO 8601 end date of the validity period. */
+  endDate?: string;
+  /** Flights the period applies to, referenced by their `itemId`. */
+  flights?: readonly FlightReference[];
+}
+
+/**
+ * Baggage allowance. Provide either a weight or a piece count — the
+ * two fields are mutually exclusive per the spec.
+ */
+export interface FulfillBaggageAllowance {
+  /** Total baggage weight in kilograms. Mutually exclusive with `baggagePieces`. */
+  totalWeightInKilograms?: number;
+  /** Total number of baggage pieces. Mutually exclusive with `totalWeightInKilograms`. */
+  baggagePieces?: number;
+  /** Flights the allowance applies to, referenced by their `itemId`. */
+  flights?: readonly FlightReference[];
+}
+
+/** Monetary amount with currency, used for the penalty cap. */
+export interface FulfillMonetaryValue {
+  /** Amount as a decimal string. */
+  amount: string;
+  /** Three-letter ISO 4217 currency code. */
+  currencyCode: string;
+}
+
+/**
+ * Penalty correlated with an itinerary change or cancellation.
+ * `isChangeable` and `maximumPenalty` are mutually exclusive per the
+ * spec.
+ */
+export interface FulfillTicketPenalty {
+  /** Type of penalty. */
+  type: FulfillTicketPenaltyType;
+  /** Whether the penalty applies before or after departure. */
+  applicability?: BookingFareRulePenaltyApplicability;
+  /** If `true`, requests changeable options; if `false`, only non-changeable. */
+  isChangeable?: boolean;
+  /** Maximum penalty cap. */
+  maximumPenalty?: FulfillMonetaryValue;
+}
+
+/**
+ * Future processing / future pricing (FP) line directing Sabre to
+ * process a ticket in the near future.
+ */
+export interface FulfillFutureProcessing {
+  /** Number of the first FP line in the sequence (1–999). */
+  firstLineNumber: number;
+  /** Number of the last FP line in the sequence (1–999). */
+  lastLineNumber?: number;
+  /** 1-based index of the traveler this future processing is assigned to. */
+  travelerIndex?: number;
+}
+
+/** Automated Net Remit ticketing qualifiers. */
+export interface FulfillNetRemit {
+  /** Manual Net Remit code value. */
+  netRemitCode?: string;
+  /** Reference code of the Net Remit commercial contract. */
+  commercialAgreementReferenceCode?: string;
+  /** Cash amount of Net Remit. Decimal string. */
+  cashAmount?: string;
+  /** Credit amount of Net Remit. Decimal string. */
+  creditAmount?: string;
+  /** Net Remit discount amount. Decimal string. */
+  discountAmount?: string;
+  /** Total selling fare amount. Decimal string. */
+  sellingFareAmount?: string;
+  /** Tour code for Net Remit ticketing. 1–15 uppercase alphanumeric. */
+  tourCode?: string;
+}
+
+/**
+ * Optional ticketing qualifiers applied to a single `FulfillmentDetails`
+ * entry. Inherits the basic qualifiers (commission, endorsements, tour
+ * code, etc.) and adds fulfillment-specific options. Spec-defined
+ * defaults for `priceWithTaxes`, `returnFareFlexibilityDetails`, and
+ * `isNetFareCommission` are sent on the wire when this object is
+ * provided.
+ */
+export interface FulfillTicketingQualifiers {
+  /** Commission amount to claim. Mutually exclusive with `commissionPercentage`. */
+  commissionAmount?: string;
+  /** Commission percentage to claim. Mutually exclusive with `commissionAmount`. */
+  commissionPercentage?: string;
+  /** Fare endorsements override. */
+  endorsements?: FulfillEndorsements;
+  /**
+   * If `true`, fares with advance purchase requirements are excluded.
+   * Mutually exclusive with `priceQuoteRecordIds`.
+   */
+  excludeFareFocusFares?: boolean;
+  /**
+   * 1-based indices into the `travelers` array for name association.
+   * Mutually exclusive with `priceQuoteRecordIds`.
+   */
+  travelerIndices?: readonly number[];
+  /** Tour code to use during ticketing. 1–15 uppercase alphanumeric. */
+  tourCode?: string;
+  /** Handling option for how the tour code is printed on the ticket. */
+  tourCodeOverrides?: BookTourCodeOverrideOption;
+  /** Two-letter IATA designator of the desired validating airline. */
+  validatingAirlineCode?: string;
+  /** Desired brand codes (up to 99). One brand code per flight. */
+  brandedFares?: readonly FulfillBrandedFare[];
+  /** Tax codes to exclude during EMD issuance (up to 5). */
+  exemptTaxes?: readonly string[];
+  /**
+   * If `true`, EMDs are fulfilled with taxes; if `false`, without. Spec
+   * default: `true`.
+   */
+  priceWithTaxes?: boolean;
+  /**
+   * Side-trip sequence of flights following a stopover, referenced by
+   * flight `itemId`.
+   */
+  sideTripFlights?: readonly FlightReference[];
+  /** Penalties correlated with itinerary changes or cancellations (1–2). */
+  penalties?: readonly FulfillTicketPenalty[];
+  /**
+   * If `true`, returns additional tags with fare flexibility
+   * information. Spec default: `false`.
+   */
+  returnFareFlexibilityDetails?: boolean;
+  /**
+   * Price Quote record IDs (1–99). Mutually exclusive with
+   * `travelerIndices` and `excludeFareFocusFares`.
+   */
+  priceQuoteRecordIds?: readonly string[];
+  /** Spanish large family discount level (1–2). */
+  spanishLargeFamilyDiscountLevel?: number;
+  /** Desired fare basis codes with complete auto-pricing validation (1–16). */
+  specificFares?: readonly FulfillSpecificFare[];
+  /** Ticket validity dates (1–99). */
+  validityDates?: readonly FulfillValidityPeriod[];
+  /** Baggage allowance details (1–99). */
+  baggageAllowance?: readonly FulfillBaggageAllowance[];
+  /**
+   * If `true`, claims commission on the Net fare. Must combine with
+   * `commissionPercentage`. Spec default: `false`.
+   */
+  isNetFareCommission?: boolean;
+  /** Eight-character discount approval code used by Korean customers. */
+  discountApprovalCode?: string;
+  /** Future processing / future pricing lines (1–99). */
+  futurePricingLines?: readonly FulfillFutureProcessing[];
+  /** Document type to print during fulfillment. */
+  printDocuments?: FulfillDocumentsType;
+  /** Automated Net Remit ticketing qualifiers. */
+  netRemit?: FulfillNetRemit;
+}
+
+/** Ticketing details for a single document (ticket or EMD) to issue. */
+export interface FulfillmentDetails {
+  /**
+   * IDs of ancillary items for which EMD issuance is required. Values
+   * come from `itemId` fields in a prior Get Booking response.
+   */
+  ancillaryIds?: readonly string[];
+  /** Optional qualifiers applied to this fulfillment. */
+  ticketingQualifiers?: FulfillTicketingQualifiers;
+  /** Miscellaneous Intelligent Service Fee details. */
+  serviceFee?: FulfillMiscellaneousServiceFee;
+  /** Payment-method distribution across forms of payment. */
+  payment?: FulfillPaymentMethod;
+}
+
+// ---------------------------------------------------------------------------
+// fulfillTickets input / output
+// ---------------------------------------------------------------------------
+
+/**
+ * Input for the `fulfillTickets` operation.
+ *
+ * `confirmationId` and `fulfillments` are required. Fields with
+ * spec-defined defaults (`retainAccounting`, `receivedFrom`,
+ * `generateSingleInvoice`, `commitTicketToBookingWaitTime`,
+ * `acceptNegotiatedFare`, `acceptPriceChanges`) are always sent on the
+ * wire using the documented default when the caller omits them.
+ */
+export interface FulfillTicketsInput {
+  /**
+   * The booking reference ID as shown in the source supplier/vendor
+   * system. For `SABRE`, this is the PNR Locator value. 6+ uppercase
+   * alphanumeric characters.
+   */
+  confirmationId: string;
+  /** Fulfillment details required to issue each document (1–99 items). */
+  fulfillments: readonly FulfillmentDetails[];
+  /** Error-handling policy. */
+  errorHandlingPolicy?: readonly FulfillErrorPolicy[];
+  /** Source of the booking. Defaults to `SABRE` when omitted. */
+  bookingSource?: BookingSource;
+  /**
+   * If `true`, the service does not delete any existing accounting
+   * lines prior to ticketing. Spec default: `false`.
+   */
+  retainAccounting?: boolean;
+  /** Agency information. */
+  agency?: FulfillAgency;
+  /**
+   * Pseudo city code of the target destination for which the ticket
+   * exchange is requested. 3–4 uppercase alphanumeric.
+   */
+  targetPcc?: string;
+  /**
+   * Entity authorizing the changes in the PNR. Spec default:
+   * `"Fulfill Flight Tickets"`.
+   */
+  receivedFrom?: string;
+  /**
+   * Printers or printer profiles to designate. A single
+   * `PrinterAddress` with a profile may be provided, or multiple
+   * entries sharing the same printer type.
+   */
+  designatePrinters?: readonly PrinterAddress[];
+  /** Payment methods to use during the fulfillment process (1–10). */
+  formsOfPayment?: readonly FulfillFormOfPayment[];
+  /** Traveler names for name association (1–9). */
+  travelers?: readonly FulfillTraveler[];
+  /**
+   * If `true`, sends multiple tickets to commit to the PNR in a single
+   * batch after issuance. Spec default: `false`.
+   */
+  generateSingleInvoice?: boolean;
+  /**
+   * Maximum asynchronous-update wait time (ms) for the ghost-ticket
+   * validation process (0–10000). Spec default: `0`.
+   */
+  commitTicketToBookingWaitTime?: number;
+  /**
+   * If `true`, uses the negotiated fare when the stored fare cannot be
+   * used. Spec default: `true`.
+   */
+  acceptNegotiatedFare?: boolean;
+  /**
+   * If `true`, issues a ticket when the price increases during
+   * processing. Spec default: `true`.
+   */
+  acceptPriceChanges?: boolean;
+  /** Handling method for a back-dated Price Quote. */
+  backDatePriceQuoteMethod?: FulfillPriceQuoteMethod;
+  /** Handling method for an expired Price Quote. */
+  priceQuoteExpirationMethod?: FulfillPriceQuoteMethod;
+  /** Email notification type. */
+  notificationEmail?: BookNotificationEmail;
+}
+
+/**
+ * An issued electronic flight ticket or EMD returned by
+ * `fulfillTickets`.
+ */
+export interface FulfillTicket {
+  /**
+   * If `true`, the ticket number has been committed to the PNR.
+   * Applicable to ATPCO bookings only.
+   */
+  isCommitted?: boolean;
+  /** Electronic ticket number. */
+  number: string;
+  /** ISO 8601 date the ticket was issued. */
+  date: string;
+  /** Traveler's first name. */
+  travelerGivenName?: string;
+  /** Traveler's last name. */
+  travelerSurname?: string;
+  /** Payment totals for the ticket. */
+  payment: BookingTotalValues;
+  /** Name of the ticket status. */
+  ticketStatusName?: BookingTicketStatus;
+  /** Two-character ticket status code. */
+  ticketStatusCode?: string;
+  /** Pseudo city code of the agency that issued the ticket or EMD. */
+  ticketingPcc?: string;
+}
+
+/**
+ * Output of the `fulfillTickets` operation.
+ *
+ * Sabre returns `errors[]` for both hard failures and benign entries
+ * (warnings, informational) on 200-OK responses; non-empty `errors[]`
+ * is not by itself proof of failure. See `assertBookingSucceeded` for
+ * the opt-in helper that throws on hard failures.
+ */
+export interface FulfillTicketsOutput {
+  /**
+   * Response timestamp, UTC. Nominal format `YYYY-MM-DDTHH:MM:SSZ`; as
+   * with other booking operations, cert has been observed to return
+   * the value without the trailing `Z`. Treat the timezone as UTC
+   * regardless.
+   */
+  timestamp?: string;
+  /** Electronic flight tickets issued for the travelers. */
+  tickets?: readonly FulfillTicket[];
+  /** Echo of the request that produced this response. */
+  request?: FulfillTicketsInput;
+  /** Errors Sabre returned alongside this response. */
+  errors?: readonly BookingError[];
+}

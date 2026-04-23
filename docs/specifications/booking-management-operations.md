@@ -15,7 +15,7 @@ Booking
 
 Flight Tickets
 --------------
-[ ] fulfillTickets   POST /fulfillFlightTickets   — Fulfill flight tickets and EMDs
+[x] fulfillTickets   POST /fulfillFlightTickets   — Fulfill flight tickets and EMDs
 [ ] voidTickets      POST /voidFlightTickets      — Void tickets by ticket number
 [ ] refundTickets    POST /refundFlightTickets    — Refund tickets and/or EMDs
 [ ] checkTickets     POST /checkFlightTickets     — Check tickets for void, refund, and exchange conditions

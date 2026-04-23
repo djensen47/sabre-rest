@@ -4,6 +4,7 @@ import { createSabreClient } from '../../client.js';
 import type {
   CancelBookingInput,
   CreateBookingInput,
+  FulfillTicketsInput,
   GetBookingInput,
   ModifyBookingInput,
 } from './types.js';
@@ -383,6 +384,102 @@ describe('BookingManagementV1Service.cancelBooking', () => {
     ).rejects.toMatchObject({
       name: 'SabreApiResponseError',
       statusCode: 404,
+    });
+  });
+});
+
+describe('BookingManagementV1Service.fulfillTickets', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const minimalFulfillInput: FulfillTicketsInput = {
+    confirmationId: 'GLEBNY',
+    fulfillments: [{}],
+  };
+
+  const fulfillResponseBody = {
+    timestamp: '2026-05-01T12:00:00Z',
+    tickets: [
+      {
+        number: '0167489825830',
+        date: '2026-05-01',
+        payment: { total: '150.00', currencyCode: 'USD' },
+        ticketStatusName: 'Issued',
+      },
+    ],
+  };
+
+  it('POSTs to the fulfillFlightTickets URL with bearer auth and JSON headers', async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      () =>
+        new Response(JSON.stringify(fulfillResponseBody), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createSabreClient({
+      baseUrl: 'https://api.cert.platform.sabre.com',
+      auth: fakeProvider(),
+    });
+
+    const result = await client.bookingManagementV1.fulfillTickets(minimalFulfillInput);
+
+    expect(result.timestamp).toBe('2026-05-01T12:00:00Z');
+    expect(result.tickets?.[0]?.number).toBe('0167489825830');
+    expect(result.tickets?.[0]?.payment.total).toBe('150.00');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/fulfillFlightTickets');
+
+    const requestInit = init as RequestInit;
+    expect(requestInit.method).toBe('POST');
+    const headers = requestInit.headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer TEST_TOKEN');
+    expect(headers.Accept).toBe('application/json');
+    expect(headers['Content-Type']).toBe('application/json');
+
+    const body = JSON.parse((requestInit.body as string) ?? '{}') as Record<string, unknown>;
+    expect(body.confirmationId).toBe('GLEBNY');
+    expect(body.fulfillments).toEqual([{}]);
+    expect(body.retainAccounting).toBe(false);
+    expect(body.receivedFrom).toBe('Fulfill Flight Tickets');
+    expect(body.generateSingleInvoice).toBe(false);
+    expect(body.commitTicketToBookingWaitTime).toBe(0);
+    expect(body.acceptNegotiatedFare).toBe(true);
+    expect(body.acceptPriceChanges).toBe(true);
+  });
+
+  it('surfaces a non-2xx response as SabreApiResponseError', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(
+        () =>
+          new Response(
+            JSON.stringify({
+              errors: [{ category: 'BAD_REQUEST', type: 'INVALID_CONFIRMATION_ID' }],
+            }),
+            { status: 400, statusText: 'Bad Request' },
+          ),
+      ),
+    );
+
+    const client = createSabreClient({
+      baseUrl: 'https://api.cert.platform.sabre.com',
+      auth: fakeProvider(),
+    });
+
+    await expect(
+      client.bookingManagementV1.fulfillTickets(minimalFulfillInput),
+    ).rejects.toMatchObject({
+      name: 'SabreApiResponseError',
+      statusCode: 400,
     });
   });
 });
