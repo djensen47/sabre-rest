@@ -81,6 +81,25 @@ import type {
   FlightReference,
   FlightReferenceToModify,
   FlightToModify,
+  FulfillAgency,
+  FulfillBaggageAllowance,
+  FulfillBrandedFare,
+  FulfillEndorsements,
+  FulfillFormOfPayment,
+  FulfillFutureProcessing,
+  FulfillMiscellaneousServiceFee,
+  FulfillNetRemit,
+  FulfillPaymentMethod,
+  FulfillSpecificFare,
+  FulfillStrongCustomerAuthentication,
+  FulfillTicket,
+  FulfillTicketPenalty,
+  FulfillTicketingQualifiers,
+  FulfillTicketsInput,
+  FulfillTicketsOutput,
+  FulfillTraveler,
+  FulfillValidityPeriod,
+  FulfillmentDetails,
   GetBookingExtraFeatures,
   GetBookingInput,
   GetBookingOutput,
@@ -106,6 +125,7 @@ const CREATE_BOOKING_PATH = 'v1/trip/orders/createBooking';
 const GET_BOOKING_PATH = 'v1/trip/orders/getBooking';
 const MODIFY_BOOKING_PATH = 'v1/trip/orders/modifyBooking';
 const CANCEL_BOOKING_PATH = 'v1/trip/orders/cancelBooking';
+const FULFILL_TICKETS_PATH = 'v1/trip/orders/fulfillFlightTickets';
 
 /**
  * Builds the outgoing {@link SabreRequest} for the `createBooking`
@@ -458,6 +478,100 @@ export function fromCancelBookingResponse(res: SabreResponse): CancelBookingOutp
   }
   if (parsed.flightRefunds !== undefined) {
     out.flightRefunds = parsed.flightRefunds.map(buildFlightRefund);
+  }
+
+  return out;
+}
+
+/**
+ * Builds the outgoing {@link SabreRequest} for the `fulfillTickets`
+ * operation.
+ *
+ * The request body matches the `FulfillTicketsRequest` schema.
+ * `confirmationId` and `fulfillments` are required. Fields with
+ * spec-defined defaults (`retainAccounting`, `receivedFrom`,
+ * `generateSingleInvoice`, `commitTicketToBookingWaitTime`,
+ * `acceptNegotiatedFare`, `acceptPriceChanges`) are always sent.
+ */
+export function toFulfillTicketsRequest(baseUrl: string, input: FulfillTicketsInput): SabreRequest {
+  const url = new URL(FULFILL_TICKETS_PATH, ensureTrailingSlash(baseUrl));
+
+  const body: Record<string, unknown> = {
+    confirmationId: input.confirmationId,
+    fulfillments: input.fulfillments.map(buildFulfillmentDetailsBody),
+    retainAccounting: input.retainAccounting ?? false,
+    receivedFrom: input.receivedFrom ?? 'Fulfill Flight Tickets',
+    generateSingleInvoice: input.generateSingleInvoice ?? false,
+    commitTicketToBookingWaitTime: input.commitTicketToBookingWaitTime ?? 0,
+    acceptNegotiatedFare: input.acceptNegotiatedFare ?? true,
+    acceptPriceChanges: input.acceptPriceChanges ?? true,
+  };
+
+  if (input.errorHandlingPolicy && input.errorHandlingPolicy.length > 0) {
+    body.errorHandlingPolicy = [...input.errorHandlingPolicy];
+  }
+  if (input.bookingSource !== undefined) body.bookingSource = input.bookingSource;
+  if (input.agency !== undefined) body.agency = buildFulfillAgencyBody(input.agency);
+  if (input.targetPcc !== undefined) body.targetPcc = input.targetPcc;
+  if (input.designatePrinters && input.designatePrinters.length > 0) {
+    body.designatePrinters = input.designatePrinters.map(buildPrinterAddressBody);
+  }
+  if (input.formsOfPayment && input.formsOfPayment.length > 0) {
+    body.formsOfPayment = input.formsOfPayment.map(buildFulfillFormOfPaymentBody);
+  }
+  if (input.travelers && input.travelers.length > 0) {
+    body.travelers = input.travelers.map(buildFulfillTravelerBody);
+  }
+  if (input.backDatePriceQuoteMethod !== undefined) {
+    body.backDatePriceQuoteMethod = input.backDatePriceQuoteMethod;
+  }
+  if (input.priceQuoteExpirationMethod !== undefined) {
+    body.priceQuoteExpirationMethod = input.priceQuoteExpirationMethod;
+  }
+  if (input.notificationEmail !== undefined) body.notificationEmail = input.notificationEmail;
+
+  return {
+    method: 'POST',
+    url: url.toString(),
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+/**
+ * Parses the `fulfillTickets` response into the public output shape.
+ *
+ * Throws {@link SabreParseError} when the body is not valid JSON or
+ * not an object.
+ */
+export function fromFulfillTicketsResponse(res: SabreResponse): FulfillTicketsOutput {
+  let parsed: components['schemas']['FulfillTicketsResponse'];
+  try {
+    parsed = JSON.parse(res.body) as components['schemas']['FulfillTicketsResponse'];
+  } catch (err) {
+    throw new SabreParseError('Failed to parse Fulfill Tickets response as JSON', res.body, {
+      cause: err,
+    });
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new SabreParseError('Fulfill Tickets response was not a JSON object', parsed);
+  }
+
+  const out: FulfillTicketsOutput = {};
+
+  if (parsed.timestamp !== undefined) out.timestamp = parsed.timestamp;
+  if (parsed.tickets !== undefined) {
+    out.tickets = parsed.tickets.map(buildFulfillTicket);
+  }
+  if (parsed.request !== undefined) {
+    out.request = buildFulfillTicketsRequestEcho(parsed.request);
+  }
+  if (parsed.errors !== undefined && parsed.errors.length > 0) {
+    out.errors = parsed.errors.map(buildBookingError);
   }
 
   return out;
@@ -1951,6 +2065,505 @@ function buildResponseTravelerEmployer(
   emp: components['schemas']['TravelersEmployer'],
 ): Booking['travelersEmployers'] extends readonly (infer T)[] | undefined ? T : never {
   return { ...emp };
+}
+
+// ---------------------------------------------------------------------------
+// fulfillTickets helpers — request builders
+// ---------------------------------------------------------------------------
+
+function buildFulfillmentDetailsBody(d: FulfillmentDetails): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (d.ancillaryIds && d.ancillaryIds.length > 0) {
+    out.ancillaryIds = [...d.ancillaryIds];
+  }
+  if (d.ticketingQualifiers !== undefined) {
+    out.ticketingQualifiers = buildFulfillTicketingQualifiersBody(d.ticketingQualifiers);
+  }
+  if (d.serviceFee !== undefined) {
+    out.serviceFee = buildFulfillMiscellaneousServiceFeeBody(d.serviceFee);
+  }
+  if (d.payment !== undefined) {
+    out.payment = buildFulfillPaymentMethodBody(d.payment);
+  }
+  return out;
+}
+
+function buildFulfillTicketingQualifiersBody(
+  q: FulfillTicketingQualifiers,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    priceWithTaxes: q.priceWithTaxes ?? true,
+    returnFareFlexibilityDetails: q.returnFareFlexibilityDetails ?? false,
+    isNetFareCommission: q.isNetFareCommission ?? false,
+  };
+  if (q.commissionAmount !== undefined) out.commissionAmount = q.commissionAmount;
+  if (q.commissionPercentage !== undefined) out.commissionPercentage = q.commissionPercentage;
+  if (q.endorsements !== undefined) {
+    out.endorsements = buildFulfillEndorsementsBody(q.endorsements);
+  }
+  if (q.excludeFareFocusFares !== undefined) {
+    out.excludeFareFocusFares = q.excludeFareFocusFares;
+  }
+  if (q.travelerIndices && q.travelerIndices.length > 0) {
+    out.travelerIndices = [...q.travelerIndices];
+  }
+  if (q.tourCode !== undefined) out.tourCode = q.tourCode;
+  if (q.tourCodeOverrides !== undefined) out.tourCodeOverrides = q.tourCodeOverrides;
+  if (q.validatingAirlineCode !== undefined) out.validatingAirlineCode = q.validatingAirlineCode;
+  if (q.brandedFares && q.brandedFares.length > 0) {
+    out.brandedFares = q.brandedFares.map(buildFulfillBrandedFareBody);
+  }
+  if (q.exemptTaxes && q.exemptTaxes.length > 0) {
+    out.exemptTaxes = [...q.exemptTaxes];
+  }
+  if (q.sideTripFlights && q.sideTripFlights.length > 0) {
+    out.sideTripFlights = q.sideTripFlights.map(buildFlightReferenceBody);
+  }
+  if (q.penalties && q.penalties.length > 0) {
+    out.penalties = q.penalties.map(buildFulfillTicketPenaltyBody);
+  }
+  if (q.priceQuoteRecordIds && q.priceQuoteRecordIds.length > 0) {
+    out.priceQuoteRecordIds = [...q.priceQuoteRecordIds];
+  }
+  if (q.spanishLargeFamilyDiscountLevel !== undefined) {
+    out.spanishLargeFamilyDiscountLevel = q.spanishLargeFamilyDiscountLevel;
+  }
+  if (q.specificFares && q.specificFares.length > 0) {
+    out.specificFares = q.specificFares.map(buildFulfillSpecificFareBody);
+  }
+  if (q.validityDates && q.validityDates.length > 0) {
+    out.validityDates = q.validityDates.map(buildFulfillValidityPeriodBody);
+  }
+  if (q.baggageAllowance && q.baggageAllowance.length > 0) {
+    out.baggageAllowance = q.baggageAllowance.map(buildFulfillBaggageAllowanceBody);
+  }
+  if (q.discountApprovalCode !== undefined) out.discountApprovalCode = q.discountApprovalCode;
+  if (q.futurePricingLines && q.futurePricingLines.length > 0) {
+    out.futurePricingLines = q.futurePricingLines.map(buildFulfillFutureProcessingBody);
+  }
+  if (q.printDocuments !== undefined) out.printDocuments = q.printDocuments;
+  if (q.netRemit !== undefined) out.netRemit = buildFulfillNetRemitBody(q.netRemit);
+  return out;
+}
+
+function buildFulfillEndorsementsBody(e: FulfillEndorsements): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (e.description !== undefined) out.description = e.description;
+  if (e.useOverride !== undefined) out.useOverride = e.useOverride;
+  return out;
+}
+
+function buildFulfillBrandedFareBody(f: FulfillBrandedFare): Record<string, unknown> {
+  const out: Record<string, unknown> = { brandCode: f.brandCode };
+  if (f.flights && f.flights.length > 0) {
+    out.flights = f.flights.map(buildFlightReferenceBody);
+  }
+  return out;
+}
+
+function buildFulfillSpecificFareBody(f: FulfillSpecificFare): Record<string, unknown> {
+  const out: Record<string, unknown> = { fareBasisCode: f.fareBasisCode };
+  if (f.flights && f.flights.length > 0) {
+    out.flights = f.flights.map(buildFlightReferenceBody);
+  }
+  return out;
+}
+
+function buildFulfillValidityPeriodBody(v: FulfillValidityPeriod): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (v.startDate !== undefined) out.startDate = v.startDate;
+  if (v.endDate !== undefined) out.endDate = v.endDate;
+  if (v.flights && v.flights.length > 0) {
+    out.flights = v.flights.map(buildFlightReferenceBody);
+  }
+  return out;
+}
+
+function buildFulfillBaggageAllowanceBody(b: FulfillBaggageAllowance): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (b.totalWeightInKilograms !== undefined) {
+    out.totalWeightInKilograms = b.totalWeightInKilograms;
+  }
+  if (b.baggagePieces !== undefined) out.baggagePieces = b.baggagePieces;
+  if (b.flights && b.flights.length > 0) {
+    out.flights = b.flights.map(buildFlightReferenceBody);
+  }
+  return out;
+}
+
+function buildFulfillTicketPenaltyBody(p: FulfillTicketPenalty): Record<string, unknown> {
+  const out: Record<string, unknown> = { type: p.type };
+  if (p.applicability !== undefined) out.applicability = p.applicability;
+  if (p.isChangeable !== undefined) out.isChangeable = p.isChangeable;
+  if (p.maximumPenalty !== undefined) {
+    out.maximumPenalty = {
+      amount: p.maximumPenalty.amount,
+      currencyCode: p.maximumPenalty.currencyCode,
+    };
+  }
+  return out;
+}
+
+function buildFulfillFutureProcessingBody(f: FulfillFutureProcessing): Record<string, unknown> {
+  const out: Record<string, unknown> = { firstLineNumber: f.firstLineNumber };
+  if (f.lastLineNumber !== undefined) out.lastLineNumber = f.lastLineNumber;
+  if (f.travelerIndex !== undefined) out.travelerIndex = f.travelerIndex;
+  return out;
+}
+
+function buildFulfillNetRemitBody(n: FulfillNetRemit): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (n.netRemitCode !== undefined) out.netRemitCode = n.netRemitCode;
+  if (n.commercialAgreementReferenceCode !== undefined) {
+    out.commercialAgreementReferenceCode = n.commercialAgreementReferenceCode;
+  }
+  if (n.cashAmount !== undefined) out.cashAmount = n.cashAmount;
+  if (n.creditAmount !== undefined) out.creditAmount = n.creditAmount;
+  if (n.discountAmount !== undefined) out.discountAmount = n.discountAmount;
+  if (n.sellingFareAmount !== undefined) out.sellingFareAmount = n.sellingFareAmount;
+  if (n.tourCode !== undefined) out.tourCode = n.tourCode;
+  return out;
+}
+
+function buildFulfillMiscellaneousServiceFeeBody(
+  fee: FulfillMiscellaneousServiceFee,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (fee.overrideAmount !== undefined) out.overrideAmount = fee.overrideAmount;
+  if (fee.currencyCode !== undefined) out.currencyCode = fee.currencyCode;
+  if (fee.description !== undefined) out.description = fee.description;
+  if (fee.customerReference !== undefined) out.customerReference = fee.customerReference;
+  return out;
+}
+
+function buildFulfillPaymentMethodBody(p: FulfillPaymentMethod): Record<string, unknown> {
+  const out: Record<string, unknown> = { primaryFormOfPayment: p.primaryFormOfPayment };
+  if (p.secondaryFormOfPayment !== undefined) {
+    out.secondaryFormOfPayment = p.secondaryFormOfPayment;
+  }
+  if (p.amountOnSecondFormOfPayment !== undefined) {
+    out.amountOnSecondFormOfPayment = p.amountOnSecondFormOfPayment;
+  }
+  return out;
+}
+
+function buildFulfillFormOfPaymentBody(f: FulfillFormOfPayment): Record<string, unknown> {
+  const out: Record<string, unknown> = { type: f.type };
+  if (f.cardTypeCode !== undefined) out.cardTypeCode = f.cardTypeCode;
+  if (f.cardNumber !== undefined) out.cardNumber = f.cardNumber;
+  if (f.cardSecurityCode !== undefined) out.cardSecurityCode = f.cardSecurityCode;
+  if (f.expiryDate !== undefined) out.expiryDate = f.expiryDate;
+  if (f.extendedPayment !== undefined) out.extendedPayment = f.extendedPayment;
+  if (f.miscellaneousCreditCode !== undefined) {
+    out.miscellaneousCreditCode = f.miscellaneousCreditCode;
+  }
+  if (f.numberOfInstallments !== undefined) out.numberOfInstallments = f.numberOfInstallments;
+  if (f.airlinePlanCode !== undefined) out.airlinePlanCode = f.airlinePlanCode;
+  if (f.installmentAmount !== undefined) out.installmentAmount = f.installmentAmount;
+  if (f.manualApprovalCode !== undefined) out.manualApprovalCode = f.manualApprovalCode;
+  if (f.virtualCardCode !== undefined) out.virtualCardCode = f.virtualCardCode;
+  if (f.authentications && f.authentications.length > 0) {
+    out.authentications = f.authentications.map(buildFulfillStrongCustomerAuthenticationBody);
+  }
+  if (f.invoiceDescription !== undefined) out.invoiceDescription = f.invoiceDescription;
+  if (f.addInvoiceDescriptionPrefix !== undefined) {
+    out.addInvoiceDescriptionPrefix = f.addInvoiceDescriptionPrefix;
+  }
+  return out;
+}
+
+function buildFulfillStrongCustomerAuthenticationBody(
+  a: FulfillStrongCustomerAuthentication,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (a.channelCode !== undefined) out.channelCode = a.channelCode;
+  return out;
+}
+
+function buildFulfillTravelerBody(t: FulfillTraveler): Record<string, unknown> {
+  const out: Record<string, unknown> = { givenName: t.givenName, surname: t.surname };
+  if (t.middleName !== undefined) out.middleName = t.middleName;
+  return out;
+}
+
+function buildFulfillAgencyBody(a: FulfillAgency): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (a.address !== undefined) {
+    const addr: Record<string, unknown> = {};
+    if (a.address.street !== undefined) addr.street = a.address.street;
+    if (a.address.city !== undefined) addr.city = a.address.city;
+    if (a.address.stateProvince !== undefined) addr.stateProvince = a.address.stateProvince;
+    if (a.address.postalCode !== undefined) addr.postalCode = a.address.postalCode;
+    if (a.address.countryCode !== undefined) addr.countryCode = a.address.countryCode;
+    if (a.address.name !== undefined) addr.name = a.address.name;
+    if (a.address.freeText !== undefined) addr.freeText = a.address.freeText;
+    out.address = addr;
+  }
+  if (a.contactInfo !== undefined) {
+    const contacts: Record<string, unknown> = {};
+    if (a.contactInfo.emails && a.contactInfo.emails.length > 0) {
+      contacts.emails = [...a.contactInfo.emails];
+    }
+    if (a.contactInfo.phones && a.contactInfo.phones.length > 0) {
+      contacts.phones = [...a.contactInfo.phones];
+    }
+    if (a.contactInfo.includePhoneLabel !== undefined) {
+      contacts.includePhoneLabel = a.contactInfo.includePhoneLabel;
+    }
+    out.contactInfo = contacts;
+  }
+  return out;
+}
+
+function buildFlightReferenceBody(f: FlightReference): Record<string, unknown> {
+  return { itemId: f.itemId };
+}
+
+// ---------------------------------------------------------------------------
+// fulfillTickets helpers — response builders
+// ---------------------------------------------------------------------------
+
+function buildFulfillTicket(t: components['schemas']['FulfillTicket']): FulfillTicket {
+  const out: FulfillTicket = {
+    number: t.number,
+    date: t.date,
+    payment: buildTotalValues(t.payment),
+  };
+  if (t.isCommitted !== undefined) out.isCommitted = t.isCommitted;
+  if (t.travelerGivenName !== undefined) out.travelerGivenName = t.travelerGivenName;
+  if (t.travelerSurname !== undefined) out.travelerSurname = t.travelerSurname;
+  if (t.ticketStatusName !== undefined) out.ticketStatusName = t.ticketStatusName;
+  if (t.ticketStatusCode !== undefined) out.ticketStatusCode = t.ticketStatusCode;
+  if (t.ticketingPcc !== undefined) out.ticketingPcc = t.ticketingPcc;
+  return out;
+}
+
+function buildFulfillTicketsRequestEcho(
+  req: components['schemas']['FulfillTicketsRequest'],
+): FulfillTicketsInput {
+  const out: FulfillTicketsInput = {
+    confirmationId: req.confirmationId,
+    fulfillments: req.fulfillments.map(buildFulfillmentDetailsEcho),
+    retainAccounting: req.retainAccounting,
+    receivedFrom: req.receivedFrom,
+    generateSingleInvoice: req.generateSingleInvoice,
+    commitTicketToBookingWaitTime: req.commitTicketToBookingWaitTime,
+    acceptNegotiatedFare: req.acceptNegotiatedFare,
+    acceptPriceChanges: req.acceptPriceChanges,
+  };
+  if (req.errorHandlingPolicy !== undefined) {
+    out.errorHandlingPolicy = [...req.errorHandlingPolicy];
+  }
+  if (req.bookingSource !== undefined) out.bookingSource = req.bookingSource;
+  if (req.agency !== undefined) out.agency = buildFulfillAgencyEcho(req.agency);
+  if (req.targetPcc !== undefined) out.targetPcc = req.targetPcc;
+  if (req.designatePrinters !== undefined) {
+    out.designatePrinters = req.designatePrinters.map(buildPrinterAddressEcho);
+  }
+  if (req.formsOfPayment !== undefined) {
+    out.formsOfPayment = req.formsOfPayment.map(buildFulfillFormOfPaymentEcho);
+  }
+  if (req.travelers !== undefined) {
+    out.travelers = req.travelers.map(buildFulfillTravelerEcho);
+  }
+  if (req.backDatePriceQuoteMethod !== undefined) {
+    out.backDatePriceQuoteMethod = req.backDatePriceQuoteMethod;
+  }
+  if (req.priceQuoteExpirationMethod !== undefined) {
+    out.priceQuoteExpirationMethod = req.priceQuoteExpirationMethod;
+  }
+  if (req.notificationEmail !== undefined) {
+    out.notificationEmail = req.notificationEmail;
+  }
+  return out;
+}
+
+function buildFulfillmentDetailsEcho(
+  d: components['schemas']['FulfillmentDetails'],
+): FulfillmentDetails {
+  const out: FulfillmentDetails = {};
+  if (d.ancillaryIds !== undefined) out.ancillaryIds = [...d.ancillaryIds];
+  if (d.ticketingQualifiers !== undefined) {
+    out.ticketingQualifiers = buildFulfillTicketingQualifiersEcho(d.ticketingQualifiers);
+  }
+  if (d.serviceFee !== undefined) {
+    out.serviceFee = { ...d.serviceFee };
+  }
+  if (d.payment !== undefined) {
+    const payment: FulfillPaymentMethod = { primaryFormOfPayment: d.payment.primaryFormOfPayment };
+    if (d.payment.secondaryFormOfPayment !== undefined) {
+      payment.secondaryFormOfPayment = d.payment.secondaryFormOfPayment;
+    }
+    if (d.payment.amountOnSecondFormOfPayment !== undefined) {
+      payment.amountOnSecondFormOfPayment = d.payment.amountOnSecondFormOfPayment;
+    }
+    out.payment = payment;
+  }
+  return out;
+}
+
+function buildFulfillTicketingQualifiersEcho(
+  q: components['schemas']['FulfillQualifiers'],
+): FulfillTicketingQualifiers {
+  const out: FulfillTicketingQualifiers = {
+    priceWithTaxes: q.priceWithTaxes,
+    returnFareFlexibilityDetails: q.returnFareFlexibilityDetails,
+    isNetFareCommission: q.isNetFareCommission,
+  };
+  if (q.commissionAmount !== undefined) out.commissionAmount = q.commissionAmount;
+  if (q.commissionPercentage !== undefined) out.commissionPercentage = q.commissionPercentage;
+  if (q.endorsements !== undefined) out.endorsements = { ...q.endorsements };
+  if (q.excludeFareFocusFares !== undefined) out.excludeFareFocusFares = q.excludeFareFocusFares;
+  if (q.travelerIndices !== undefined) out.travelerIndices = [...q.travelerIndices];
+  if (q.tourCode !== undefined) out.tourCode = q.tourCode;
+  if (q.tourCodeOverrides !== undefined) out.tourCodeOverrides = q.tourCodeOverrides;
+  if (q.validatingAirlineCode !== undefined) out.validatingAirlineCode = q.validatingAirlineCode;
+  if (q.brandedFares !== undefined) {
+    out.brandedFares = q.brandedFares.map((b) => ({
+      brandCode: b.brandCode,
+      ...(b.flights !== undefined ? { flights: b.flights.map((f) => ({ itemId: f.itemId })) } : {}),
+    }));
+  }
+  if (q.exemptTaxes !== undefined) out.exemptTaxes = [...q.exemptTaxes];
+  if (q.sideTripFlights !== undefined) {
+    out.sideTripFlights = q.sideTripFlights.map((f) => ({ itemId: f.itemId }));
+  }
+  if (q.penalties !== undefined) {
+    out.penalties = q.penalties.map((p) => {
+      const tp: FulfillTicketPenalty = { type: p.type };
+      if (p.applicability !== undefined) tp.applicability = p.applicability;
+      if (p.isChangeable !== undefined) tp.isChangeable = p.isChangeable;
+      if (p.maximumPenalty !== undefined) {
+        tp.maximumPenalty = {
+          amount: p.maximumPenalty.amount,
+          currencyCode: p.maximumPenalty.currencyCode,
+        };
+      }
+      return tp;
+    });
+  }
+  if (q.priceQuoteRecordIds !== undefined) {
+    out.priceQuoteRecordIds = [...q.priceQuoteRecordIds];
+  }
+  if (q.spanishLargeFamilyDiscountLevel !== undefined) {
+    out.spanishLargeFamilyDiscountLevel = q.spanishLargeFamilyDiscountLevel;
+  }
+  if (q.specificFares !== undefined) {
+    out.specificFares = q.specificFares.map((f) => ({
+      fareBasisCode: f.fareBasisCode,
+      ...(f.flights !== undefined ? { flights: f.flights.map((x) => ({ itemId: x.itemId })) } : {}),
+    }));
+  }
+  if (q.validityDates !== undefined) {
+    out.validityDates = q.validityDates.map((v) => {
+      const vp: FulfillValidityPeriod = {};
+      if (v.startDate !== undefined) vp.startDate = v.startDate;
+      if (v.endDate !== undefined) vp.endDate = v.endDate;
+      if (v.flights !== undefined) vp.flights = v.flights.map((x) => ({ itemId: x.itemId }));
+      return vp;
+    });
+  }
+  if (q.baggageAllowance !== undefined) {
+    out.baggageAllowance = q.baggageAllowance.map((b) => {
+      const ba: FulfillBaggageAllowance = {};
+      if (b.totalWeightInKilograms !== undefined) {
+        ba.totalWeightInKilograms = b.totalWeightInKilograms;
+      }
+      if (b.baggagePieces !== undefined) ba.baggagePieces = b.baggagePieces;
+      if (b.flights !== undefined) ba.flights = b.flights.map((x) => ({ itemId: x.itemId }));
+      return ba;
+    });
+  }
+  if (q.discountApprovalCode !== undefined) out.discountApprovalCode = q.discountApprovalCode;
+  if (q.futurePricingLines !== undefined) {
+    out.futurePricingLines = q.futurePricingLines.map((f) => {
+      const fp: FulfillFutureProcessing = { firstLineNumber: f.firstLineNumber };
+      if (f.lastLineNumber !== undefined) fp.lastLineNumber = f.lastLineNumber;
+      if (f.travelerIndex !== undefined) fp.travelerIndex = f.travelerIndex;
+      return fp;
+    });
+  }
+  if (q.printDocuments !== undefined) out.printDocuments = q.printDocuments;
+  if (q.netRemit !== undefined) out.netRemit = { ...q.netRemit };
+  return out;
+}
+
+function buildFulfillAgencyEcho(a: components['schemas']['GenericAgency']): FulfillAgency {
+  const out: FulfillAgency = {};
+  if (a.address !== undefined) {
+    const addr: FulfillAgency['address'] = {};
+    const src = a.address;
+    if (src.street !== undefined) addr.street = src.street;
+    if (src.city !== undefined) addr.city = src.city;
+    if (src.stateProvince !== undefined) addr.stateProvince = src.stateProvince;
+    if (src.postalCode !== undefined) addr.postalCode = src.postalCode;
+    if (src.countryCode !== undefined) addr.countryCode = src.countryCode;
+    if (src.name !== undefined) addr.name = src.name;
+    if (src.freeText !== undefined) addr.freeText = src.freeText;
+    out.address = addr;
+  }
+  if (a.contactInfo !== undefined) {
+    const ci: FulfillAgency['contactInfo'] = {};
+    if (a.contactInfo.emails !== undefined) ci.emails = [...a.contactInfo.emails];
+    if (a.contactInfo.phones !== undefined) ci.phones = [...a.contactInfo.phones];
+    if (a.contactInfo.includePhoneLabel !== undefined) {
+      ci.includePhoneLabel = a.contactInfo.includePhoneLabel;
+    }
+    out.contactInfo = ci;
+  }
+  return out;
+}
+
+function buildPrinterAddressEcho(p: components['schemas']['PrinterAddress']): PrinterAddress {
+  const out: PrinterAddress = {};
+  if (p.profileNumber !== undefined) out.profileNumber = p.profileNumber;
+  if (p.hardcopy !== undefined) {
+    const h: NonNullable<PrinterAddress['hardcopy']> = {};
+    if (p.hardcopy.address !== undefined) h.address = p.hardcopy.address;
+    if (p.hardcopy.spacing !== undefined) h.spacing = p.hardcopy.spacing;
+    out.hardcopy = h;
+  }
+  if (p.invoiceItinerary !== undefined) out.invoiceItinerary = p.invoiceItinerary;
+  if (p.ticket !== undefined) {
+    const t: NonNullable<PrinterAddress['ticket']> = {};
+    if (p.ticket.address !== undefined) t.address = p.ticket.address;
+    if (p.ticket.countryCode !== undefined) t.countryCode = p.ticket.countryCode;
+    out.ticket = t;
+  }
+  return out;
+}
+
+function buildFulfillFormOfPaymentEcho(
+  f: components['schemas']['FulfillFormOfPayment'],
+): FulfillFormOfPayment {
+  const out: FulfillFormOfPayment = { type: f.type };
+  if (f.cardTypeCode !== undefined) out.cardTypeCode = f.cardTypeCode;
+  if (f.cardNumber !== undefined) out.cardNumber = f.cardNumber;
+  if (f.cardSecurityCode !== undefined) out.cardSecurityCode = f.cardSecurityCode;
+  if (f.expiryDate !== undefined) out.expiryDate = f.expiryDate;
+  if (f.extendedPayment !== undefined) out.extendedPayment = f.extendedPayment;
+  if (f.miscellaneousCreditCode !== undefined) {
+    out.miscellaneousCreditCode = f.miscellaneousCreditCode;
+  }
+  if (f.numberOfInstallments !== undefined) out.numberOfInstallments = f.numberOfInstallments;
+  if (f.airlinePlanCode !== undefined) out.airlinePlanCode = f.airlinePlanCode;
+  if (f.installmentAmount !== undefined) out.installmentAmount = f.installmentAmount;
+  if (f.manualApprovalCode !== undefined) out.manualApprovalCode = f.manualApprovalCode;
+  if (f.virtualCardCode !== undefined) out.virtualCardCode = f.virtualCardCode;
+  if (f.authentications !== undefined) {
+    out.authentications = f.authentications.map((a) => ({ ...a }));
+  }
+  if (f.invoiceDescription !== undefined) out.invoiceDescription = f.invoiceDescription;
+  if (f.addInvoiceDescriptionPrefix !== undefined) {
+    out.addInvoiceDescriptionPrefix = f.addInvoiceDescriptionPrefix;
+  }
+  return out;
+}
+
+function buildFulfillTravelerEcho(t: components['schemas']['TravelerName']): FulfillTraveler {
+  const out: FulfillTraveler = { givenName: t.givenName, surname: t.surname };
+  if (t.middleName !== undefined) out.middleName = t.middleName;
+  return out;
 }
 
 function ensureTrailingSlash(url: string): string {

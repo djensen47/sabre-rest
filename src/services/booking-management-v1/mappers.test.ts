@@ -4,16 +4,19 @@ import type { SabreResponse } from '../../http/types.js';
 import {
   fromCancelBookingResponse,
   fromCreateBookingResponse,
+  fromFulfillTicketsResponse,
   fromGetBookingResponse,
   fromModifyBookingResponse,
   toCancelBookingRequest,
   toCreateBookingRequest,
+  toFulfillTicketsRequest,
   toGetBookingRequest,
   toModifyBookingRequest,
 } from './mappers.js';
 import type {
   CancelBookingInput,
   CreateBookingInput,
+  FulfillTicketsInput,
   GetBookingInput,
   ModifyBookingInput,
 } from './types.js';
@@ -1071,5 +1074,350 @@ describe('fromCancelBookingResponse', () => {
 
   it('throws SabreParseError for array body', () => {
     expect(() => fromCancelBookingResponse(okResponse('[]'))).toThrow(SabreParseError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toFulfillTicketsRequest
+// ---------------------------------------------------------------------------
+
+const minimalFulfillInput: FulfillTicketsInput = {
+  confirmationId: 'GLEBNY',
+  fulfillments: [{}],
+};
+
+describe('toFulfillTicketsRequest', () => {
+  it('builds a POST to the fulfillFlightTickets path with JSON headers', () => {
+    const req = toFulfillTicketsRequest('https://api.cert.platform.sabre.com', minimalFulfillInput);
+    expect(req.method).toBe('POST');
+    expect(req.url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/fulfillFlightTickets');
+    expect(req.headers.Accept).toBe('application/json');
+    expect(req.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('handles a base URL with a trailing slash', () => {
+    const req = toFulfillTicketsRequest(
+      'https://api.cert.platform.sabre.com/',
+      minimalFulfillInput,
+    );
+    expect(req.url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/fulfillFlightTickets');
+  });
+
+  it('sends all spec-defined defaults when caller omits them', () => {
+    const req = toFulfillTicketsRequest('https://api.cert.platform.sabre.com', minimalFulfillInput);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.confirmationId).toBe('GLEBNY');
+    expect(body.fulfillments).toEqual([{}]);
+    expect(body.retainAccounting).toBe(false);
+    expect(body.receivedFrom).toBe('Fulfill Flight Tickets');
+    expect(body.generateSingleInvoice).toBe(false);
+    expect(body.commitTicketToBookingWaitTime).toBe(0);
+    expect(body.acceptNegotiatedFare).toBe(true);
+    expect(body.acceptPriceChanges).toBe(true);
+  });
+
+  it('allows overriding defaulted fields', () => {
+    const input: FulfillTicketsInput = {
+      ...minimalFulfillInput,
+      retainAccounting: true,
+      receivedFrom: 'My App',
+      generateSingleInvoice: true,
+      commitTicketToBookingWaitTime: 3000,
+      acceptNegotiatedFare: false,
+      acceptPriceChanges: false,
+    };
+    const req = toFulfillTicketsRequest('https://api.cert.platform.sabre.com', input);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.retainAccounting).toBe(true);
+    expect(body.receivedFrom).toBe('My App');
+    expect(body.generateSingleInvoice).toBe(true);
+    expect(body.commitTicketToBookingWaitTime).toBe(3000);
+    expect(body.acceptNegotiatedFare).toBe(false);
+    expect(body.acceptPriceChanges).toBe(false);
+  });
+
+  it('omits optional fields when not provided', () => {
+    const req = toFulfillTicketsRequest('https://api.cert.platform.sabre.com', minimalFulfillInput);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect('errorHandlingPolicy' in body).toBe(false);
+    expect('bookingSource' in body).toBe(false);
+    expect('agency' in body).toBe(false);
+    expect('targetPcc' in body).toBe(false);
+    expect('designatePrinters' in body).toBe(false);
+    expect('formsOfPayment' in body).toBe(false);
+    expect('travelers' in body).toBe(false);
+    expect('backDatePriceQuoteMethod' in body).toBe(false);
+    expect('priceQuoteExpirationMethod' in body).toBe(false);
+    expect('notificationEmail' in body).toBe(false);
+  });
+
+  it('includes optional top-level fields when provided', () => {
+    const input: FulfillTicketsInput = {
+      ...minimalFulfillInput,
+      errorHandlingPolicy: ['ALLOW_PARTIAL_FULFILLMENT'],
+      bookingSource: 'SABRE',
+      targetPcc: 'G7HE',
+      notificationEmail: 'ETICKET',
+      backDatePriceQuoteMethod: 'Reprice',
+      priceQuoteExpirationMethod: 'Quit',
+    };
+    const req = toFulfillTicketsRequest('https://api.cert.platform.sabre.com', input);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.errorHandlingPolicy).toEqual(['ALLOW_PARTIAL_FULFILLMENT']);
+    expect(body.bookingSource).toBe('SABRE');
+    expect(body.targetPcc).toBe('G7HE');
+    expect(body.notificationEmail).toBe('ETICKET');
+    expect(body.backDatePriceQuoteMethod).toBe('Reprice');
+    expect(body.priceQuoteExpirationMethod).toBe('Quit');
+  });
+
+  it('builds the travelers list with given/middle/surname', () => {
+    const input: FulfillTicketsInput = {
+      ...minimalFulfillInput,
+      travelers: [
+        { givenName: 'JOHN', middleName: 'Q', surname: 'DOE' },
+        { givenName: 'JANE', surname: 'SMITH' },
+      ],
+    };
+    const req = toFulfillTicketsRequest('https://api.cert.platform.sabre.com', input);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.travelers).toEqual([
+      { givenName: 'JOHN', middleName: 'Q', surname: 'DOE' },
+      { givenName: 'JANE', surname: 'SMITH' },
+    ]);
+  });
+
+  it('builds a forms-of-payment list with card details', () => {
+    const input: FulfillTicketsInput = {
+      ...minimalFulfillInput,
+      formsOfPayment: [
+        {
+          type: 'PAYMENTCARD',
+          cardTypeCode: 'VI',
+          cardNumber: '4537156488578956',
+          expiryDate: '2027-12',
+          authentications: [{ channelCode: 'EC' }],
+        },
+      ],
+    };
+    const req = toFulfillTicketsRequest('https://api.cert.platform.sabre.com', input);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    const fops = body.formsOfPayment as Record<string, unknown>[];
+    expect(fops[0]?.type).toBe('PAYMENTCARD');
+    expect(fops[0]?.cardTypeCode).toBe('VI');
+    expect(fops[0]?.cardNumber).toBe('4537156488578956');
+    expect(fops[0]?.expiryDate).toBe('2027-12');
+    expect(fops[0]?.authentications).toEqual([{ channelCode: 'EC' }]);
+  });
+
+  it('sends spec defaults inside ticketingQualifiers when present', () => {
+    const input: FulfillTicketsInput = {
+      confirmationId: 'GLEBNY',
+      fulfillments: [
+        {
+          ticketingQualifiers: {
+            tourCode: 'TEST1212',
+            brandedFares: [{ brandCode: 'CP', flights: [{ itemId: '1' }] }],
+          },
+        },
+      ],
+    };
+    const req = toFulfillTicketsRequest('https://api.cert.platform.sabre.com', input);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    const fulfillments = body.fulfillments as Record<string, unknown>[];
+    const qualifiers = fulfillments[0]?.ticketingQualifiers as Record<string, unknown>;
+    expect(qualifiers.priceWithTaxes).toBe(true);
+    expect(qualifiers.returnFareFlexibilityDetails).toBe(false);
+    expect(qualifiers.isNetFareCommission).toBe(false);
+    expect(qualifiers.tourCode).toBe('TEST1212');
+    expect(qualifiers.brandedFares).toEqual([{ brandCode: 'CP', flights: [{ itemId: '1' }] }]);
+  });
+
+  it('omits the ticketingQualifiers object when the fulfillment has none', () => {
+    const req = toFulfillTicketsRequest('https://api.cert.platform.sabre.com', minimalFulfillInput);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    const fulfillments = body.fulfillments as Record<string, unknown>[];
+    expect('ticketingQualifiers' in (fulfillments[0] ?? {})).toBe(false);
+  });
+
+  it('builds a full penalty with amount cap', () => {
+    const input: FulfillTicketsInput = {
+      confirmationId: 'GLEBNY',
+      fulfillments: [
+        {
+          ticketingQualifiers: {
+            penalties: [
+              {
+                type: 'Refundable',
+                applicability: 'BEFORE_DEPARTURE',
+                maximumPenalty: { amount: '100.00', currencyCode: 'USD' },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const req = toFulfillTicketsRequest('https://api.cert.platform.sabre.com', input);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    const fulfillments = body.fulfillments as Record<string, unknown>[];
+    const qualifiers = fulfillments[0]?.ticketingQualifiers as Record<string, unknown>;
+    const penalties = qualifiers.penalties as Record<string, unknown>[];
+    expect(penalties[0]).toEqual({
+      type: 'Refundable',
+      applicability: 'BEFORE_DEPARTURE',
+      maximumPenalty: { amount: '100.00', currencyCode: 'USD' },
+    });
+  });
+
+  it('builds an agency with nested address and contacts', () => {
+    const input: FulfillTicketsInput = {
+      ...minimalFulfillInput,
+      agency: {
+        address: {
+          street: '1230 Ellen Ave',
+          city: 'Dallas',
+          countryCode: 'US',
+          name: 'Sabre Travel',
+        },
+        contactInfo: {
+          emails: ['travel@sabre.com'],
+          phones: ['+1-555-123-4567'],
+          includePhoneLabel: true,
+        },
+      },
+    };
+    const req = toFulfillTicketsRequest('https://api.cert.platform.sabre.com', input);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    const agency = body.agency as Record<string, unknown>;
+    expect(agency.address).toEqual({
+      street: '1230 Ellen Ave',
+      city: 'Dallas',
+      countryCode: 'US',
+      name: 'Sabre Travel',
+    });
+    expect(agency.contactInfo).toEqual({
+      emails: ['travel@sabre.com'],
+      phones: ['+1-555-123-4567'],
+      includePhoneLabel: true,
+    });
+  });
+
+  it('builds designatePrinters with profile and ticket details', () => {
+    const input: FulfillTicketsInput = {
+      ...minimalFulfillInput,
+      designatePrinters: [
+        { profileNumber: 1 },
+        { ticket: { address: 'AB12CD', countryCode: 'US' } },
+      ],
+    };
+    const req = toFulfillTicketsRequest('https://api.cert.platform.sabre.com', input);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.designatePrinters).toEqual([
+      { profileNumber: 1 },
+      { ticket: { address: 'AB12CD', countryCode: 'US' } },
+    ]);
+  });
+
+  it('omits empty arrays and preserves defaulted booleans', () => {
+    const input: FulfillTicketsInput = {
+      ...minimalFulfillInput,
+      errorHandlingPolicy: [],
+      designatePrinters: [],
+      formsOfPayment: [],
+      travelers: [],
+    };
+    const req = toFulfillTicketsRequest('https://api.cert.platform.sabre.com', input);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect('errorHandlingPolicy' in body).toBe(false);
+    expect('designatePrinters' in body).toBe(false);
+    expect('formsOfPayment' in body).toBe(false);
+    expect('travelers' in body).toBe(false);
+    expect(body.retainAccounting).toBe(false);
+    expect(body.acceptNegotiatedFare).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fromFulfillTicketsResponse
+// ---------------------------------------------------------------------------
+
+describe('fromFulfillTicketsResponse', () => {
+  it('parses a populated response with tickets', () => {
+    const result = fromFulfillTicketsResponse(
+      okResponse({
+        timestamp: '2026-05-01T12:00:00Z',
+        tickets: [
+          {
+            number: '0167489825830',
+            date: '2026-05-01',
+            travelerGivenName: 'John',
+            travelerSurname: 'Smith',
+            payment: { total: '150.00', currencyCode: 'USD' },
+            ticketStatusName: 'Issued',
+            ticketStatusCode: 'TE',
+            ticketingPcc: 'G7HE',
+          },
+        ],
+      }),
+    );
+    expect(result.timestamp).toBe('2026-05-01T12:00:00Z');
+    expect(result.tickets?.[0]?.number).toBe('0167489825830');
+    expect(result.tickets?.[0]?.payment.total).toBe('150.00');
+    expect(result.tickets?.[0]?.payment.currencyCode).toBe('USD');
+    expect(result.tickets?.[0]?.ticketStatusName).toBe('Issued');
+  });
+
+  it('echoes the request back through the output type', () => {
+    const result = fromFulfillTicketsResponse(
+      okResponse({
+        timestamp: '2026-05-01T12:00:00Z',
+        request: {
+          confirmationId: 'GLEBNY',
+          fulfillments: [{}],
+          retainAccounting: false,
+          receivedFrom: 'Fulfill Flight Tickets',
+          generateSingleInvoice: false,
+          commitTicketToBookingWaitTime: 0,
+          acceptNegotiatedFare: true,
+          acceptPriceChanges: true,
+          bookingSource: 'SABRE',
+          targetPcc: 'G7HE',
+        },
+      }),
+    );
+    expect(result.request?.confirmationId).toBe('GLEBNY');
+    expect(result.request?.bookingSource).toBe('SABRE');
+    expect(result.request?.targetPcc).toBe('G7HE');
+    expect(result.request?.retainAccounting).toBe(false);
+  });
+
+  it('maps the errors array', () => {
+    const result = fromFulfillTicketsResponse(
+      okResponse({
+        errors: [{ category: 'BAD_REQUEST', type: 'INVALID_CONFIRMATION_ID' }],
+      }),
+    );
+    expect(result.errors?.[0]?.category).toBe('BAD_REQUEST');
+    expect(result.errors?.[0]?.type).toBe('INVALID_CONFIRMATION_ID');
+  });
+
+  it('maps an empty response body', () => {
+    const result = fromFulfillTicketsResponse(okResponse({}));
+    expect(result.timestamp).toBeUndefined();
+    expect(result.tickets).toBeUndefined();
+    expect(result.request).toBeUndefined();
+    expect(result.errors).toBeUndefined();
+  });
+
+  it('throws SabreParseError for non-JSON body', () => {
+    expect(() => fromFulfillTicketsResponse(okResponse('not json'))).toThrow(SabreParseError);
+  });
+
+  it('throws SabreParseError for null body', () => {
+    expect(() => fromFulfillTicketsResponse(okResponse('null'))).toThrow(SabreParseError);
+  });
+
+  it('throws SabreParseError for array body', () => {
+    expect(() => fromFulfillTicketsResponse(okResponse('[]'))).toThrow(SabreParseError);
   });
 });
