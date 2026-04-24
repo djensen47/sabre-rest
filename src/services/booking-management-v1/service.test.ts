@@ -7,6 +7,7 @@ import type {
   FulfillTicketsInput,
   GetBookingInput,
   ModifyBookingInput,
+  VoidTicketsInput,
 } from './types.js';
 
 const fakeProvider = (): TokenProvider => ({
@@ -478,6 +479,88 @@ describe('BookingManagementV1Service.fulfillTickets', () => {
     await expect(
       client.bookingManagementV1.fulfillTickets(minimalFulfillInput),
     ).rejects.toMatchObject({
+      name: 'SabreApiResponseError',
+      statusCode: 400,
+    });
+  });
+});
+
+describe('BookingManagementV1Service.voidTickets', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const minimalVoidInput: VoidTicketsInput = {
+    confirmationId: 'GLEBNY',
+    tickets: ['0167489825830'],
+  };
+
+  const voidResponseBody = {
+    timestamp: '2026-05-01T12:00:00Z',
+    voidedTickets: ['0167489825830'],
+  };
+
+  it('POSTs to the voidFlightTickets URL with bearer auth and JSON headers', async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      () =>
+        new Response(JSON.stringify(voidResponseBody), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createSabreClient({
+      baseUrl: 'https://api.cert.platform.sabre.com',
+      auth: fakeProvider(),
+    });
+
+    const result = await client.bookingManagementV1.voidTickets(minimalVoidInput);
+
+    expect(result.timestamp).toBe('2026-05-01T12:00:00Z');
+    expect(result.voidedTickets).toEqual(['0167489825830']);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/voidFlightTickets');
+
+    const requestInit = init as RequestInit;
+    expect(requestInit.method).toBe('POST');
+    const headers = requestInit.headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer TEST_TOKEN');
+    expect(headers.Accept).toBe('application/json');
+    expect(headers['Content-Type']).toBe('application/json');
+
+    const body = JSON.parse((requestInit.body as string) ?? '{}') as Record<string, unknown>;
+    expect(body.confirmationId).toBe('GLEBNY');
+    expect(body.tickets).toEqual(['0167489825830']);
+    expect(body.voidNonElectronicTickets).toBe(false);
+    expect(body.errorHandlingPolicy).toBe('HALT_ON_ERROR');
+  });
+
+  it('surfaces a non-2xx response as SabreApiResponseError', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(
+        () =>
+          new Response(
+            JSON.stringify({
+              errors: [{ category: 'BAD_REQUEST', type: 'TICKET_NOT_VOIDABLE' }],
+            }),
+            { status: 400, statusText: 'Bad Request' },
+          ),
+      ),
+    );
+
+    const client = createSabreClient({
+      baseUrl: 'https://api.cert.platform.sabre.com',
+      auth: fakeProvider(),
+    });
+
+    await expect(client.bookingManagementV1.voidTickets(minimalVoidInput)).rejects.toMatchObject({
       name: 'SabreApiResponseError',
       statusCode: 400,
     });

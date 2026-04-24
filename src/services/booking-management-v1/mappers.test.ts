@@ -7,11 +7,13 @@ import {
   fromFulfillTicketsResponse,
   fromGetBookingResponse,
   fromModifyBookingResponse,
+  fromVoidTicketsResponse,
   toCancelBookingRequest,
   toCreateBookingRequest,
   toFulfillTicketsRequest,
   toGetBookingRequest,
   toModifyBookingRequest,
+  toVoidTicketsRequest,
 } from './mappers.js';
 import type {
   CancelBookingInput,
@@ -19,6 +21,7 @@ import type {
   FulfillTicketsInput,
   GetBookingInput,
   ModifyBookingInput,
+  VoidTicketsInput,
 } from './types.js';
 
 const okResponse = (body: unknown): SabreResponse => ({
@@ -1419,5 +1422,151 @@ describe('fromFulfillTicketsResponse', () => {
 
   it('throws SabreParseError for array body', () => {
     expect(() => fromFulfillTicketsResponse(okResponse('[]'))).toThrow(SabreParseError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toVoidTicketsRequest
+// ---------------------------------------------------------------------------
+
+const minimalVoidInput: VoidTicketsInput = {
+  confirmationId: 'GLEBNY',
+  tickets: ['0167489825830'],
+};
+
+describe('toVoidTicketsRequest', () => {
+  it('builds a POST to the voidFlightTickets path with JSON headers', () => {
+    const req = toVoidTicketsRequest('https://api.cert.platform.sabre.com', minimalVoidInput);
+    expect(req.method).toBe('POST');
+    expect(req.url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/voidFlightTickets');
+    expect(req.headers.Accept).toBe('application/json');
+    expect(req.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('handles a base URL with a trailing slash', () => {
+    const req = toVoidTicketsRequest('https://api.cert.platform.sabre.com/', minimalVoidInput);
+    expect(req.url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/voidFlightTickets');
+  });
+
+  it('sends defaults for voidNonElectronicTickets and errorHandlingPolicy', () => {
+    const req = toVoidTicketsRequest('https://api.cert.platform.sabre.com', minimalVoidInput);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.voidNonElectronicTickets).toBe(false);
+    expect(body.errorHandlingPolicy).toBe('HALT_ON_ERROR');
+    expect(body.tickets).toEqual(['0167489825830']);
+    expect(body.confirmationId).toBe('GLEBNY');
+  });
+
+  it('allows overriding defaulted fields', () => {
+    const input: VoidTicketsInput = {
+      ...minimalVoidInput,
+      voidNonElectronicTickets: true,
+      errorHandlingPolicy: 'ALLOW_PARTIAL_CANCEL',
+    };
+    const req = toVoidTicketsRequest('https://api.cert.platform.sabre.com', input);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.voidNonElectronicTickets).toBe(true);
+    expect(body.errorHandlingPolicy).toBe('ALLOW_PARTIAL_CANCEL');
+  });
+
+  it('omits optional fields when not provided', () => {
+    const req = toVoidTicketsRequest('https://api.cert.platform.sabre.com', {
+      confirmationId: 'GLEBNY',
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect('tickets' in body).toBe(false);
+    expect('targetPcc' in body).toBe(false);
+    expect('receivedFrom' in body).toBe(false);
+    expect('notification' in body).toBe(false);
+    expect('designatePrinters' in body).toBe(false);
+  });
+
+  it('omits tickets when the array is empty', () => {
+    const req = toVoidTicketsRequest('https://api.cert.platform.sabre.com', {
+      confirmationId: 'GLEBNY',
+      tickets: [],
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect('tickets' in body).toBe(false);
+  });
+
+  it('includes notification and designatePrinters when provided', () => {
+    const input: VoidTicketsInput = {
+      confirmationId: 'GLEBNY',
+      notification: { email: 'ETICKET' },
+      designatePrinters: [{ profileNumber: 2 }],
+      targetPcc: 'G7HE',
+      receivedFrom: 'My App',
+    };
+    const req = toVoidTicketsRequest('https://api.cert.platform.sabre.com', input);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.notification).toEqual({ email: 'ETICKET' });
+    expect(body.designatePrinters).toEqual([{ profileNumber: 2 }]);
+    expect(body.targetPcc).toBe('G7HE');
+    expect(body.receivedFrom).toBe('My App');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fromVoidTicketsResponse
+// ---------------------------------------------------------------------------
+
+describe('fromVoidTicketsResponse', () => {
+  it('parses a populated response with voidedTickets', () => {
+    const result = fromVoidTicketsResponse(
+      okResponse({
+        timestamp: '2026-05-01T12:00:00Z',
+        voidedTickets: ['0167489825830', '0167489825831'],
+      }),
+    );
+    expect(result.timestamp).toBe('2026-05-01T12:00:00Z');
+    expect(result.voidedTickets).toEqual(['0167489825830', '0167489825831']);
+  });
+
+  it('echoes the request including defaulted fields', () => {
+    const result = fromVoidTicketsResponse(
+      okResponse({
+        request: {
+          confirmationId: 'GLEBNY',
+          tickets: ['0167489825830'],
+          voidNonElectronicTickets: false,
+          errorHandlingPolicy: 'HALT_ON_ERROR',
+        },
+      }),
+    );
+    expect(result.request?.confirmationId).toBe('GLEBNY');
+    expect(result.request?.tickets).toEqual(['0167489825830']);
+    expect(result.request?.voidNonElectronicTickets).toBe(false);
+    expect(result.request?.errorHandlingPolicy).toBe('HALT_ON_ERROR');
+  });
+
+  it('maps the errors array', () => {
+    const result = fromVoidTicketsResponse(
+      okResponse({
+        errors: [{ category: 'BAD_REQUEST', type: 'TICKET_NOT_VOIDABLE' }],
+      }),
+    );
+    expect(result.errors?.[0]?.category).toBe('BAD_REQUEST');
+    expect(result.errors?.[0]?.type).toBe('TICKET_NOT_VOIDABLE');
+  });
+
+  it('maps an empty response body', () => {
+    const result = fromVoidTicketsResponse(okResponse({}));
+    expect(result.timestamp).toBeUndefined();
+    expect(result.voidedTickets).toBeUndefined();
+    expect(result.request).toBeUndefined();
+    expect(result.errors).toBeUndefined();
+  });
+
+  it('throws SabreParseError for non-JSON body', () => {
+    expect(() => fromVoidTicketsResponse(okResponse('not json'))).toThrow(SabreParseError);
+  });
+
+  it('throws SabreParseError for null body', () => {
+    expect(() => fromVoidTicketsResponse(okResponse('null'))).toThrow(SabreParseError);
+  });
+
+  it('throws SabreParseError for array body', () => {
+    expect(() => fromVoidTicketsResponse(okResponse('[]'))).toThrow(SabreParseError);
   });
 });

@@ -12,6 +12,8 @@ import type {
   GetBookingOutput,
   ModifyBookingInput,
   ModifyBookingOutput,
+  VoidTicketsInput,
+  VoidTicketsOutput,
 } from './types.js';
 
 /**
@@ -28,6 +30,7 @@ import type {
  *     - `modifyBooking` (`POST /v1/trip/orders/modifyBooking`)
  *     - `cancelBooking` (`POST /v1/trip/orders/cancelBooking`)
  *     - `fulfillTickets` (`POST /v1/trip/orders/fulfillFlightTickets`)
+ *     - `voidTickets` (`POST /v1/trip/orders/voidFlightTickets`)
  *   - Docs: https://developer.sabre.com/docs/rest_apis/trip/orders/booking_management
  *
  * Construct via {@link createSabreClient}; do not implement this interface
@@ -111,6 +114,24 @@ export interface BookingManagementV1Service {
    *   errors Sabre returned.
    */
   fulfillTickets(input: FulfillTicketsInput): Promise<FulfillTicketsOutput>;
+
+  /**
+   * Void flight tickets and Electronic Miscellaneous Documents (EMDs)
+   * by ticket number.
+   *
+   * Supply either a `confirmationId` (void every ticket on the
+   * booking) or a `tickets` list (void specific tickets), or both to
+   * scope. Up to 12 ticket numbers per call. The spec-defined default
+   * for `voidNonElectronicTickets` (`false`) is always sent on the
+   * wire; `errorHandlingPolicy` defaults to `HALT_ON_ERROR` to match
+   * `cancelBooking`.
+   *
+   * @param input Voiding criteria. At minimum, supply either
+   *   `confirmationId` or `tickets` so Sabre can resolve the scope.
+   * @returns Successfully voided ticket numbers, the echoed request,
+   *   and any errors Sabre returned.
+   */
+  voidTickets(input: VoidTicketsInput): Promise<VoidTicketsOutput>;
 }
 
 /**
@@ -155,5 +176,11 @@ export class DefaultBookingManagementV1Service implements BookingManagementV1Ser
     const req = mappers.toFulfillTicketsRequest(this.#baseUrl, input);
     const res = await this.#request(req);
     return mappers.fromFulfillTicketsResponse(res);
+  }
+
+  async voidTickets(input: VoidTicketsInput): Promise<VoidTicketsOutput> {
+    const req = mappers.toVoidTicketsRequest(this.#baseUrl, input);
+    const res = await this.#request(req);
+    return mappers.fromVoidTicketsResponse(res);
   }
 }
