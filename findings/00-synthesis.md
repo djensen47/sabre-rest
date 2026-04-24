@@ -46,112 +46,113 @@ list. This is the source of truth for the implementation phase
 
 ## Punch list (prioritized)
 
+Checkbox marks shipping status. PR number appears next to items that
+have landed on `main`.
+
 ### Tier 1 — must-fix
 
-**T1.1. Extract `ensureTrailingSlash` to a shared utility.**
-- Source: D1 #1.
-- Where: all 8 services' `mappers.ts` define this 3-line pure
-  function identically.
-- Action: extract to `src/http/ensure-trailing-slash.ts`, import in
-  each mapper, delete the local copies.
-- Risk: minimal — pure function, no per-service variation.
-- Estimated PR size: small (8 file edits + 1 new file + 1 test).
+- [x] **T1.1. Extract `ensureTrailingSlash` to a shared utility.** — shipped in #66.
+  - Source: D1 #1.
+  - Where: all 8 services' `mappers.ts` define this 3-line pure
+    function identically.
+  - Action: extract to `src/http/ensure-trailing-slash.ts`, import in
+    each mapper, delete the local copies.
+  - Risk: minimal — pure function, no per-service variation.
+  - Estimated PR size: small (8 file edits + 1 new file + 1 test).
 
 ### Tier 2 — should-fix
 
-**T2.1. Extract `okResponse` test helper to a shared test util.**
-- Source: D1 #2.
-- Where: all 8 services' `mappers.test.ts` (line numbers in D1 file).
-- Action: extract to `src/http/test-utils.ts` (or `src/testing.ts`),
-  import in each test file, delete local copies.
-- Risk: minimal — test-only code.
-- Estimated PR size: small (8 test file edits + 1 new file).
+- [ ] **T2.1. Extract `okResponse` test helper to a shared test util.**
+  - Source: D1 #2.
+  - Where: all 8 services' `mappers.test.ts` (line numbers in D1 file).
+  - Action: extract to `src/http/test-utils.ts` (or `src/testing.ts`),
+    import in each test file, delete local copies.
+  - Risk: minimal — test-only code.
+  - Estimated PR size: small (8 test file edits + 1 new file).
 
-**T2.2. Document the BFM/Revalidate intentional type duplication.**
-- Source: D4 #1, with `$ref` verification (above) confirming
-  independent specs.
-- Where: top of `bargain-finder-max-v5/types.ts` and
-  `revalidate-itinerary-v5/types.ts`.
-- Action: add a doc comment explaining that the 14 structurally
-  identical types (PassengerCount, PassengerFare, PricedItinerary,
-  FareComponent, FareComponentSegment, Tax, BaggageAllowance,
-  BaggageCharge, ItineraryLeg, FlightSegment, SegmentEndpoint,
-  TotalFare, PointOfSale, FareOffer, SabreMessage) are intentionally
-  duplicated because each spec defines them as independent inline
-  schemas. Note that diverging shapes are an explicit possibility,
-  not a bug. Reference `docs/architecture.md` Public type design
-  rule #1.
-- Risk: doc-only, zero behavior change.
-- Estimated PR size: small (2 file edits, comment blocks only).
+- [ ] **T2.2. Document the BFM/Revalidate intentional type duplication.**
+  - Source: D4 #1, with `$ref` verification (above) confirming
+    independent specs.
+  - Where: top of `bargain-finder-max-v5/types.ts` and
+    `revalidate-itinerary-v5/types.ts`.
+  - Action: add a doc comment explaining that the 14 structurally
+    identical types (PassengerCount, PassengerFare, PricedItinerary,
+    FareComponent, FareComponentSegment, Tax, BaggageAllowance,
+    BaggageCharge, ItineraryLeg, FlightSegment, SegmentEndpoint,
+    TotalFare, PointOfSale, FareOffer, SabreMessage) are intentionally
+    duplicated because each spec defines them as independent inline
+    schemas. Note that diverging shapes are an explicit possibility,
+    not a bug. Reference `docs/architecture.md` Public type design
+    rule #1.
+  - Risk: doc-only, zero behavior change.
+  - Estimated PR size: small (2 file edits, comment blocks only).
 
-**T2.3. Document the assertions-module rationale.**
-- Source: D5 #1 + D8 #1 (combined).
-- Where: top of `booking-management-v1/assertions.ts`.
-- Action: add a doc comment explaining that this module exists
-  because Sabre booking responses can return HTTP 200 with hard
-  failures in `errors[]` — a quirk specific to this API. Document
-  the criterion under which other services should add an analogous
-  module ("only when the upstream API has a similar
-  success-status-with-failure-payload pattern"). This closes the
-  "is this drift?" question without scaffolding empty assertion
-  files in the other 7 services.
-- Risk: doc-only, zero behavior change.
-- Estimated PR size: tiny (1 file edit, comment block only).
+- [ ] **T2.3. Document the assertions-module rationale.**
+  - Source: D5 #1 + D8 #1 (combined).
+  - Where: top of `booking-management-v1/assertions.ts`.
+  - Action: add a doc comment explaining that this module exists
+    because Sabre booking responses can return HTTP 200 with hard
+    failures in `errors[]` — a quirk specific to this API. Document
+    the criterion under which other services should add an analogous
+    module ("only when the upstream API has a similar
+    success-status-with-failure-payload pattern"). This closes the
+    "is this drift?" question without scaffolding empty assertion
+    files in the other 7 services.
+  - Risk: doc-only, zero behavior change.
+  - Estimated PR size: tiny (1 file edit, comment block only).
 
-**T2.4. Standardize JSON-parse error tests across services.**
-- Source: D8 #2.
-- Where: each service's `mappers.test.ts`.
-- Action: for each service, add the missing parse-error categories
-  (non-JSON string body, null, array) per D8's matrix. Aim for the
-  same 3-4 negative-path tests per service.
-- Risk: low — additive tests only.
-- Estimated PR size: small-medium (~8 test files, ~3 tests each).
+- [ ] **T2.4. Standardize JSON-parse error tests across services.**
+  - Source: D8 #2.
+  - Where: each service's `mappers.test.ts`.
+  - Action: for each service, add the missing parse-error categories
+    (non-JSON string body, null, array) per D8's matrix. Aim for the
+    same 3-4 negative-path tests per service.
+  - Risk: low — additive tests only.
+  - Estimated PR size: small-medium (~8 test files, ~3 tests each).
 
 ### Tier 3 — nice-to-have
 
-**T3.1. Document the mapper function naming convention.**
-- Source: D5 #2.
-- Where: `docs/architecture.md` (mapper section).
-- Action: add a paragraph explaining that mapper function names
-  follow the operation's natural verb/noun (e.g., `toLookupRequest`,
-  `toCreateBookingRequest`) rather than a mechanical pattern.
+- [ ] **T3.1. Document the mapper function naming convention.**
+  - Source: D5 #2.
+  - Where: `docs/architecture.md` (mapper section).
+  - Action: add a paragraph explaining that mapper function names
+    follow the operation's natural verb/noun (e.g., `toLookupRequest`,
+    `toCreateBookingRequest`) rather than a mechanical pattern.
 
-**T3.2. Document the request-input optionality variance.**
-- Source: D5 #3.
-- Where: existing service-method JSDoc already covers this. D5
-  flagged it as informational only ("no fix needed"). Defer; could
-  drop entirely.
+- [ ] **T3.2. Document the request-input optionality variance.**
+  - Source: D5 #3.
+  - Where: existing service-method JSDoc already covers this. D5
+    flagged it as informational only ("no fix needed"). Defer; could
+    drop entirely.
 
-**T3.3. Thicken booking-management-v1 service-level tests.**
-- Source: D8 #3.
-- Where: `booking-management-v1/service.test.ts`.
-- Action: add edge-case tests at the service level for each of the
-  8 operations (currently ~2 tests per operation). Mapper tests
-  carry the bulk of coverage so this is a small marginal gain.
+- [ ] **T3.3. Thicken booking-management-v1 service-level tests.**
+  - Source: D8 #3.
+  - Where: `booking-management-v1/service.test.ts`.
+  - Action: add edge-case tests at the service level for each of the
+    8 operations (currently ~2 tests per operation). Mapper tests
+    carry the bulk of coverage so this is a small marginal gain.
 
-**T3.4. Document booking's stricter array-rejection.**
-- Source: D9 #1.
-- Where: doc comment in `booking-management-v1/mappers.ts` near the
-  `Array.isArray()` check, OR in `assertions.ts` if the rationale
-  fits there.
-- Action: explain why booking explicitly rejects array responses
-  while other services accept them (because booking endpoints
-  always return objects, not arrays).
+- [ ] **T3.4. Document booking's stricter array-rejection.**
+  - Source: D9 #1.
+  - Where: doc comment in `booking-management-v1/mappers.ts` near the
+    `Array.isArray()` check, OR in `assertions.ts` if the rationale
+    fits there.
+  - Action: explain why booking explicitly rejects array responses
+    while other services accept them (because booking endpoints
+    always return objects, not arrays).
 
-**T3.5. Document BFM/Revalidate envelope validation depth.**
-- Source: D9 #2.
-- Where: doc comment near the `groupedItineraryResponse` validation
-  in each mapper.
-- Action: brief note explaining the deeper validation reflects the
-  OTA-style nested response shape.
+- [ ] **T3.5. Document BFM/Revalidate envelope validation depth.**
+  - Source: D9 #2.
+  - Where: doc comment near the `groupedItineraryResponse` validation
+    in each mapper.
+  - Action: brief note explaining the deeper validation reflects the
+    OTA-style nested response shape.
 
 ## Suggested action PR sequence
 
 The PRs are mostly independent. A natural shipping order:
 
-1. **PR 1: T1.1** — `ensureTrailingSlash` extraction. Smallest, safest,
-   pure code dedup. Establishes the `src/http/` shared-utility
-   pattern.
+1. ~~**PR 1: T1.1** — `ensureTrailingSlash` extraction.~~ **Shipped in #66.**
 2. **PR 2: T2.1** — `okResponse` test helper extraction. Same pattern,
    same risk profile, can land independently.
 3. **PR 3: T2.2 + T2.3** (bundle) — both are doc-only edits that
@@ -165,7 +166,7 @@ The PRs are mostly independent. A natural shipping order:
    if appetite exists.
 7. **Drop T3.2** unless the user wants it.
 
-Total expected PRs: 5–6. All small. No must-fix beyond T1.1.
+Remaining expected PRs: 4–5. All small.
 
 ## Overall assessment
 
