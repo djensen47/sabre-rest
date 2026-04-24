@@ -143,6 +143,13 @@ export function fromRevalidateResponse(res: SabreResponse): RevalidateItineraryO
     throw new SabreParseError('Revalidate Itinerary response was not a JSON object', parsed);
   }
 
+  // Revalidate uses Sabre's OTA-style envelope: the real payload lives
+  // under `groupedItineraryResponse`. Validate it explicitly here so a
+  // missing or non-object envelope surfaces as `SabreParseError` rather
+  // than a downstream `TypeError` when iterating over `scheduleDescs`,
+  // `legDescs`, etc. Flat-schema services (lookups, get-ancillaries,
+  // get-seats, booking-management) don't need this check because they
+  // have no nested envelope.
   const root = parsed.groupedItineraryResponse;
   if (root === null || typeof root !== 'object') {
     throw new SabreParseError(
