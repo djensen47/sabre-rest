@@ -1,5 +1,6 @@
 import { SabreParseError } from '../../errors/sabre-parse-error.js';
 import type { components } from '../../generated/airline-alliance-lookup.js';
+import { ensureTrailingSlash } from '../../http/ensure-trailing-slash.js';
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type {
   AirlineAlliance,
@@ -78,8 +79,4 @@ export function fromLookupResponse(res: SabreResponse): LookupAirlineAlliancesOu
   });
 
   return { alliances };
-}
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }
