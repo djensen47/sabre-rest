@@ -18,4 +18,4 @@ Flight Tickets
 [x] fulfillTickets   POST /fulfillFlightTickets   — Fulfill flight tickets and EMDs
 [x] voidTickets      POST /voidFlightTickets      — Void tickets by ticket number
 [ ] refundTickets    POST /refundFlightTickets    — Refund tickets and/or EMDs
-[ ] checkTickets     POST /checkFlightTickets     — Check tickets for void, refund, and exchange conditions
+[x] checkTickets     POST /checkFlightTickets     — Check tickets for void, refund, and exchange conditions

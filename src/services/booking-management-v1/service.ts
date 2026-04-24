@@ -4,6 +4,8 @@ import * as mappers from './mappers.js';
 import type {
   CancelBookingInput,
   CancelBookingOutput,
+  CheckTicketsInput,
+  CheckTicketsOutput,
   CreateBookingInput,
   CreateBookingOutput,
   FulfillTicketsInput,
@@ -31,6 +33,7 @@ import type {
  *     - `cancelBooking` (`POST /v1/trip/orders/cancelBooking`)
  *     - `fulfillTickets` (`POST /v1/trip/orders/fulfillFlightTickets`)
  *     - `voidTickets` (`POST /v1/trip/orders/voidFlightTickets`)
+ *     - `checkTickets` (`POST /v1/trip/orders/checkFlightTickets`)
  *   - Docs: https://developer.sabre.com/docs/rest_apis/trip/orders/booking_management
  *
  * Construct via {@link createSabreClient}; do not implement this interface
@@ -132,6 +135,27 @@ export interface BookingManagementV1Service {
    *   and any errors Sabre returned.
    */
   voidTickets(input: VoidTicketsInput): Promise<VoidTicketsOutput>;
+
+  /**
+   * Check flight tickets for void, refund, and exchange conditions.
+   *
+   * Read-only: this operation does not mutate the booking. Supply
+   * either a `confirmationId` (check every ticket on the booking) or
+   * a `tickets` list (up to 12 entries, each with a ticket number and
+   * optional ATPCO refund qualifiers), or both. The response includes
+   * per-ticket eligibility flags (`isVoidable`, `isRefundable`,
+   * `isChangeable`), refund totals and penalties, and — for NDC
+   * orders — `cancelOffers`. EMDs are not supported by this
+   * operation. Sabre returns `tickets` in the same order as the
+   * request.
+   *
+   * @param input Check criteria. At minimum supply either
+   *   `confirmationId` or `tickets` so Sabre can resolve the scope.
+   * @returns Per-ticket eligibility data, NDC cancel offers, flight
+   *   refund options, the echoed request, and any errors Sabre
+   *   returned.
+   */
+  checkTickets(input: CheckTicketsInput): Promise<CheckTicketsOutput>;
 }
 
 /**
@@ -182,5 +206,11 @@ export class DefaultBookingManagementV1Service implements BookingManagementV1Ser
     const req = mappers.toVoidTicketsRequest(this.#baseUrl, input);
     const res = await this.#request(req);
     return mappers.fromVoidTicketsResponse(res);
+  }
+
+  async checkTickets(input: CheckTicketsInput): Promise<CheckTicketsOutput> {
+    const req = mappers.toCheckTicketsRequest(this.#baseUrl, input);
+    const res = await this.#request(req);
+    return mappers.fromCheckTicketsResponse(res);
   }
 }

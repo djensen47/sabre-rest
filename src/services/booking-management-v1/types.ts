@@ -4400,3 +4400,275 @@ export interface VoidTicketsOutput {
   /** Numbers of tickets that were successfully voided. */
   voidedTickets?: readonly string[];
 }
+
+// ---------------------------------------------------------------------------
+// checkTickets enums
+// ---------------------------------------------------------------------------
+
+/**
+ * Journey type code applied when refunding an ATPCO ticket.
+ *
+ * Mirrors Sabre's `JourneyTypeCodeEnum`:
+ * - `B` — Both (one-way refund on a round trip is allowed).
+ * - `F` — Forward (only the outbound portion is refunded).
+ * - `M` — Mixed (manual intervention required).
+ */
+export type JourneyTypeCode = 'B' | 'F' | 'M';
+
+/**
+ * Offer type for an NDC cancellation option.
+ *
+ * Mirrors Sabre's `CancelOfferTypeEnum`.
+ */
+export type CancelOfferType = 'VOID' | 'REFUND';
+
+// ---------------------------------------------------------------------------
+// checkTickets / refundTickets shared shapes
+// ---------------------------------------------------------------------------
+
+/**
+ * A single ticket number plus optional refund qualifiers.
+ *
+ * Used on the request side of both `checkTickets` and `refundTickets`
+ * (only `checkTickets` is wired today). Every field is optional per
+ * Sabre's `RefundFlightTicket` schema.
+ */
+export interface RefundFlightTicket {
+  /**
+   * Electronic document number of the ticket. 13 alphanumeric
+   * characters, optionally followed by `/NN` for conjunction / multi-
+   * coupon documents.
+   */
+  number?: string;
+  /** Optional refund qualifiers for ATPCO tickets. */
+  refundQualifiers?: RefundQualifiers;
+}
+
+/**
+ * Optional qualifiers that override refund behavior for ATPCO tickets.
+ *
+ * All fields are optional and are only sent on the wire when provided.
+ */
+export interface RefundQualifiers {
+  /**
+   * Cancel penalty amount (in the original ticket's currency) to apply
+   * to the refund. Overrides any system-calculated penalty.
+   */
+  overrideCancelFee?: string;
+  /** Taxes to override, per tax code. */
+  overrideTaxes?: readonly OverrideTax[];
+  /**
+   * Commission amount to apply to the refund. Overrides the original
+   * ticket's commission. Cannot be combined with `commissionPercentage`.
+   */
+  commissionAmount?: string;
+  /**
+   * Commission percentage to apply to the refund. Overrides the
+   * original ticket's commission. Cannot be combined with
+   * `commissionAmount`.
+   */
+  commissionPercentage?: string;
+  /** Commission collected on the cancel penalty. */
+  commissionOnPenalty?: string;
+  /**
+   * Airline-supplied waiver code to override a cancel fee.
+   */
+  waiverCode?: string;
+  /**
+   * Tour code to apply to the refund. Overrides any tour code on the
+   * original ticket.
+   */
+  tourCode?: string;
+  /**
+   * Per-form-of-payment refund amounts, in the original ticket's
+   * currency. Order must match the forms of payment used when the
+   * ticket was issued.
+   */
+  splitRefundAmounts?: readonly SplitRefundAmount[];
+  /** Journey type applied when refunding an ATPCO ticket. */
+  journeyTypeCode?: JourneyTypeCode;
+}
+
+/** Override for a single tax applied to the refund. */
+export interface OverrideTax {
+  /** Two-character tax code. Must be combined with `taxAmount`. */
+  taxCode?: string;
+  /** Override amount for this tax, in the original ticket's currency. */
+  taxAmount?: string;
+  /**
+   * Per-airport breakdown for overriding individual XF airport taxes.
+   */
+  airportTaxBreakdowns?: readonly AirportTaxBreakdown[];
+}
+
+/** Per-airport refund amount for an XF airport tax. */
+export interface AirportTaxBreakdown {
+  /** Amount in the currency of the original ticket. */
+  taxAmount?: string;
+  /** Three-letter IATA airport code the refund amount applies to. */
+  airportCode?: string;
+}
+
+/** Refund amount for a single form of payment. */
+export interface SplitRefundAmount {
+  /** Amount in the currency of the original ticket. */
+  amount?: string;
+}
+
+// ---------------------------------------------------------------------------
+// checkTickets input/output
+// ---------------------------------------------------------------------------
+
+/**
+ * Input for the `checkTickets` operation.
+ *
+ * Every field is optional per the spec. In practice at least one of
+ * `tickets` or `confirmationId` should be supplied so Sabre can scope
+ * the check. EMDs are **not** supported by this operation.
+ */
+export interface CheckTicketsInput {
+  /**
+   * Pseudo city code of the target destination for which the ticket
+   * check is requested. 3–4 uppercase alphanumeric characters.
+   */
+  targetPcc?: string;
+  /**
+   * Tickets to check. Up to 12 entries. Each entry carries a ticket
+   * number and optional refund qualifiers.
+   */
+  tickets?: readonly RefundFlightTicket[];
+  /**
+   * Booking reference ID as shown in the source supplier/vendor
+   * system. 6+ uppercase alphanumeric characters.
+   */
+  confirmationId?: string;
+}
+
+/**
+ * Output of the `checkTickets` operation.
+ *
+ * The operation is read-only — it does not mutate the booking. Sabre
+ * returns per-ticket eligibility for void, refund and exchange
+ * actions, plus NDC `cancelOffers` and per-flight `flightRefunds`
+ * (populated depending on source content).
+ *
+ * `tickets` are returned in the same order as the request.
+ */
+export interface CheckTicketsOutput {
+  /**
+   * Response timestamp, UTC. Nominal format `YYYY-MM-DDTHH:MM:SSZ`;
+   * as with other booking operations, cert has been observed to
+   * return the value without the trailing `Z`. Treat the timezone as
+   * UTC regardless.
+   */
+  timestamp?: string;
+  /** Echo of the request that produced this response. */
+  request?: CheckTicketsInput;
+  /**
+   * Per-ticket cancellation, refund, and exchange eligibility. Sabre
+   * lists tickets in the same order as the request.
+   */
+  tickets?: readonly CheckedTicket[];
+  /** Errors Sabre returned alongside this response. */
+  errors?: readonly BookingError[];
+  /** Cancellation options for NDC orders. */
+  cancelOffers?: readonly CancelOffer[];
+  /** Per-flight refund options. Reuses the `cancelBooking` shape. */
+  flightRefunds?: readonly CancelFlightRefund[];
+}
+
+/**
+ * Cancellation, refund, and exchange eligibility for a single ticket.
+ *
+ * Mirrors Sabre's `CheckedTicket` — the base `Ticket` shape plus an
+ * automated-refund `refundFee`. All fields are optional per the spec;
+ * the mapper emits every record returned by Sabre even if individual
+ * fields are absent.
+ */
+export interface CheckedTicket {
+  /** Electronic flight ticket number. */
+  number?: string;
+  /**
+   * If `true`, the ticket meets the requirements for the void
+   * procedure.
+   */
+  isVoidable?: boolean;
+  /**
+   * If `true`, the ticket is fully or partially refundable. Refer to
+   * `refundPenalties` for details. Not guaranteed when the penalty
+   * source indicates `Category 16`.
+   */
+  isRefundable?: boolean;
+  /**
+   * If `true`, the ticket meets the requirements for an automated
+   * refund.
+   */
+  isAutomatedRefundsEligible?: boolean;
+  /**
+   * Estimated refund-penalty details. Estimates assume the highest
+   * possible refund penalty is applied.
+   */
+  refundPenalties?: readonly BookingFareRulePenalty[];
+  /**
+   * Tax information associated with a refund. Applicable to automated
+   * refunds only.
+   */
+  refundTaxes?: readonly CancelRefundTax[];
+  /** Refundable totals for the ticket. */
+  refundTotals?: BookingTotalValues;
+  /**
+   * If `true`, the fare can be exchanged (with or without additional
+   * cost). Not guaranteed when the penalty source indicates
+   * `Category 16`.
+   */
+  isChangeable?: boolean;
+  /**
+   * Estimated exchange-penalty details. Estimates assume that all
+   * fare components are changed and the highest applicable penalty is
+   * applied.
+   */
+  exchangePenalties?: readonly BookingFareRulePenalty[];
+  /**
+   * Structured cancellation-fee details for an automated refund —
+   * amount, currency, and any applicable taxes (e.g. GST, VAT).
+   */
+  refundFee?: CheckRefundFee;
+}
+
+/**
+ * Cancellation fee applied during an automated refund, with its
+ * currency and applicable taxes.
+ */
+export interface CheckRefundFee {
+  /** Monetary value of the cancellation fee. */
+  amount?: string;
+  /** Three-letter ISO 4217 currency code. */
+  currencyCode?: string;
+  /**
+   * Taxes applied to the cancellation fee. Typically GST/VAT where
+   * applicable; multiple taxes may apply to a single fee.
+   */
+  taxes?: readonly CancelRefundTax[];
+}
+
+/**
+ * A cancellation option for an NDC order item.
+ *
+ * All fields are optional per Sabre's `CancelOffer` schema.
+ */
+export interface CancelOffer {
+  /** Offer classification (void or refund). */
+  offerType?: CancelOfferType;
+  /**
+   * Offer ID referencing the cancel option for an NDC order. Apply
+   * this ID when cancelling the order to receive the associated
+   * refund/void.
+   */
+  offerItemId?: string;
+  /** Expiration date of the cancel offer (`YYYY-MM-DD`). */
+  offerExpirationDate?: string;
+  /** Expiration time of the cancel offer, UTC (`HH:MM`). */
+  offerExpirationTime?: string;
+  /** Refundable totals associated with this offer. */
+  refundTotals?: BookingTotalValues;
+}
