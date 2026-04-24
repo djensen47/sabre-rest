@@ -316,3 +316,52 @@ the library will release `1.0.0` and switch to strict semver from then on.
   once we see real Sabre responses and real usage patterns.
 - **Demand-driven prioritization.** APIs get added when they're needed,
   not on a schedule.
+
+---
+
+## Known spec drift
+
+A changelog of public-type drift from the upstream OAS that has been
+**corrected**. New corrections are added to the top; active drift is
+tracked in issues, not here.
+
+Entries are stamped with the **calendar date** the fix PR was opened
+and the **PR number**. The PR is the root context: its description
+carries the spec analysis, the diff, and the review discussion, which
+is what an investigator needs. Release version is intentionally *not*
+stamped — release-please assigns those, and anyone triaging can cross-
+reference the PR merge commit to the release.
+
+The process: when a drift bug is discovered, the fix PR appends an
+entry describing the spec location that was misrepresented and the
+shape the public type now carries. The design rules that govern what
+counts as drift are in
+[`architecture.md` → Public type design rules](./architecture.md).
+New entries are stamped with `PR #TBD` while the fix is on a branch;
+the PR number is filled in once the PR is opened, before merge.
+
+### 2026-04-23 · PR #TBD — Booking Management v1.32
+
+Three drift corrections landed together:
+
+- **`MonetaryValue`** (replaces `BookingMonetaryValue` and
+  `FulfillMonetaryValue`). Spec `Value` (booking-management.yml line
+  3609) has both `amount` and `currencyCode` in `required:`. The
+  earlier public types had both fields optional, which
+  misrepresented the spec without a documented cert-observed reason.
+  The two legacy duplicates are now one `MonetaryValue` with both
+  fields required.
+- **`BookingHotelRefundPenalty.penalty`**. Spec
+  `HotelDateRangeRefundPenalty.penalty` (line 7800) is
+  `$ref: HotelPenaltyValue`, which extends `Value` with optional
+  `percentage` and `numberOfNights`. The public type previously
+  pointed at the plain monetary value and dropped both extensions.
+  The field now carries a new `HotelPenaltyValue extends
+  MonetaryValue` shape.
+- **`BookingFareDifferenceBreakdown`**. Spec
+  `FareDifferenceBreakdown` (line 7498) carries `adjustedAmount?`
+  and `currencyCode?`. The earlier public type had fabricated
+  `fareDifference` / `taxDifference` fields that did not exist in
+  the spec; the mapper was using a `Record<string, unknown>` cast
+  to sidestep the compiler. The public type now matches the spec
+  and the cast is gone.
