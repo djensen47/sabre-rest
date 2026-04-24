@@ -62,7 +62,7 @@ have landed on `main`.
 
 ### Tier 2 — should-fix
 
-- [ ] **T2.1. Extract `okResponse` test helper to a shared test util.**
+- [x] **T2.1. Extract `okResponse` test helper to a shared test util.** — shipped in #TBD
   - Source: D1 #2.
   - Where: all 8 services' `mappers.test.ts` (line numbers in D1 file).
   - Action: extract to `src/http/test-utils.ts` (or `src/testing.ts`),
@@ -153,8 +153,8 @@ have landed on `main`.
 The PRs are mostly independent. A natural shipping order:
 
 1. ~~**PR 1: T1.1** — `ensureTrailingSlash` extraction.~~ **Shipped in #66.**
-2. **PR 2: T2.1** — `okResponse` test helper extraction. Same pattern,
-   same risk profile, can land independently.
+2. ~~**PR 2: T2.1** — `okResponse` test helper extraction. Same pattern,
+   same risk profile, can land independently.~~
 3. **PR 3: T2.2 + T2.3** (bundle) — both are doc-only edits that
    document intentional duplication / specialization. Bundling makes
    sense since neither changes behavior.
