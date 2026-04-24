@@ -3526,10 +3526,14 @@ export type CancelFlightTicketOperation = 'VOID' | 'REFUND';
 export type CancelErrorPolicy = 'HALT_ON_ERROR' | 'ALLOW_PARTIAL_CANCEL';
 
 /**
- * Type(s) of electronic documents to refund when `flightTicketOperation`
- * is `REFUND`. Spec default is `Tickets`.
+ * Type(s) of electronic documents a refund operation applies to.
+ *
+ * Mirrors Sabre's shared `DocumentsTypeEnum`. Used by
+ * `cancelBooking.refundDocumentsType` (when `flightTicketOperation`
+ * is `REFUND`) and by `refundTickets.documentsType`. Spec default is
+ * `Tickets`.
  */
-export type CancelDocumentsType = 'Tickets' | 'EMDs' | 'Tickets and EMDs';
+export type DocumentsType = 'Tickets' | 'EMDs' | 'Tickets and EMDs';
 
 // ---------------------------------------------------------------------------
 // cancelBooking input helper types
@@ -3691,7 +3695,7 @@ export interface CancelBookingInput {
    * Type of electronic documents to refund. Applicable when
    * `flightTicketOperation` is `REFUND`. Spec default: `Tickets`.
    */
-  refundDocumentsType?: CancelDocumentsType;
+  refundDocumentsType?: DocumentsType;
 }
 
 /**
@@ -4716,10 +4720,10 @@ export interface RefundTicketsInput {
   confirmationId?: string;
   /**
    * Which document categories participate in the refund (tickets,
-   * EMDs, or both). Uses the shared `DocumentsTypeEnum` also used by
+   * EMDs, or both). Shares the `DocumentsType` enum with
    * `cancelBooking.refundDocumentsType`.
    */
-  documentsType?: CancelDocumentsType;
+  documentsType?: DocumentsType;
 }
 
 /**

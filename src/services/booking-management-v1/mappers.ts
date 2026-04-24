@@ -68,7 +68,6 @@ import type {
   CancelBookingInput,
   CancelBookingOutput,
   CancelBookingTicket,
-  CancelDocumentsType,
   CancelErrorPolicy,
   CancelFlightRefund,
   CancelFlightTicketOperation,
@@ -83,6 +82,7 @@ import type {
   CreateBookingOutput,
   CreationDetailsToModify,
   CruiseReference,
+  DocumentsType,
   FareToModify,
   FlightReference,
   FlightReferenceToModify,
@@ -747,7 +747,7 @@ function buildCancelBookingRequestEcho(
     out.errorHandlingPolicy = req.errorHandlingPolicy as CancelErrorPolicy;
   }
   if (req.refundDocumentsType !== undefined) {
-    out.refundDocumentsType = req.refundDocumentsType as CancelDocumentsType;
+    out.refundDocumentsType = req.refundDocumentsType as DocumentsType;
   }
   if (req.flights !== undefined) {
     out.flights = req.flights.map((f): FlightReference => ({ itemId: f.itemId }));
