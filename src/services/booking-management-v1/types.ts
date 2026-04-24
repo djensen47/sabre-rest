@@ -1971,11 +1971,11 @@ export interface BookingFareRulePenalty {
   /** If `true`, conditions apply beyond the stated penalty. */
   conditionsApply: boolean;
   /** Penalty amount. */
-  penalty: BookingMonetaryValue;
+  penalty: MonetaryValue;
   /** If `true`, a no-show has additional cost. */
   hasNoShowCost?: boolean;
   /** No-show penalty amount. */
-  noShowPenalty?: BookingMonetaryValue;
+  noShowPenalty?: MonetaryValue;
   /**
    * Source of the penalty rule. Present only for `cancelBooking` ticket
    * penalties (derived from Sabre's `PenaltyItem`).
@@ -1983,12 +1983,30 @@ export interface BookingFareRulePenalty {
   source?: BookingPenaltySource;
 }
 
-/** A monetary value with amount and currency. */
-export interface BookingMonetaryValue {
+/**
+ * A monetary value with amount and currency.
+ *
+ * Mirrors Sabre's `Value` schema exactly — both fields are required per
+ * the spec (`required: [amount, currencyCode]`).
+ */
+export interface MonetaryValue {
   /** Amount as a decimal string. */
-  amount?: string;
+  amount: string;
   /** Three-letter ISO 4217 currency code. */
-  currencyCode?: string;
+  currencyCode: string;
+}
+
+/**
+ * Hotel refund penalty amount. Extends {@link MonetaryValue} with the
+ * optional expressions defined by Sabre's `HotelPenaltyValue` schema —
+ * when `percentage` or `numberOfNights` is present, the docs say to
+ * ignore `amount`.
+ */
+export interface HotelPenaltyValue extends MonetaryValue {
+  /** Penalty expressed as a percentage. If present, ignore `amount`. */
+  percentage?: string;
+  /** Penalty expressed as a number of nights. If present, ignore `amount`. */
+  numberOfNights?: number;
 }
 
 /** Fare offer with baggage information. */
@@ -2036,7 +2054,7 @@ export interface BookingBaggagePolicy {
   /** If `true`, only allowed at check-in. */
   isCheckInOnly?: boolean;
   /** Fee for this baggage piece. */
-  fee?: BookingMonetaryValue;
+  fee?: MonetaryValue;
 }
 
 /** A saved fare (price quote or order item). */
@@ -2130,7 +2148,7 @@ export interface BookingFareComponent {
   /** Fare basis code. */
   fareBasisCode?: string;
   /** Base rate. */
-  baseRate?: BookingMonetaryValue;
+  baseRate?: MonetaryValue;
   /** Brand fare code. */
   brandFareCode?: string;
   /** Brand fare name. */
@@ -2164,7 +2182,7 @@ export interface BookingTaxComponent {
   /** Tax code. */
   taxCode?: string;
   /** Tax amount. */
-  taxAmount?: BookingMonetaryValue;
+  taxAmount?: MonetaryValue;
   /** If `true`, the tax has been paid. */
   isPaid?: boolean;
 }
@@ -2233,12 +2251,12 @@ export interface BookingInitialSellingFare {
   fareDifferenceBreakdown?: BookingFareDifferenceBreakdown;
 }
 
-/** Fare difference breakdown for exchanges. */
+/** Fare difference breakdown for exchanges (Sabre `FareDifferenceBreakdown`). */
 export interface BookingFareDifferenceBreakdown {
-  /** Fare difference amount. */
-  fareDifference?: BookingMonetaryValue;
-  /** Tax difference amount. */
-  taxDifference?: BookingMonetaryValue;
+  /** Monetary amount of the adjusted fare, as a decimal string. */
+  adjustedAmount?: string;
+  /** Three-letter ISO 4217 currency code. */
+  currencyCode?: string;
 }
 
 /** A remark in the booking response. */
@@ -2355,8 +2373,8 @@ export interface BookingHotelRefundPenalty {
   startDate?: string;
   /** End date of the penalty period. */
   endDate?: string;
-  /** Penalty amount. */
-  penalty?: BookingMonetaryValue;
+  /** Penalty amount. May express the penalty as percentage or nights. */
+  penalty?: HotelPenaltyValue;
 }
 
 /** Associated flight details for hotel/car. */
@@ -2458,7 +2476,7 @@ export interface BookingCarRefundPenalty {
   /** End date. */
   endDate?: string;
   /** Penalty amount. */
-  penalty?: BookingMonetaryValue;
+  penalty?: MonetaryValue;
 }
 
 /** A train reservation in the booking response. */
@@ -4029,14 +4047,6 @@ export interface FulfillBaggageAllowance {
   flights?: readonly FlightReference[];
 }
 
-/** Monetary amount with currency, used for the penalty cap. */
-export interface FulfillMonetaryValue {
-  /** Amount as a decimal string. */
-  amount: string;
-  /** Three-letter ISO 4217 currency code. */
-  currencyCode: string;
-}
-
 /**
  * Penalty correlated with an itinerary change or cancellation.
  * `isChangeable` and `maximumPenalty` are mutually exclusive per the
@@ -4050,7 +4060,7 @@ export interface FulfillTicketPenalty {
   /** If `true`, requests changeable options; if `false`, only non-changeable. */
   isChangeable?: boolean;
   /** Maximum penalty cap. */
-  maximumPenalty?: FulfillMonetaryValue;
+  maximumPenalty?: MonetaryValue;
 }
 
 /**

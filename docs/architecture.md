@@ -327,6 +327,28 @@ const wireRequest = mappers.toRetrieveRequest(input);
   `src/services/<service>/`). Forces context-switching across folders for
   every change.
 
+### Public type design rules
+
+Three rules that govern how public types are shaped, derived from
+actual drift bugs we've had to fix in this repo:
+
+- **Share a public type across operations only when the OAS uses the
+  same `$ref`.** Two schemas that happen to look alike each get their
+  own public type. Sabre splits shapes for a reason (different required
+  fields, different extension fields), and merging by coincidence hides
+  future divergence. The guideline is "same ref → share; same shape
+  today → don't trust it."
+- **Optionality mirrors the OAS.** If the spec's `required:` list
+  includes a field, the public type field is required too. Don't loosen
+  a field defensively — an unexplained `?` will be read as a bug by
+  future maintainers. If a field is loosened, say why (see next rule).
+- **Document defensive choices inline.** If a field is intentionally
+  looser than the spec to accommodate a cert-observed quirk, add a doc
+  comment on the field explaining the quirk and ideally pointing at a
+  test fixture that reproduces it. Without that, the next reader will
+  tighten the type to match the spec and break the real-world caller
+  the looseness was protecting.
+
 ---
 
 ## Service organization

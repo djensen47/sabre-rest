@@ -34,6 +34,7 @@ import type {
   BookingError,
   BookingFare,
   BookingFareComponent,
+  BookingFareDifferenceBreakdown,
   BookingFareOffer,
   BookingFareRule,
   BookingFareRulePenalty,
@@ -47,10 +48,10 @@ import type {
   BookingHotel,
   BookingHotelRefundPenalty,
   BookingIdentityDocument,
+  BookingInitialSellingFare,
   BookingJourney,
   BookingLoyaltyProgram,
   BookingMeal,
-  BookingMonetaryValue,
   BookingNonElectronicTicket,
   BookingPayments,
   BookingRemark,
@@ -103,12 +104,14 @@ import type {
   GetBookingExtraFeatures,
   GetBookingInput,
   GetBookingOutput,
+  HotelPenaltyValue,
   HotelReference,
   HotelToModify,
   IdentityDocumentToModify,
   ModifyBookingExtraFeatures,
   ModifyBookingInput,
   ModifyBookingOutput,
+  MonetaryValue,
   OtherServiceToModify,
   PaymentToModify,
   PrinterAddress,
@@ -1631,10 +1634,14 @@ function buildFareRulePenalty(p: components['schemas']['FareRulePenalty']): Book
   return out;
 }
 
-function buildMonetaryValue(v: components['schemas']['Value']): BookingMonetaryValue {
-  const out: BookingMonetaryValue = {};
-  if (v.amount !== undefined) out.amount = v.amount;
-  if (v.currencyCode !== undefined) out.currencyCode = v.currencyCode;
+function buildMonetaryValue(v: components['schemas']['Value']): MonetaryValue {
+  return { amount: v.amount, currencyCode: v.currencyCode };
+}
+
+function buildHotelPenaltyValue(v: components['schemas']['HotelPenaltyValue']): HotelPenaltyValue {
+  const out: HotelPenaltyValue = { amount: v.amount, currencyCode: v.currencyCode };
+  if (v.percentage !== undefined) out.percentage = v.percentage;
+  if (v.numberOfNights !== undefined) out.numberOfNights = v.numberOfNights;
   return out;
 }
 
@@ -1717,19 +1724,18 @@ function buildFare(f: components['schemas']['Fare']): BookingFare {
   if (f.pricingStatusCode !== undefined) out.pricingStatusCode = f.pricingStatusCode;
   if (f.pricingStatusName !== undefined) out.pricingStatusName = f.pricingStatusName;
   if (f.initialSellingFare !== undefined) {
-    const isf: Record<string, unknown> = {};
+    const isf: BookingInitialSellingFare = {};
     if (f.initialSellingFare.totals !== undefined) {
       isf.totals = buildGenericTotalValues(f.initialSellingFare.totals);
     }
     if (f.initialSellingFare.fareDifferenceBreakdown !== undefined) {
       const fdb = f.initialSellingFare.fareDifferenceBreakdown;
-      const breakdown: Record<string, unknown> = {};
-      if (fdb.adjustedAmount !== undefined) {
-        breakdown.fareDifference = { amount: fdb.adjustedAmount, currencyCode: fdb.currencyCode };
-      }
+      const breakdown: BookingFareDifferenceBreakdown = {};
+      if (fdb.adjustedAmount !== undefined) breakdown.adjustedAmount = fdb.adjustedAmount;
+      if (fdb.currencyCode !== undefined) breakdown.currencyCode = fdb.currencyCode;
       isf.fareDifferenceBreakdown = breakdown;
     }
-    out.initialSellingFare = isf as BookingFare['initialSellingFare'];
+    out.initialSellingFare = isf;
   }
   if (f.requestedTravelerType !== undefined) out.requestedTravelerType = f.requestedTravelerType;
   if (f.pricedTravelerType !== undefined) out.pricedTravelerType = f.pricedTravelerType;
@@ -1849,8 +1855,7 @@ function buildHotelRefundPenalty(
   const out: BookingHotelRefundPenalty = {};
   if (p.applicableFromDate !== undefined) out.startDate = p.applicableFromDate;
   if (p.applicableToDate !== undefined) out.endDate = p.applicableToDate;
-  if (p.penalty !== undefined)
-    out.penalty = { amount: p.penalty.amount, currencyCode: p.penalty.currencyCode };
+  if (p.penalty !== undefined) out.penalty = buildHotelPenaltyValue(p.penalty);
   return out;
 }
 
