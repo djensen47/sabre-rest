@@ -70,7 +70,7 @@ have landed on `main`.
   - Risk: minimal — test-only code.
   - Estimated PR size: small (8 test file edits + 1 new file).
 
-- [x] **T2.2. Document the BFM/Revalidate intentional type duplication.** — shipped in #XXXX.
+- [x] **T2.2. Document the BFM/Revalidate intentional type duplication.** — shipped in #69.
   - Source: D4 #1, with `$ref` verification (above) confirming
     independent specs.
   - Where: top of `bargain-finder-max-v5/types.ts` and
@@ -87,7 +87,7 @@ have landed on `main`.
   - Risk: doc-only, zero behavior change.
   - Estimated PR size: small (2 file edits, comment blocks only).
 
-- [x] **T2.3. Document the assertions-module rationale.** — shipped in #XXXX.
+- [x] **T2.3. Document the assertions-module rationale.** — shipped in #69.
   - Source: D5 #1 + D8 #1 (combined).
   - Where: top of `booking-management-v1/assertions.ts`.
   - Action: add a doc comment explaining that this module exists
@@ -157,7 +157,7 @@ The PRs are mostly independent. A natural shipping order:
    same risk profile, can land independently.~~
 3. ~~**PR 3: T2.2 + T2.3** (bundle) — both are doc-only edits that
    document intentional duplication / specialization. Bundling makes
-   sense since neither changes behavior.~~ **Shipped in #XXXX.**
+   sense since neither changes behavior.~~ **Shipped in #69.**
 4. **PR 4: T2.4** — JSON-parse-error test standardization. Touches
    8 test files but is purely additive.
 5. **PR 5: T3.1 + T3.4 + T3.5** (bundle) — documentation cluster
