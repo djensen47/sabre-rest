@@ -72,8 +72,13 @@ import type {
   CancelErrorPolicy,
   CancelFlightRefund,
   CancelFlightTicketOperation,
+  CancelOffer,
   CancelRefundTax,
   CarReference,
+  CheckRefundFee,
+  CheckTicketsInput,
+  CheckTicketsOutput,
+  CheckedTicket,
   CreateBookingInput,
   CreateBookingOutput,
   CreationDetailsToModify,
@@ -113,8 +118,11 @@ import type {
   ModifyBookingOutput,
   MonetaryValue,
   OtherServiceToModify,
+  OverrideTax,
   PaymentToModify,
   PrinterAddress,
+  RefundFlightTicket,
+  RefundQualifiers,
   RemarkToModify,
   RoomToModify,
   SeatToModify,
@@ -132,6 +140,7 @@ const MODIFY_BOOKING_PATH = 'v1/trip/orders/modifyBooking';
 const CANCEL_BOOKING_PATH = 'v1/trip/orders/cancelBooking';
 const FULFILL_TICKETS_PATH = 'v1/trip/orders/fulfillFlightTickets';
 const VOID_TICKETS_PATH = 'v1/trip/orders/voidFlightTickets';
+const CHECK_TICKETS_PATH = 'v1/trip/orders/checkFlightTickets';
 
 /**
  * Builds the outgoing {@link SabreRequest} for the `createBooking`
@@ -2674,6 +2683,204 @@ function buildFulfillFormOfPaymentEcho(
 function buildFulfillTravelerEcho(t: components['schemas']['TravelerName']): FulfillTraveler {
   const out: FulfillTraveler = { givenName: t.givenName, surname: t.surname };
   if (t.middleName !== undefined) out.middleName = t.middleName;
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// checkTickets
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the outgoing {@link SabreRequest} for the `checkTickets`
+ * operation.
+ *
+ * The request body matches the `CheckTicketsRequest` schema. Every
+ * field is optional and there are no spec-defined defaults, so
+ * nothing is invented — only caller-supplied values are emitted.
+ */
+export function toCheckTicketsRequest(baseUrl: string, input: CheckTicketsInput): SabreRequest {
+  const url = new URL(CHECK_TICKETS_PATH, ensureTrailingSlash(baseUrl));
+
+  const body: Record<string, unknown> = {};
+  if (input.targetPcc !== undefined) body.targetPcc = input.targetPcc;
+  if (input.tickets && input.tickets.length > 0) {
+    body.tickets = input.tickets.map(buildRefundFlightTicketBody);
+  }
+  if (input.confirmationId !== undefined) body.confirmationId = input.confirmationId;
+
+  return {
+    method: 'POST',
+    url: url.toString(),
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+/**
+ * Parses the `checkTickets` response into the public output shape.
+ *
+ * Throws {@link SabreParseError} when the body is not valid JSON or
+ * not an object.
+ */
+export function fromCheckTicketsResponse(res: SabreResponse): CheckTicketsOutput {
+  let parsed: components['schemas']['CheckTicketsResponse'];
+  try {
+    parsed = JSON.parse(res.body) as components['schemas']['CheckTicketsResponse'];
+  } catch (err) {
+    throw new SabreParseError('Failed to parse Check Tickets response as JSON', res.body, {
+      cause: err,
+    });
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new SabreParseError('Check Tickets response was not a JSON object', parsed);
+  }
+
+  const out: CheckTicketsOutput = {};
+
+  if (parsed.timestamp !== undefined) out.timestamp = parsed.timestamp;
+  if (parsed.request !== undefined) out.request = buildCheckTicketsRequestEcho(parsed.request);
+  if (parsed.tickets !== undefined) out.tickets = parsed.tickets.map(buildCheckedTicket);
+  if (parsed.errors !== undefined && parsed.errors.length > 0) {
+    out.errors = parsed.errors.map(buildBookingError);
+  }
+  if (parsed.cancelOffers !== undefined) {
+    out.cancelOffers = parsed.cancelOffers.map(buildCancelOffer);
+  }
+  if (parsed.flightRefunds !== undefined) {
+    out.flightRefunds = parsed.flightRefunds.map(buildFlightRefund);
+  }
+
+  return out;
+}
+
+function buildRefundFlightTicketBody(t: RefundFlightTicket): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (t.number !== undefined) out.number = t.number;
+  if (t.refundQualifiers !== undefined) {
+    out.refundQualifiers = buildRefundQualifiersBody(t.refundQualifiers);
+  }
+  return out;
+}
+
+function buildRefundQualifiersBody(q: RefundQualifiers): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (q.overrideCancelFee !== undefined) out.overrideCancelFee = q.overrideCancelFee;
+  if (q.overrideTaxes && q.overrideTaxes.length > 0) {
+    out.overrideTaxes = q.overrideTaxes.map(buildOverrideTaxBody);
+  }
+  if (q.commissionAmount !== undefined) out.commissionAmount = q.commissionAmount;
+  if (q.commissionPercentage !== undefined) out.commissionPercentage = q.commissionPercentage;
+  if (q.commissionOnPenalty !== undefined) out.commissionOnPenalty = q.commissionOnPenalty;
+  if (q.waiverCode !== undefined) out.waiverCode = q.waiverCode;
+  if (q.tourCode !== undefined) out.tourCode = q.tourCode;
+  if (q.splitRefundAmounts && q.splitRefundAmounts.length > 0) {
+    out.splitRefundAmounts = q.splitRefundAmounts.map((s) => ({ ...s }));
+  }
+  if (q.journeyTypeCode !== undefined) out.journeyTypeCode = q.journeyTypeCode;
+  return out;
+}
+
+function buildOverrideTaxBody(t: OverrideTax): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (t.taxCode !== undefined) out.taxCode = t.taxCode;
+  if (t.taxAmount !== undefined) out.taxAmount = t.taxAmount;
+  if (t.airportTaxBreakdowns && t.airportTaxBreakdowns.length > 0) {
+    out.airportTaxBreakdowns = t.airportTaxBreakdowns.map((b) => ({ ...b }));
+  }
+  return out;
+}
+
+function buildCheckTicketsRequestEcho(
+  req: components['schemas']['CheckTicketsRequest'],
+): CheckTicketsInput {
+  const out: CheckTicketsInput = {};
+  if (req.targetPcc !== undefined) out.targetPcc = req.targetPcc;
+  if (req.tickets !== undefined) out.tickets = req.tickets.map(buildRefundFlightTicketEcho);
+  if (req.confirmationId !== undefined) out.confirmationId = req.confirmationId;
+  return out;
+}
+
+function buildRefundFlightTicketEcho(
+  t: components['schemas']['RefundFlightTicket'],
+): RefundFlightTicket {
+  const out: RefundFlightTicket = {};
+  if (t.number !== undefined) out.number = t.number;
+  if (t.refundQualifiers !== undefined) {
+    out.refundQualifiers = buildRefundQualifiersEcho(t.refundQualifiers);
+  }
+  return out;
+}
+
+function buildRefundQualifiersEcho(q: components['schemas']['RefundQualifiers']): RefundQualifiers {
+  const out: RefundQualifiers = {};
+  if (q.overrideCancelFee !== undefined) out.overrideCancelFee = q.overrideCancelFee;
+  if (q.overrideTaxes !== undefined) {
+    out.overrideTaxes = q.overrideTaxes.map(buildOverrideTaxEcho);
+  }
+  if (q.commissionAmount !== undefined) out.commissionAmount = q.commissionAmount;
+  if (q.commissionPercentage !== undefined) out.commissionPercentage = q.commissionPercentage;
+  if (q.commissionOnPenalty !== undefined) out.commissionOnPenalty = q.commissionOnPenalty;
+  if (q.waiverCode !== undefined) out.waiverCode = q.waiverCode;
+  if (q.tourCode !== undefined) out.tourCode = q.tourCode;
+  if (q.splitRefundAmounts !== undefined) {
+    out.splitRefundAmounts = q.splitRefundAmounts.map((s) => ({ ...s }));
+  }
+  if (q.journeyTypeCode !== undefined) out.journeyTypeCode = q.journeyTypeCode;
+  return out;
+}
+
+function buildOverrideTaxEcho(t: components['schemas']['OverrideTax']): OverrideTax {
+  const out: OverrideTax = {};
+  if (t.taxCode !== undefined) out.taxCode = t.taxCode;
+  if (t.taxAmount !== undefined) out.taxAmount = t.taxAmount;
+  if (t.airportTaxBreakdowns !== undefined) {
+    out.airportTaxBreakdowns = t.airportTaxBreakdowns.map((b) => ({ ...b }));
+  }
+  return out;
+}
+
+function buildCheckedTicket(t: components['schemas']['CheckedTicket']): CheckedTicket {
+  const out: CheckedTicket = {};
+  if (t.number !== undefined) out.number = t.number;
+  if (t.isVoidable !== undefined) out.isVoidable = t.isVoidable;
+  if (t.isRefundable !== undefined) out.isRefundable = t.isRefundable;
+  if (t.isAutomatedRefundsEligible !== undefined) {
+    out.isAutomatedRefundsEligible = t.isAutomatedRefundsEligible;
+  }
+  if (t.refundPenalties !== undefined) {
+    out.refundPenalties = t.refundPenalties.map(buildPenaltyItem);
+  }
+  if (t.refundTaxes !== undefined) {
+    out.refundTaxes = t.refundTaxes.map(buildCancelRefundTax);
+  }
+  if (t.refundTotals !== undefined) out.refundTotals = buildTotalValues(t.refundTotals);
+  if (t.isChangeable !== undefined) out.isChangeable = t.isChangeable;
+  if (t.exchangePenalties !== undefined) {
+    out.exchangePenalties = t.exchangePenalties.map(buildPenaltyItem);
+  }
+  if (t.refundFee !== undefined) out.refundFee = buildCheckRefundFee(t.refundFee);
+  return out;
+}
+
+function buildCheckRefundFee(f: components['schemas']['RefundFee']): CheckRefundFee {
+  const out: CheckRefundFee = {};
+  if (f.amount !== undefined) out.amount = f.amount;
+  if (f.currencyCode !== undefined) out.currencyCode = f.currencyCode;
+  if (f.taxes !== undefined) out.taxes = f.taxes.map(buildCancelRefundTax);
+  return out;
+}
+
+function buildCancelOffer(o: components['schemas']['CancelOffer']): CancelOffer {
+  const out: CancelOffer = {};
+  if (o.offerType !== undefined) out.offerType = o.offerType;
+  if (o.offerItemId !== undefined) out.offerItemId = o.offerItemId;
+  if (o.offerExpirationDate !== undefined) out.offerExpirationDate = o.offerExpirationDate;
+  if (o.offerExpirationTime !== undefined) out.offerExpirationTime = o.offerExpirationTime;
+  if (o.refundTotals !== undefined) out.refundTotals = buildTotalValues(o.refundTotals);
   return out;
 }
 

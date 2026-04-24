@@ -3,12 +3,14 @@ import { SabreParseError } from '../../errors/sabre-parse-error.js';
 import type { SabreResponse } from '../../http/types.js';
 import {
   fromCancelBookingResponse,
+  fromCheckTicketsResponse,
   fromCreateBookingResponse,
   fromFulfillTicketsResponse,
   fromGetBookingResponse,
   fromModifyBookingResponse,
   fromVoidTicketsResponse,
   toCancelBookingRequest,
+  toCheckTicketsRequest,
   toCreateBookingRequest,
   toFulfillTicketsRequest,
   toGetBookingRequest,
@@ -17,6 +19,7 @@ import {
 } from './mappers.js';
 import type {
   CancelBookingInput,
+  CheckTicketsInput,
   CreateBookingInput,
   FulfillTicketsInput,
   GetBookingInput,
@@ -1568,5 +1571,228 @@ describe('fromVoidTicketsResponse', () => {
 
   it('throws SabreParseError for array body', () => {
     expect(() => fromVoidTicketsResponse(okResponse('[]'))).toThrow(SabreParseError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toCheckTicketsRequest
+// ---------------------------------------------------------------------------
+
+const minimalCheckInput: CheckTicketsInput = {
+  confirmationId: 'GLEBNY',
+  tickets: [{ number: '0167489825830' }],
+};
+
+describe('toCheckTicketsRequest', () => {
+  it('builds a POST to the checkFlightTickets path with JSON headers', () => {
+    const req = toCheckTicketsRequest('https://api.cert.platform.sabre.com', minimalCheckInput);
+    expect(req.method).toBe('POST');
+    expect(req.url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/checkFlightTickets');
+    expect(req.headers.Accept).toBe('application/json');
+    expect(req.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('handles a base URL with a trailing slash', () => {
+    const req = toCheckTicketsRequest('https://api.cert.platform.sabre.com/', minimalCheckInput);
+    expect(req.url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/checkFlightTickets');
+  });
+
+  it('emits only caller-supplied fields (no invented defaults)', () => {
+    const req = toCheckTicketsRequest('https://api.cert.platform.sabre.com', {});
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body).toEqual({});
+  });
+
+  it('maps tickets with and without refundQualifiers verbatim', () => {
+    const input: CheckTicketsInput = {
+      targetPcc: 'G7HE',
+      confirmationId: 'GLEBNY',
+      tickets: [
+        { number: '0167489825830' },
+        {
+          number: '0167489825831',
+          refundQualifiers: {
+            overrideCancelFee: '100.00',
+            overrideTaxes: [
+              {
+                taxCode: 'XF',
+                taxAmount: '5.00',
+                airportTaxBreakdowns: [{ airportCode: 'DFW', taxAmount: '5.00' }],
+              },
+            ],
+            commissionAmount: '25.00',
+            waiverCode: '12345ABCD',
+            tourCode: '123456789ABCDE',
+            splitRefundAmounts: [{ amount: '5.00' }, { amount: '10.00' }],
+            journeyTypeCode: 'B',
+          },
+        },
+      ],
+    };
+    const req = toCheckTicketsRequest('https://api.cert.platform.sabre.com', input);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.targetPcc).toBe('G7HE');
+    expect(body.confirmationId).toBe('GLEBNY');
+    expect(body.tickets).toEqual([
+      { number: '0167489825830' },
+      {
+        number: '0167489825831',
+        refundQualifiers: {
+          overrideCancelFee: '100.00',
+          overrideTaxes: [
+            {
+              taxCode: 'XF',
+              taxAmount: '5.00',
+              airportTaxBreakdowns: [{ airportCode: 'DFW', taxAmount: '5.00' }],
+            },
+          ],
+          commissionAmount: '25.00',
+          waiverCode: '12345ABCD',
+          tourCode: '123456789ABCDE',
+          splitRefundAmounts: [{ amount: '5.00' }, { amount: '10.00' }],
+          journeyTypeCode: 'B',
+        },
+      },
+    ]);
+  });
+
+  it('omits tickets when the array is empty', () => {
+    const req = toCheckTicketsRequest('https://api.cert.platform.sabre.com', {
+      confirmationId: 'GLEBNY',
+      tickets: [],
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect('tickets' in body).toBe(false);
+    expect(body.confirmationId).toBe('GLEBNY');
+  });
+
+  it('omits optional refundQualifier sub-arrays when empty', () => {
+    const req = toCheckTicketsRequest('https://api.cert.platform.sabre.com', {
+      tickets: [
+        {
+          number: '0167489825830',
+          refundQualifiers: { overrideTaxes: [], splitRefundAmounts: [] },
+        },
+      ],
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    const tickets = body.tickets as Array<Record<string, unknown>>;
+    expect(tickets[0]?.refundQualifiers).toEqual({});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fromCheckTicketsResponse
+// ---------------------------------------------------------------------------
+
+describe('fromCheckTicketsResponse', () => {
+  it('parses a fully populated response with every section preserved', () => {
+    const result = fromCheckTicketsResponse(
+      okResponse({
+        timestamp: '2024-10-28T11:11:21Z',
+        request: {
+          targetPcc: 'G7HE',
+          confirmationId: 'GLEBNY',
+          tickets: [{ number: '0167489825830' }],
+        },
+        tickets: [
+          {
+            number: '0167489825830',
+            isVoidable: true,
+            isRefundable: true,
+            isAutomatedRefundsEligible: true,
+            isChangeable: false,
+            refundPenalties: [
+              {
+                applicability: 'BEFORE_DEPARTURE',
+                conditionsApply: false,
+                penalty: { amount: '50.00', currencyCode: 'USD' },
+                source: 'Category 33',
+              },
+            ],
+            refundTaxes: [{ taxCode: 'XF', amount: '5.00' }],
+            refundTotals: { total: '100.00', currencyCode: 'USD' },
+            exchangePenalties: [
+              {
+                applicability: 'AFTER_DEPARTURE',
+                conditionsApply: true,
+                penalty: { amount: '75.00', currencyCode: 'USD' },
+              },
+            ],
+            refundFee: {
+              amount: '50.00',
+              currencyCode: 'USD',
+              taxes: [{ taxCode: 'GST', amount: '2.50' }],
+            },
+          },
+        ],
+        errors: [{ category: 'INFO', type: 'PARTIAL_REFUND' }],
+        cancelOffers: [
+          {
+            offerType: 'REFUND',
+            offerItemId: 'cb7778589bcbklg7tkkp8sdo50',
+            offerExpirationDate: '2024-01-30',
+            offerExpirationTime: '09:25',
+            refundTotals: { total: '200.00', currencyCode: 'USD' },
+          },
+        ],
+        flightRefunds: [
+          {
+            airlineCode: 'AA',
+            confirmationId: 'GLEBNY',
+            refundTotals: { total: '200.00', currencyCode: 'USD' },
+          },
+        ],
+      }),
+    );
+    expect(result.timestamp).toBe('2024-10-28T11:11:21Z');
+    expect(result.request?.confirmationId).toBe('GLEBNY');
+    expect(result.request?.tickets?.[0]?.number).toBe('0167489825830');
+    expect(result.tickets).toHaveLength(1);
+    const ticket = result.tickets?.[0];
+    expect(ticket?.isVoidable).toBe(true);
+    expect(ticket?.isRefundable).toBe(true);
+    expect(ticket?.refundPenalties?.[0]?.source).toBe('Category 33');
+    expect(ticket?.refundTaxes?.[0]).toEqual({ taxCode: 'XF', amount: '5.00' });
+    expect(ticket?.refundTotals?.total).toBe('100.00');
+    expect(ticket?.exchangePenalties?.[0]?.applicability).toBe('AFTER_DEPARTURE');
+    expect(ticket?.refundFee).toEqual({
+      amount: '50.00',
+      currencyCode: 'USD',
+      taxes: [{ taxCode: 'GST', amount: '2.50' }],
+    });
+    expect(result.errors?.[0]?.type).toBe('PARTIAL_REFUND');
+    expect(result.cancelOffers?.[0]?.offerType).toBe('REFUND');
+    expect(result.cancelOffers?.[0]?.offerItemId).toBe('cb7778589bcbklg7tkkp8sdo50');
+    expect(result.flightRefunds?.[0]?.airlineCode).toBe('AA');
+    expect(result.flightRefunds?.[0]?.refundTotals.total).toBe('200.00');
+  });
+
+  it('preserves ticket order (Sabre returns them in request order)', () => {
+    const result = fromCheckTicketsResponse(
+      okResponse({
+        tickets: [{ number: 'AAA' }, { number: 'BBB' }, { number: 'CCC' }],
+      }),
+    );
+    expect(result.tickets?.map((t) => t.number)).toEqual(['AAA', 'BBB', 'CCC']);
+  });
+
+  it('maps an empty response body', () => {
+    const result = fromCheckTicketsResponse(okResponse({}));
+    expect(result).toEqual({});
+  });
+
+  it('keeps tickets that have no populated fields (no silent data loss)', () => {
+    const result = fromCheckTicketsResponse(okResponse({ tickets: [{}] }));
+    expect(result.tickets).toHaveLength(1);
+    expect(result.tickets?.[0]).toEqual({});
+  });
+
+  it('throws SabreParseError for non-JSON body', () => {
+    expect(() => fromCheckTicketsResponse(okResponse('not json'))).toThrow(SabreParseError);
+  });
+
+  it('throws SabreParseError for array body', () => {
+    expect(() => fromCheckTicketsResponse(okResponse('[]'))).toThrow(SabreParseError);
   });
 });
