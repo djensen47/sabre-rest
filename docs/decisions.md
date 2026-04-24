@@ -340,7 +340,7 @@ counts as drift are in
 New entries are stamped with `PR #TBD` while the fix is on a branch;
 the PR number is filled in once the PR is opened, before merge.
 
-### 2026-04-23 · PR #TBD — Booking Management v1.32
+### 2026-04-23 · [PR #60](https://github.com/djensen47/sabre-rest/pull/60) — Booking Management v1.32
 
 Three drift corrections landed together:
 
