@@ -4321,3 +4321,82 @@ export interface FulfillTicketsOutput {
   /** Errors Sabre returned alongside this response. */
   errors?: readonly BookingError[];
 }
+
+// ---------------------------------------------------------------------------
+// voidTickets input / output
+// ---------------------------------------------------------------------------
+
+/**
+ * Input for the `voidTickets` operation.
+ *
+ * All fields are optional in the spec, but in practice at least one of
+ * `confirmationId` or `tickets` must be supplied so Sabre can resolve
+ * the voiding scope. The field with a spec-defined default
+ * (`voidNonElectronicTickets: false`) is always sent on the wire; the
+ * enum `errorHandlingPolicy` has a declaration-level default of
+ * `HALT_ON_ERROR` (matching the existing `cancelBooking` convention)
+ * and is also always sent.
+ */
+export interface VoidTicketsInput {
+  /**
+   * Electronic document numbers of tickets (or EMDs) to void. Up to 12
+   * entries. Pattern: 13 alphanumeric characters optionally followed by
+   * `/NN` (for conjunction/multi-coupon documents).
+   */
+  tickets?: readonly string[];
+  /**
+   * The booking reference ID as shown in the source supplier/vendor
+   * system. 6+ uppercase alphanumeric characters.
+   */
+  confirmationId?: string;
+  /**
+   * Policy for handling errors. Spec-level default: `HALT_ON_ERROR`.
+   */
+  errorHandlingPolicy?: CancelErrorPolicy;
+  /**
+   * Pseudo city code of the target destination for which the voiding
+   * is requested. 3–4 uppercase alphanumeric.
+   */
+  targetPcc?: string;
+  /** Entity authorizing the changes in the PNR. */
+  receivedFrom?: string;
+  /** Post-operation notification configuration. */
+  notification?: BookNotification;
+  /**
+   * Printers or printer profiles to designate. Provide a single
+   * `PrinterAddress` with a profile, or multiple entries sharing the
+   * same printer type.
+   */
+  designatePrinters?: readonly PrinterAddress[];
+  /**
+   * If `true`, nonelectronic (paper) tickets are included in the void
+   * process. Spec default: `false`.
+   */
+  voidNonElectronicTickets?: boolean;
+}
+
+/**
+ * Output of the `voidTickets` operation.
+ *
+ * Sabre returns `errors[]` for both hard failures and benign entries
+ * (warnings, informational) on 200-OK responses, and an
+ * `ALLOW_PARTIAL_CANCEL`-style response can legitimately carry
+ * per-item errors describing the tickets that were not voided — so
+ * non-empty `errors[]` is not by itself proof of failure. See
+ * `assertBookingSucceeded` for the opt-in helper.
+ */
+export interface VoidTicketsOutput {
+  /**
+   * Response timestamp, UTC. Nominal format `YYYY-MM-DDTHH:MM:SSZ`; as
+   * with other booking operations, cert has been observed to return
+   * the value without the trailing `Z`. Treat the timezone as UTC
+   * regardless.
+   */
+  timestamp?: string;
+  /** Echo of the request that produced this response. */
+  request?: VoidTicketsInput;
+  /** Errors Sabre returned alongside this response. */
+  errors?: readonly BookingError[];
+  /** Numbers of tickets that were successfully voided. */
+  voidedTickets?: readonly string[];
+}

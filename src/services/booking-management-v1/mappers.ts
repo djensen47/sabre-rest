@@ -122,6 +122,8 @@ import type {
   SpecialServiceToModify,
   TrainReference,
   TravelerToModify,
+  VoidTicketsInput,
+  VoidTicketsOutput,
 } from './types.js';
 
 const CREATE_BOOKING_PATH = 'v1/trip/orders/createBooking';
@@ -129,6 +131,7 @@ const GET_BOOKING_PATH = 'v1/trip/orders/getBooking';
 const MODIFY_BOOKING_PATH = 'v1/trip/orders/modifyBooking';
 const CANCEL_BOOKING_PATH = 'v1/trip/orders/cancelBooking';
 const FULFILL_TICKETS_PATH = 'v1/trip/orders/fulfillFlightTickets';
+const VOID_TICKETS_PATH = 'v1/trip/orders/voidFlightTickets';
 
 /**
  * Builds the outgoing {@link SabreRequest} for the `createBooking`
@@ -577,6 +580,109 @@ export function fromFulfillTicketsResponse(res: SabreResponse): FulfillTicketsOu
     out.errors = parsed.errors.map(buildBookingError);
   }
 
+  return out;
+}
+
+/**
+ * Builds the outgoing {@link SabreRequest} for the `voidTickets`
+ * operation.
+ *
+ * The request body matches the `VoidTicketsRequest` schema. Every
+ * field in the spec is optional; in practice at least `confirmationId`
+ * or `tickets` should be supplied so Sabre can resolve the voiding
+ * scope. Fields with spec-defined defaults (`voidNonElectronicTickets`)
+ * are always sent, as is `errorHandlingPolicy` (whose enum carries a
+ * `HALT_ON_ERROR` default in the spec — same convention as
+ * `cancelBooking`).
+ */
+export function toVoidTicketsRequest(baseUrl: string, input: VoidTicketsInput): SabreRequest {
+  const url = new URL(VOID_TICKETS_PATH, ensureTrailingSlash(baseUrl));
+
+  const body: Record<string, unknown> = {
+    voidNonElectronicTickets: input.voidNonElectronicTickets ?? false,
+    errorHandlingPolicy: input.errorHandlingPolicy ?? 'HALT_ON_ERROR',
+  };
+
+  if (input.tickets && input.tickets.length > 0) body.tickets = [...input.tickets];
+  if (input.confirmationId !== undefined) body.confirmationId = input.confirmationId;
+  if (input.targetPcc !== undefined) body.targetPcc = input.targetPcc;
+  if (input.receivedFrom !== undefined) body.receivedFrom = input.receivedFrom;
+  if (input.notification !== undefined) {
+    body.notification = buildNotificationBody(input.notification);
+  }
+  if (input.designatePrinters && input.designatePrinters.length > 0) {
+    body.designatePrinters = input.designatePrinters.map(buildPrinterAddressBody);
+  }
+
+  return {
+    method: 'POST',
+    url: url.toString(),
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+/**
+ * Parses the `voidTickets` response into the public output shape.
+ *
+ * Throws {@link SabreParseError} when the body is not valid JSON or
+ * not an object.
+ */
+export function fromVoidTicketsResponse(res: SabreResponse): VoidTicketsOutput {
+  let parsed: components['schemas']['VoidTicketsResponse'];
+  try {
+    parsed = JSON.parse(res.body) as components['schemas']['VoidTicketsResponse'];
+  } catch (err) {
+    throw new SabreParseError('Failed to parse Void Tickets response as JSON', res.body, {
+      cause: err,
+    });
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new SabreParseError('Void Tickets response was not a JSON object', parsed);
+  }
+
+  const out: VoidTicketsOutput = {};
+
+  if (parsed.timestamp !== undefined) out.timestamp = parsed.timestamp;
+  if (parsed.request !== undefined) {
+    out.request = buildVoidTicketsRequestEcho(parsed.request);
+  }
+  if (parsed.errors !== undefined && parsed.errors.length > 0) {
+    out.errors = parsed.errors.map(buildBookingError);
+  }
+  if (parsed.voidedTickets !== undefined) {
+    out.voidedTickets = [...parsed.voidedTickets];
+  }
+
+  return out;
+}
+
+function buildVoidTicketsRequestEcho(
+  req: components['schemas']['VoidTicketsRequest'],
+): VoidTicketsInput {
+  const out: VoidTicketsInput = {
+    voidNonElectronicTickets: req.voidNonElectronicTickets,
+  };
+  if (req.tickets !== undefined) out.tickets = [...req.tickets];
+  if (req.confirmationId !== undefined) out.confirmationId = req.confirmationId;
+  if (req.errorHandlingPolicy !== undefined) out.errorHandlingPolicy = req.errorHandlingPolicy;
+  if (req.targetPcc !== undefined) out.targetPcc = req.targetPcc;
+  if (req.receivedFrom !== undefined) out.receivedFrom = req.receivedFrom;
+  if (req.notification !== undefined) {
+    const notification: BookNotification = {};
+    if (req.notification.email !== undefined) notification.email = req.notification.email;
+    if (req.notification.queuePlacement !== undefined) {
+      notification.queuePlacement = req.notification.queuePlacement.map((q) => ({ ...q }));
+    }
+    out.notification = notification;
+  }
+  if (req.designatePrinters !== undefined) {
+    out.designatePrinters = req.designatePrinters.map(buildPrinterAddressEcho);
+  }
   return out;
 }
 
