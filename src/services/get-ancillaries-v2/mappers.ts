@@ -1,5 +1,6 @@
 import { SabreParseError } from '../../errors/sabre-parse-error.js';
 import type { components } from '../../generated/get-ancillaries.js';
+import { ensureTrailingSlash } from '../../http/ensure-trailing-slash.js';
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type {
   AncillaryCabinUpgrade,
@@ -319,8 +320,4 @@ function buildWarning(w: components['schemas']['Warning']): AncillaryWarning {
   if (w.descriptionText !== undefined) out.descriptionText = w.descriptionText;
   if (w.ownerName !== undefined) out.ownerName = w.ownerName;
   return out;
-}
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }

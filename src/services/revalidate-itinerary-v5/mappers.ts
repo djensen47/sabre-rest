@@ -1,5 +1,6 @@
 import { SabreParseError } from '../../errors/sabre-parse-error.js';
 import type { components } from '../../generated/revalidate-itinerary.js';
+import { ensureTrailingSlash } from '../../http/ensure-trailing-slash.js';
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type {
   BaggageAllowance,
@@ -560,8 +561,4 @@ function extractTotalFare(
   if (typeof tf.baseFareCurrency === 'string') out.baseFareCurrency = tf.baseFareCurrency;
   if (typeof tf.totalTaxAmount === 'number') out.totalTaxAmount = tf.totalTaxAmount;
   return out;
-}
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }

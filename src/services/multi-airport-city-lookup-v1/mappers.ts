@@ -1,5 +1,6 @@
 import { SabreParseError } from '../../errors/sabre-parse-error.js';
 import type { components } from '../../generated/multi-airport-city-lookup.js';
+import { ensureTrailingSlash } from '../../http/ensure-trailing-slash.js';
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type { CityLink, LookupCitiesInput, LookupCitiesOutput, MultiAirportCity } from './types.js';
 
@@ -71,8 +72,4 @@ export function fromLookupCitiesResponse(res: SabreResponse): LookupCitiesOutput
   });
 
   return { cities };
-}
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }

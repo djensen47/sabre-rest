@@ -1,5 +1,6 @@
 import { SabreParseError } from '../../errors/sabre-parse-error.js';
 import type { components } from '../../generated/booking-management.js';
+import { ensureTrailingSlash } from '../../http/ensure-trailing-slash.js';
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type {
   AncillaryToModify,
@@ -3011,8 +3012,4 @@ function buildRefundTicket(t: components['schemas']['Ticket']): RefundTicket {
     out.exchangePenalties = t.exchangePenalties.map(buildPenaltyItem);
   }
   return out;
-}
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
 }
