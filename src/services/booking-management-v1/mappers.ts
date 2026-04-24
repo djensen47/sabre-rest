@@ -123,6 +123,9 @@ import type {
   PrinterAddress,
   RefundFlightTicket,
   RefundQualifiers,
+  RefundTicket,
+  RefundTicketsInput,
+  RefundTicketsOutput,
   RemarkToModify,
   RoomToModify,
   SeatToModify,
@@ -141,6 +144,7 @@ const CANCEL_BOOKING_PATH = 'v1/trip/orders/cancelBooking';
 const FULFILL_TICKETS_PATH = 'v1/trip/orders/fulfillFlightTickets';
 const VOID_TICKETS_PATH = 'v1/trip/orders/voidFlightTickets';
 const CHECK_TICKETS_PATH = 'v1/trip/orders/checkFlightTickets';
+const REFUND_TICKETS_PATH = 'v1/trip/orders/refundFlightTickets';
 
 /**
  * Builds the outgoing {@link SabreRequest} for the `createBooking`
@@ -2881,6 +2885,131 @@ function buildCancelOffer(o: components['schemas']['CancelOffer']): CancelOffer 
   if (o.offerExpirationDate !== undefined) out.offerExpirationDate = o.offerExpirationDate;
   if (o.offerExpirationTime !== undefined) out.offerExpirationTime = o.offerExpirationTime;
   if (o.refundTotals !== undefined) out.refundTotals = buildTotalValues(o.refundTotals);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// refundTickets
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the outgoing {@link SabreRequest} for the `refundTickets`
+ * operation.
+ *
+ * The request body matches the `RefundTicketsRequest` schema. Every
+ * field is optional and there are no spec-defined defaults, so nothing
+ * is invented — only caller-supplied values are emitted.
+ */
+export function toRefundTicketsRequest(baseUrl: string, input?: RefundTicketsInput): SabreRequest {
+  const url = new URL(REFUND_TICKETS_PATH, ensureTrailingSlash(baseUrl));
+
+  const body: Record<string, unknown> = {};
+  if (input?.errorHandlingPolicy !== undefined) {
+    body.errorHandlingPolicy = input.errorHandlingPolicy;
+  }
+  if (input?.targetPcc !== undefined) body.targetPcc = input.targetPcc;
+  if (input?.tickets && input.tickets.length > 0) {
+    body.tickets = input.tickets.map(buildRefundFlightTicketBody);
+  }
+  if (input?.receivedFrom !== undefined) body.receivedFrom = input.receivedFrom;
+  if (input?.notification !== undefined) {
+    body.notification = buildNotificationBody(input.notification);
+  }
+  if (input?.designatePrinters && input.designatePrinters.length > 0) {
+    body.designatePrinters = input.designatePrinters.map(buildPrinterAddressBody);
+  }
+  if (input?.confirmationId !== undefined) body.confirmationId = input.confirmationId;
+  if (input?.documentsType !== undefined) body.documentsType = input.documentsType;
+
+  return {
+    method: 'POST',
+    url: url.toString(),
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+/**
+ * Parses the `refundTickets` response into the public output shape.
+ *
+ * Throws {@link SabreParseError} when the body is not valid JSON or
+ * not an object.
+ */
+export function fromRefundTicketsResponse(res: SabreResponse): RefundTicketsOutput {
+  let parsed: components['schemas']['RefundTicketsResponse'];
+  try {
+    parsed = JSON.parse(res.body) as components['schemas']['RefundTicketsResponse'];
+  } catch (err) {
+    throw new SabreParseError('Failed to parse Refund Tickets response as JSON', res.body, {
+      cause: err,
+    });
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new SabreParseError('Refund Tickets response was not a JSON object', parsed);
+  }
+
+  const out: RefundTicketsOutput = {};
+
+  if (parsed.timestamp !== undefined) out.timestamp = parsed.timestamp;
+  if (parsed.request !== undefined) out.request = buildRefundTicketsRequestEcho(parsed.request);
+  if (parsed.tickets !== undefined) out.tickets = parsed.tickets.map(buildRefundTicket);
+  if (parsed.errors !== undefined && parsed.errors.length > 0) {
+    out.errors = parsed.errors.map(buildBookingError);
+  }
+  if (parsed.refundedTickets !== undefined) {
+    out.refundedTickets = [...parsed.refundedTickets];
+  }
+
+  return out;
+}
+
+function buildRefundTicketsRequestEcho(
+  req: components['schemas']['RefundTicketsRequest'],
+): RefundTicketsInput {
+  const out: RefundTicketsInput = {};
+  if (req.errorHandlingPolicy !== undefined) out.errorHandlingPolicy = req.errorHandlingPolicy;
+  if (req.targetPcc !== undefined) out.targetPcc = req.targetPcc;
+  if (req.tickets !== undefined) out.tickets = req.tickets.map(buildRefundFlightTicketEcho);
+  if (req.receivedFrom !== undefined) out.receivedFrom = req.receivedFrom;
+  if (req.notification !== undefined) {
+    const notification: BookNotification = {};
+    if (req.notification.email !== undefined) notification.email = req.notification.email;
+    if (req.notification.queuePlacement !== undefined) {
+      notification.queuePlacement = req.notification.queuePlacement.map((q) => ({ ...q }));
+    }
+    out.notification = notification;
+  }
+  if (req.designatePrinters !== undefined) {
+    out.designatePrinters = req.designatePrinters.map(buildPrinterAddressEcho);
+  }
+  if (req.confirmationId !== undefined) out.confirmationId = req.confirmationId;
+  if (req.documentsType !== undefined) out.documentsType = req.documentsType;
+  return out;
+}
+
+function buildRefundTicket(t: components['schemas']['Ticket']): RefundTicket {
+  const out: RefundTicket = {};
+  if (t.number !== undefined) out.number = t.number;
+  if (t.isVoidable !== undefined) out.isVoidable = t.isVoidable;
+  if (t.isRefundable !== undefined) out.isRefundable = t.isRefundable;
+  if (t.isAutomatedRefundsEligible !== undefined) {
+    out.isAutomatedRefundsEligible = t.isAutomatedRefundsEligible;
+  }
+  if (t.refundPenalties !== undefined) {
+    out.refundPenalties = t.refundPenalties.map(buildPenaltyItem);
+  }
+  if (t.refundTaxes !== undefined) {
+    out.refundTaxes = t.refundTaxes.map(buildCancelRefundTax);
+  }
+  if (t.refundTotals !== undefined) out.refundTotals = buildTotalValues(t.refundTotals);
+  if (t.isChangeable !== undefined) out.isChangeable = t.isChangeable;
+  if (t.exchangePenalties !== undefined) {
+    out.exchangePenalties = t.exchangePenalties.map(buildPenaltyItem);
+  }
   return out;
 }
 
