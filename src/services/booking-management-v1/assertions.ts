@@ -1,3 +1,33 @@
+/**
+ * Assertion helpers for Booking Management v1 responses.
+ *
+ * ## Why this module exists
+ *
+ * Sabre's Booking Management v1 API can return HTTP 200 with hard
+ * failures listed in the response body's `errors[]` array. This is a
+ * quirk specific to this upstream API: a 2xx status does not by
+ * itself imply the operation succeeded. The library therefore does
+ * not classify or throw on `errors[]` by default — that decision
+ * belongs to the consumer — and instead exposes the opt-in
+ * {@link assertBookingSucceeded} helper for callers that want
+ * "200-with-errors should throw" semantics. The companion error
+ * type {@link SabreBookingErrorResponseError} carries the rejected
+ * entries.
+ *
+ * ## Why other services don't have an `assertions.ts`
+ *
+ * The 7 other Sabre APIs wrapped by this package signal failure via
+ * non-2xx HTTP statuses (which the HTTP layer surfaces as thrown
+ * errors) and do not return hard-failure payloads on 200. They have
+ * no analogous quirk to assert against, so they have no
+ * `assertions.ts` module. The asymmetry is intentional, not drift.
+ *
+ * **Criterion for adding an analogous module to a future service:**
+ * only when the upstream API has a similar success-status-with-
+ * failure-payload pattern. A service whose failures are always
+ * carried by the HTTP status does not need this layer.
+ */
+
 import { SabreBookingErrorResponseError } from '../../errors/sabre-booking-error-response-error.js';
 import type { BookingError } from './types.js';
 
