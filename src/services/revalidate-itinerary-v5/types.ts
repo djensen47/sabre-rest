@@ -10,13 +10,29 @@
  * revalidation takes exact flight details and confirms whether the
  * itinerary is still valid for purchase at the returned price.
  *
- * The response uses Sabre's GIR (Grouped Itinerary Response) format —
- * the same wire shape as BFM. The output types below are structurally
- * identical to BFM's response types but declared independently to avoid
- * cross-service coupling; the two services may evolve their public
- * surfaces independently.
- *
  * NDC content is not supported by Revalidate Itinerary.
+ *
+ * ## Why these types are duplicated with Bargain Finder Max v5
+ *
+ * Revalidate Itinerary and BFM share a wire format (Sabre's GIR —
+ * Grouped Itinerary Response), so 14 of the public types declared
+ * here are structurally identical to the same-named types in
+ * `src/services/bargain-finder-max-v5/types.ts`:
+ *
+ * `PassengerCount`, `PassengerFare`, `PricedItinerary`, `FareComponent`,
+ * `FareComponentSegment`, `Tax`, `BaggageAllowance`, `BaggageCharge`,
+ * `ItineraryLeg`, `FlightSegment`, `SegmentEndpoint`, `TotalFare`,
+ * `PointOfSale`, `FareOffer`, `SabreMessage`.
+ *
+ * The duplication is intentional, not drift. Each spec defines these
+ * shapes as independent inline schemas under its own operations — there
+ * are no cross-spec `$ref`s — so per `docs/architecture.md` "Public
+ * type design rule #1" ("same `$ref` → share; same shape today → don't
+ * trust it"), the two services must each own their copy. The two
+ * surfaces are free to evolve independently; if BFM grows a new field
+ * or Revalidate loosens a type for a cert-observed quirk, neither
+ * change should ripple into the other service. Sharing by coincidence
+ * would hide that future divergence.
  */
 
 // ---------------------------------------------------------------------------
