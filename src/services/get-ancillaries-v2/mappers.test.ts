@@ -1,15 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { SabreParseError } from '../../errors/sabre-parse-error.js';
-import type { SabreResponse } from '../../http/types.js';
+import { okResponse } from '../../http/test-utils.js';
 import { fromGetAncillariesResponse, toGetAncillariesRequest } from './mappers.js';
 import type { GetAncillariesInput } from './types.js';
-
-const okResponse = (body: unknown): SabreResponse => ({
-  status: 200,
-  statusText: 'OK',
-  headers: {},
-  body: typeof body === 'string' ? body : JSON.stringify(body),
-});
 
 const minimalInput: GetAncillariesInput = {
   orderId: 'ORDER-123',

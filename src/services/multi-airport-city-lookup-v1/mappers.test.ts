@@ -1,14 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { SabreParseError } from '../../errors/sabre-parse-error.js';
+import { okResponse } from '../../http/test-utils.js';
 import type { SabreResponse } from '../../http/types.js';
 import { fromLookupCitiesResponse, toLookupCitiesRequest } from './mappers.js';
-
-const okResponse = (body: unknown): SabreResponse => ({
-  status: 200,
-  statusText: 'OK',
-  headers: {},
-  body: typeof body === 'string' ? body : JSON.stringify(body),
-});
 
 describe('toLookupCitiesRequest', () => {
   it('builds a GET to the cities path with no query params when no input is given', () => {
