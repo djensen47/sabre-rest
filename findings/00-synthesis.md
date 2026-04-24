@@ -62,7 +62,7 @@ have landed on `main`.
 
 ### Tier 2 — should-fix
 
-- [x] **T2.1. Extract `okResponse` test helper to a shared test util.** — shipped in #TBD
+- [x] **T2.1. Extract `okResponse` test helper to a shared test util.** — shipped in #68
   - Source: D1 #2.
   - Where: all 8 services' `mappers.test.ts` (line numbers in D1 file).
   - Action: extract to `src/http/test-utils.ts` (or `src/testing.ts`),
