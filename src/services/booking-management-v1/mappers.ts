@@ -138,6 +138,21 @@ import type {
   VoidTicketsOutput,
 } from './types.js';
 
+/**
+ * Response-shape validation note
+ *
+ * Every `from*Response` mapper in this file rejects array bodies via
+ * `Array.isArray(parsed)` in addition to the usual `null` / `typeof`
+ * checks. Booking Management endpoints always return JSON objects per
+ * the OAS — never top-level arrays — so an array body indicates an
+ * unexpected shape and is treated as a parse failure. Other services
+ * in this package don't need this guard because their downstream
+ * mappers would surface a shape mismatch on their own; here the
+ * defensive check produces a clean `SabreParseError` instead of
+ * letting an unexpected array fall through into a less informative
+ * `TypeError`.
+ */
+
 const CREATE_BOOKING_PATH = 'v1/trip/orders/createBooking';
 const GET_BOOKING_PATH = 'v1/trip/orders/getBooking';
 const MODIFY_BOOKING_PATH = 'v1/trip/orders/modifyBooking';

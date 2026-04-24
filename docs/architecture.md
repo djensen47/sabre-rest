@@ -292,6 +292,13 @@ export function toRetrieveRequest(input: PublicInput): GeneratedRequest;
 export function fromRetrieveResponse(response: GeneratedResponse): PublicOutput;
 ```
 
+Beyond the `to` / `from` prefix, the rest of the function name follows
+the operation's natural verb/noun — `toLookupRequest`,
+`toCreateBookingRequest`, `toGetAncillariesRequest`,
+`fromSearchResponse`. There is no mechanical derivation rule. A reader
+scanning multiple services should expect the operation name, not a
+fixed pattern.
+
 Services consume mappers via a namespace import for grouping at call sites:
 
 ```ts
