@@ -14,6 +14,8 @@ import type {
   GetBookingOutput,
   ModifyBookingInput,
   ModifyBookingOutput,
+  RefundTicketsInput,
+  RefundTicketsOutput,
   VoidTicketsInput,
   VoidTicketsOutput,
 } from './types.js';
@@ -33,6 +35,7 @@ import type {
  *     - `cancelBooking` (`POST /v1/trip/orders/cancelBooking`)
  *     - `fulfillTickets` (`POST /v1/trip/orders/fulfillFlightTickets`)
  *     - `voidTickets` (`POST /v1/trip/orders/voidFlightTickets`)
+ *     - `refundTickets` (`POST /v1/trip/orders/refundFlightTickets`)
  *     - `checkTickets` (`POST /v1/trip/orders/checkFlightTickets`)
  *   - Docs: https://developer.sabre.com/docs/rest_apis/trip/orders/booking_management
  *
@@ -137,6 +140,27 @@ export interface BookingManagementV1Service {
   voidTickets(input: VoidTicketsInput): Promise<VoidTicketsOutput>;
 
   /**
+   * Refund flight tickets and/or Electronic Miscellaneous Documents
+   * (EMDs).
+   *
+   * Every field is optional per the spec and no defaults are sent on
+   * the wire; in practice callers should supply either a
+   * `confirmationId` (refund every eligible ticket on the booking) or
+   * a `tickets` list (refund specific tickets, optionally with ATPCO
+   * `refundQualifiers`). Up to 12 entries per call. Use
+   * `documentsType` to narrow the operation to `Tickets`, `EMDs`, or
+   * `Tickets and EMDs`.
+   *
+   * @param input Refund criteria. Omit entirely only if a pass-through
+   *   body is desired; otherwise supply at least `confirmationId` or
+   *   `tickets`.
+   * @returns Successfully refunded ticket numbers, per-ticket refund
+   *   eligibility data, the echoed request, and any errors Sabre
+   *   returned.
+   */
+  refundTickets(input?: RefundTicketsInput): Promise<RefundTicketsOutput>;
+
+  /**
    * Check flight tickets for void, refund, and exchange conditions.
    *
    * Read-only: this operation does not mutate the booking. Supply
@@ -206,6 +230,12 @@ export class DefaultBookingManagementV1Service implements BookingManagementV1Ser
     const req = mappers.toVoidTicketsRequest(this.#baseUrl, input);
     const res = await this.#request(req);
     return mappers.fromVoidTicketsResponse(res);
+  }
+
+  async refundTickets(input?: RefundTicketsInput): Promise<RefundTicketsOutput> {
+    const req = mappers.toRefundTicketsRequest(this.#baseUrl, input);
+    const res = await this.#request(req);
+    return mappers.fromRefundTicketsResponse(res);
   }
 
   async checkTickets(input: CheckTicketsInput): Promise<CheckTicketsOutput> {

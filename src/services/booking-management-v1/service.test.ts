@@ -8,6 +8,7 @@ import type {
   FulfillTicketsInput,
   GetBookingInput,
   ModifyBookingInput,
+  RefundTicketsInput,
   VoidTicketsInput,
 } from './types.js';
 
@@ -657,6 +658,121 @@ describe('BookingManagementV1Service.checkTickets', () => {
     });
 
     await expect(client.bookingManagementV1.checkTickets(minimalCheckInput)).rejects.toMatchObject({
+      name: 'SabreApiResponseError',
+      statusCode: 400,
+    });
+  });
+});
+
+describe('BookingManagementV1Service.refundTickets', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const minimalRefundInput: RefundTicketsInput = {
+    confirmationId: 'GLEBNY',
+    tickets: [{ number: '0167489825830' }],
+  };
+
+  const refundResponseBody = {
+    timestamp: '2024-10-28T11:11:21Z',
+    tickets: [
+      {
+        number: '0167489825830',
+        isVoidable: false,
+        isRefundable: true,
+        isChangeable: false,
+      },
+    ],
+    refundedTickets: ['0167489825830'],
+  };
+
+  it('POSTs to the refundFlightTickets URL with bearer auth and JSON headers', async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      () =>
+        new Response(JSON.stringify(refundResponseBody), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createSabreClient({
+      baseUrl: 'https://api.cert.platform.sabre.com',
+      auth: fakeProvider(),
+    });
+
+    const result = await client.bookingManagementV1.refundTickets(minimalRefundInput);
+
+    expect(result.timestamp).toBe('2024-10-28T11:11:21Z');
+    expect(result.tickets?.[0]?.number).toBe('0167489825830');
+    expect(result.tickets?.[0]?.isRefundable).toBe(true);
+    expect(result.refundedTickets).toEqual(['0167489825830']);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/refundFlightTickets');
+
+    const requestInit = init as RequestInit;
+    expect(requestInit.method).toBe('POST');
+    const headers = requestInit.headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer TEST_TOKEN');
+    expect(headers.Accept).toBe('application/json');
+    expect(headers['Content-Type']).toBe('application/json');
+
+    const body = JSON.parse((requestInit.body as string) ?? '{}') as Record<string, unknown>;
+    expect(body.confirmationId).toBe('GLEBNY');
+    expect(body.tickets).toEqual([{ number: '0167489825830' }]);
+  });
+
+  it('POSTs an empty body when called without input', async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      () =>
+        new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createSabreClient({
+      baseUrl: 'https://api.cert.platform.sabre.com',
+      auth: fakeProvider(),
+    });
+
+    await client.bookingManagementV1.refundTickets();
+
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    const requestInit = init as RequestInit;
+    expect(requestInit.method).toBe('POST');
+    expect(requestInit.body).toBe('{}');
+  });
+
+  it('surfaces a non-2xx response as SabreApiResponseError', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(
+        () =>
+          new Response(
+            JSON.stringify({
+              errors: [{ category: 'BAD_REQUEST', type: 'TICKET_NOT_REFUNDABLE' }],
+            }),
+            { status: 400, statusText: 'Bad Request' },
+          ),
+      ),
+    );
+
+    const client = createSabreClient({
+      baseUrl: 'https://api.cert.platform.sabre.com',
+      auth: fakeProvider(),
+    });
+
+    await expect(
+      client.bookingManagementV1.refundTickets(minimalRefundInput),
+    ).rejects.toMatchObject({
       name: 'SabreApiResponseError',
       statusCode: 400,
     });

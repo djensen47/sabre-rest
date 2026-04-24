@@ -4672,3 +4672,140 @@ export interface CancelOffer {
   /** Refundable totals associated with this offer. */
   refundTotals?: BookingTotalValues;
 }
+
+// ---------------------------------------------------------------------------
+// refundTickets input / output
+// ---------------------------------------------------------------------------
+
+/**
+ * Input for the `refundTickets` operation.
+ *
+ * Every field is optional per Sabre's `RefundTicketsRequest` schema —
+ * the spec declares no required fields and no wire-level defaults. In
+ * practice callers should supply at least one of `confirmationId` or
+ * `tickets` so Sabre can resolve the refund scope. Use `documentsType`
+ * to narrow the operation to tickets, EMDs, or both.
+ */
+export interface RefundTicketsInput {
+  /** Policy for handling errors. */
+  errorHandlingPolicy?: CancelErrorPolicy;
+  /**
+   * Pseudo city code of the target destination for which the ticket
+   * refund is requested. 3–4 uppercase alphanumeric characters.
+   */
+  targetPcc?: string;
+  /**
+   * Tickets to refund. Up to 12 entries. Each entry carries a ticket
+   * number and optional ATPCO refund qualifiers.
+   */
+  tickets?: readonly RefundFlightTicket[];
+  /** Entity authorizing the changes in the PNR. */
+  receivedFrom?: string;
+  /** Post-operation notification configuration. */
+  notification?: BookNotification;
+  /**
+   * Printers or printer profiles to designate. Provide a single
+   * `PrinterAddress` with a profile, or multiple entries sharing the
+   * same printer type.
+   */
+  designatePrinters?: readonly PrinterAddress[];
+  /**
+   * Booking reference ID as shown in the source supplier/vendor
+   * system. 6+ uppercase alphanumeric characters.
+   */
+  confirmationId?: string;
+  /**
+   * Which document categories participate in the refund (tickets,
+   * EMDs, or both). Uses the shared `DocumentsTypeEnum` also used by
+   * `cancelBooking.refundDocumentsType`.
+   */
+  documentsType?: CancelDocumentsType;
+}
+
+/**
+ * Output of the `refundTickets` operation.
+ *
+ * Sabre returns `errors[]` for both hard failures and benign entries
+ * (warnings, informational) on 200-OK responses, and an
+ * `ALLOW_PARTIAL_CANCEL`-style response can legitimately carry
+ * per-item errors describing the tickets that were not refunded — so
+ * non-empty `errors[]` is not by itself proof of failure. See
+ * `assertBookingSucceeded` for the opt-in helper.
+ *
+ * `tickets` are returned in the same order as the request.
+ */
+export interface RefundTicketsOutput {
+  /**
+   * Response timestamp, UTC. Nominal format `YYYY-MM-DDTHH:MM:SSZ`;
+   * as with other booking operations, cert has been observed to
+   * return the value without the trailing `Z`. Treat the timezone as
+   * UTC regardless.
+   */
+  timestamp?: string;
+  /** Echo of the request that produced this response. */
+  request?: RefundTicketsInput;
+  /**
+   * Per-ticket cancellation eligibility and refundable amounts, in
+   * the same order as the request.
+   */
+  tickets?: readonly RefundTicket[];
+  /** Errors Sabre returned alongside this response. */
+  errors?: readonly BookingError[];
+  /** Numbers of tickets that were successfully refunded. */
+  refundedTickets?: readonly string[];
+}
+
+/**
+ * Cancellation, refund, and exchange eligibility for a single ticket
+ * in a `refundTickets` response.
+ *
+ * Mirrors Sabre's base `Ticket` schema — this is the `CheckedTicket`
+ * shape minus the automated-refund `refundFee` field (which is only
+ * present in `checkTickets` responses). All fields are optional per
+ * the spec; the mapper emits every record returned by Sabre even if
+ * individual fields are absent.
+ */
+export interface RefundTicket {
+  /** Electronic flight ticket number. */
+  number?: string;
+  /**
+   * If `true`, the ticket meets the requirements for the void
+   * procedure.
+   */
+  isVoidable?: boolean;
+  /**
+   * If `true`, the ticket is fully or partially refundable. Refer to
+   * `refundPenalties` for details. Not guaranteed when the penalty
+   * source indicates `Category 16`.
+   */
+  isRefundable?: boolean;
+  /**
+   * If `true`, the ticket meets the requirements for an automated
+   * refund.
+   */
+  isAutomatedRefundsEligible?: boolean;
+  /**
+   * Estimated refund-penalty details. Estimates assume the highest
+   * possible refund penalty is applied.
+   */
+  refundPenalties?: readonly BookingFareRulePenalty[];
+  /**
+   * Tax information associated with a refund. Applicable to automated
+   * refunds only.
+   */
+  refundTaxes?: readonly CancelRefundTax[];
+  /** Refundable totals for the ticket. */
+  refundTotals?: BookingTotalValues;
+  /**
+   * If `true`, the fare can be exchanged (with or without additional
+   * cost). Not guaranteed when the penalty source indicates
+   * `Category 16`.
+   */
+  isChangeable?: boolean;
+  /**
+   * Estimated exchange-penalty details. Estimates assume that all
+   * fare components are changed and the highest applicable penalty is
+   * applied.
+   */
+  exchangePenalties?: readonly BookingFareRulePenalty[];
+}

@@ -8,6 +8,7 @@ import {
   fromFulfillTicketsResponse,
   fromGetBookingResponse,
   fromModifyBookingResponse,
+  fromRefundTicketsResponse,
   fromVoidTicketsResponse,
   toCancelBookingRequest,
   toCheckTicketsRequest,
@@ -15,6 +16,7 @@ import {
   toFulfillTicketsRequest,
   toGetBookingRequest,
   toModifyBookingRequest,
+  toRefundTicketsRequest,
   toVoidTicketsRequest,
 } from './mappers.js';
 import type {
@@ -24,6 +26,7 @@ import type {
   FulfillTicketsInput,
   GetBookingInput,
   ModifyBookingInput,
+  RefundTicketsInput,
   VoidTicketsInput,
 } from './types.js';
 
@@ -1794,5 +1797,249 @@ describe('fromCheckTicketsResponse', () => {
 
   it('throws SabreParseError for array body', () => {
     expect(() => fromCheckTicketsResponse(okResponse('[]'))).toThrow(SabreParseError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toRefundTicketsRequest
+// ---------------------------------------------------------------------------
+
+const minimalRefundInput: RefundTicketsInput = {
+  confirmationId: 'GLEBNY',
+  tickets: [{ number: '0167489825830' }],
+};
+
+describe('toRefundTicketsRequest', () => {
+  it('builds a POST to the refundFlightTickets path with JSON headers', () => {
+    const req = toRefundTicketsRequest('https://api.cert.platform.sabre.com', minimalRefundInput);
+    expect(req.method).toBe('POST');
+    expect(req.url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/refundFlightTickets');
+    expect(req.headers.Accept).toBe('application/json');
+    expect(req.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('handles a base URL with a trailing slash', () => {
+    const req = toRefundTicketsRequest('https://api.cert.platform.sabre.com/', minimalRefundInput);
+    expect(req.url).toBe('https://api.cert.platform.sabre.com/v1/trip/orders/refundFlightTickets');
+  });
+
+  it('emits an empty body when called without input', () => {
+    const req = toRefundTicketsRequest('https://api.cert.platform.sabre.com');
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body).toEqual({});
+  });
+
+  it('emits only caller-supplied fields (no invented defaults)', () => {
+    const req = toRefundTicketsRequest('https://api.cert.platform.sabre.com', {});
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body).toEqual({});
+  });
+
+  it('maps every optional field verbatim when provided', () => {
+    const input: RefundTicketsInput = {
+      errorHandlingPolicy: 'ALLOW_PARTIAL_CANCEL',
+      targetPcc: 'G7HE',
+      confirmationId: 'GLEBNY',
+      receivedFrom: 'Booking Management API testing',
+      notification: { email: 'ETICKET' },
+      designatePrinters: [{ profileNumber: 2 }],
+      documentsType: 'Tickets and EMDs',
+      tickets: [
+        { number: '0167489825830' },
+        {
+          number: '0167489825831',
+          refundQualifiers: {
+            overrideCancelFee: '100.00',
+            overrideTaxes: [
+              {
+                taxCode: 'XF',
+                taxAmount: '5.00',
+                airportTaxBreakdowns: [{ airportCode: 'DFW', taxAmount: '5.00' }],
+              },
+            ],
+            commissionAmount: '25.00',
+            waiverCode: '12345ABCD',
+            tourCode: '123456789ABCDE',
+            splitRefundAmounts: [{ amount: '5.00' }, { amount: '10.00' }],
+            journeyTypeCode: 'B',
+          },
+        },
+      ],
+    };
+    const req = toRefundTicketsRequest('https://api.cert.platform.sabre.com', input);
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect(body.errorHandlingPolicy).toBe('ALLOW_PARTIAL_CANCEL');
+    expect(body.targetPcc).toBe('G7HE');
+    expect(body.confirmationId).toBe('GLEBNY');
+    expect(body.receivedFrom).toBe('Booking Management API testing');
+    expect(body.notification).toEqual({ email: 'ETICKET' });
+    expect(body.designatePrinters).toEqual([{ profileNumber: 2 }]);
+    expect(body.documentsType).toBe('Tickets and EMDs');
+    expect(body.tickets).toEqual([
+      { number: '0167489825830' },
+      {
+        number: '0167489825831',
+        refundQualifiers: {
+          overrideCancelFee: '100.00',
+          overrideTaxes: [
+            {
+              taxCode: 'XF',
+              taxAmount: '5.00',
+              airportTaxBreakdowns: [{ airportCode: 'DFW', taxAmount: '5.00' }],
+            },
+          ],
+          commissionAmount: '25.00',
+          waiverCode: '12345ABCD',
+          tourCode: '123456789ABCDE',
+          splitRefundAmounts: [{ amount: '5.00' }, { amount: '10.00' }],
+          journeyTypeCode: 'B',
+        },
+      },
+    ]);
+  });
+
+  it('omits tickets when the array is empty', () => {
+    const req = toRefundTicketsRequest('https://api.cert.platform.sabre.com', {
+      confirmationId: 'GLEBNY',
+      tickets: [],
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect('tickets' in body).toBe(false);
+    expect(body.confirmationId).toBe('GLEBNY');
+  });
+
+  it('omits designatePrinters when the array is empty', () => {
+    const req = toRefundTicketsRequest('https://api.cert.platform.sabre.com', {
+      confirmationId: 'GLEBNY',
+      designatePrinters: [],
+    });
+    const body = JSON.parse(req.body ?? '{}') as Record<string, unknown>;
+    expect('designatePrinters' in body).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fromRefundTicketsResponse
+// ---------------------------------------------------------------------------
+
+describe('fromRefundTicketsResponse', () => {
+  it('parses a fully populated response with every section preserved', () => {
+    const result = fromRefundTicketsResponse(
+      okResponse({
+        timestamp: '2024-10-28T11:11:21Z',
+        request: {
+          errorHandlingPolicy: 'HALT_ON_ERROR',
+          targetPcc: 'G7HE',
+          confirmationId: 'GLEBNY',
+          documentsType: 'Tickets and EMDs',
+          tickets: [
+            {
+              number: '0167489825830',
+              refundQualifiers: { overrideCancelFee: '100.00' },
+            },
+          ],
+        },
+        tickets: [
+          {
+            number: '0167489825830',
+            isVoidable: false,
+            isRefundable: true,
+            isAutomatedRefundsEligible: true,
+            isChangeable: false,
+            refundPenalties: [
+              {
+                applicability: 'BEFORE_DEPARTURE',
+                conditionsApply: false,
+                penalty: { amount: '50.00', currencyCode: 'USD' },
+                source: 'Category 33',
+              },
+            ],
+            refundTaxes: [{ taxCode: 'XF', amount: '5.00' }],
+            refundTotals: { total: '100.00', currencyCode: 'USD' },
+            exchangePenalties: [
+              {
+                applicability: 'AFTER_DEPARTURE',
+                conditionsApply: true,
+                penalty: { amount: '75.00', currencyCode: 'USD' },
+              },
+            ],
+          },
+        ],
+        errors: [{ category: 'INFO', type: 'PARTIAL_REFUND' }],
+        refundedTickets: ['0167489825830'],
+      }),
+    );
+    expect(result.timestamp).toBe('2024-10-28T11:11:21Z');
+    expect(result.request?.confirmationId).toBe('GLEBNY');
+    expect(result.request?.documentsType).toBe('Tickets and EMDs');
+    expect(result.request?.tickets?.[0]?.refundQualifiers?.overrideCancelFee).toBe('100.00');
+    expect(result.tickets).toHaveLength(1);
+    const ticket = result.tickets?.[0];
+    expect(ticket?.number).toBe('0167489825830');
+    expect(ticket?.isRefundable).toBe(true);
+    expect(ticket?.refundPenalties?.[0]?.source).toBe('Category 33');
+    expect(ticket?.refundTaxes?.[0]).toEqual({ taxCode: 'XF', amount: '5.00' });
+    expect(ticket?.refundTotals?.total).toBe('100.00');
+    expect(ticket?.exchangePenalties?.[0]?.applicability).toBe('AFTER_DEPARTURE');
+    expect(result.errors?.[0]?.type).toBe('PARTIAL_REFUND');
+    expect(result.refundedTickets).toEqual(['0167489825830']);
+  });
+
+  it('preserves ticket order (Sabre returns them in request order)', () => {
+    const result = fromRefundTicketsResponse(
+      okResponse({
+        tickets: [{ number: 'AAA' }, { number: 'BBB' }, { number: 'CCC' }],
+      }),
+    );
+    expect(result.tickets?.map((t) => t.number)).toEqual(['AAA', 'BBB', 'CCC']);
+  });
+
+  it('keeps tickets that have no populated fields (no silent data loss)', () => {
+    const result = fromRefundTicketsResponse(okResponse({ tickets: [{}] }));
+    expect(result.tickets).toHaveLength(1);
+    expect(result.tickets?.[0]).toEqual({});
+  });
+
+  it('echoes the request with nested refundQualifiers', () => {
+    const result = fromRefundTicketsResponse(
+      okResponse({
+        request: {
+          tickets: [
+            {
+              number: '0167489825830',
+              refundQualifiers: {
+                overrideCancelFee: '100.00',
+                splitRefundAmounts: [{ amount: '50.00' }],
+              },
+            },
+          ],
+          notification: { email: 'ETICKET' },
+          designatePrinters: [{ profileNumber: 2 }],
+        },
+      }),
+    );
+    expect(result.request?.tickets?.[0]?.refundQualifiers?.overrideCancelFee).toBe('100.00');
+    expect(result.request?.tickets?.[0]?.refundQualifiers?.splitRefundAmounts).toEqual([
+      { amount: '50.00' },
+    ]);
+    expect(result.request?.notification).toEqual({ email: 'ETICKET' });
+    expect(result.request?.designatePrinters).toEqual([{ profileNumber: 2 }]);
+  });
+
+  it('maps an empty response body', () => {
+    const result = fromRefundTicketsResponse(okResponse({}));
+    expect(result).toEqual({});
+  });
+
+  it('throws SabreParseError for non-JSON body', () => {
+    expect(() => fromRefundTicketsResponse(okResponse('not json'))).toThrow(SabreParseError);
+  });
+
+  it('throws SabreParseError for null body', () => {
+    expect(() => fromRefundTicketsResponse(okResponse('null'))).toThrow(SabreParseError);
+  });
+
+  it('throws SabreParseError for array body', () => {
+    expect(() => fromRefundTicketsResponse(okResponse('[]'))).toThrow(SabreParseError);
   });
 });
