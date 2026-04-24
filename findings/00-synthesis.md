@@ -112,7 +112,7 @@ have landed on `main`.
 
 ### Tier 3 — nice-to-have
 
-- [ ] **T3.1. Document the mapper function naming convention.**
+- [x] **T3.1. Document the mapper function naming convention.** — shipped in #70.
   - Source: D5 #2.
   - Where: `docs/architecture.md` (mapper section).
   - Action: add a paragraph explaining that mapper function names
@@ -132,7 +132,7 @@ have landed on `main`.
     8 operations (currently ~2 tests per operation). Mapper tests
     carry the bulk of coverage so this is a small marginal gain.
 
-- [ ] **T3.4. Document booking's stricter array-rejection.**
+- [x] **T3.4. Document booking's stricter array-rejection.** — shipped in #70.
   - Source: D9 #1.
   - Where: doc comment in `booking-management-v1/mappers.ts` near the
     `Array.isArray()` check, OR in `assertions.ts` if the rationale
@@ -141,7 +141,7 @@ have landed on `main`.
     while other services accept them (because booking endpoints
     always return objects, not arrays).
 
-- [ ] **T3.5. Document BFM/Revalidate envelope validation depth.**
+- [x] **T3.5. Document BFM/Revalidate envelope validation depth.** — shipped in #70.
   - Source: D9 #2.
   - Where: doc comment near the `groupedItineraryResponse` validation
     in each mapper.
@@ -160,8 +160,8 @@ The PRs are mostly independent. A natural shipping order:
    sense since neither changes behavior.~~ **Shipped in #69.**
 4. **PR 4: T2.4** — JSON-parse-error test standardization. Touches
    8 test files but is purely additive.
-5. **PR 5: T3.1 + T3.4 + T3.5** (bundle) — documentation cluster
-   in architecture.md and mapper comments.
+5. ~~**PR 5: T3.1 + T3.4 + T3.5** (bundle) — documentation cluster
+   in architecture.md and mapper comments.~~ **Shipped in #70.**
 6. **PR 6: T3.3** (optional) — thicker booking service tests, only
    if appetite exists.
 7. **Drop T3.2** unless the user wants it.
