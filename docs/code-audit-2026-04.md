@@ -1,8 +1,12 @@
-# Code Audit — Wrap-up
+# Code Audit — April 2026
 
 A cross-cutting review of `src/services/*` and the shared infrastructure
-around them, completed April 2026. The goal was a punch list of small,
+around them, completed 2026-04-24. The goal was a punch list of small,
 revertable improvements — not a single mega-PR.
+
+Future audits should follow the same date-stamped filename pattern
+(`docs/code-audit-YYYY-MM.md`) so this report stays a snapshot in time
+rather than drifting as the codebase evolves.
 
 ## What was checked
 
