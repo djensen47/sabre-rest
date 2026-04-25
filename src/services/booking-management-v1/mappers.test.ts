@@ -355,6 +355,9 @@ describe('fromCreateBookingResponse', () => {
     expect(result.booking?.journeys?.[0]?.numberOfFlights).toBe(1);
   });
 
+  // Canonical negative-path matrix for this file. Every from*Response in
+  // booking-management-v1 must throw SabreParseError for non-JSON, null, and
+  // array bodies; the sibling describe blocks repeat this matrix per operation.
   it('throws SabreParseError for non-JSON body', () => {
     expect(() => fromCreateBookingResponse(okResponse('not json'))).toThrow(SabreParseError);
   });

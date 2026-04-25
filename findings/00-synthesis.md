@@ -101,7 +101,7 @@ have landed on `main`.
   - Risk: doc-only, zero behavior change.
   - Estimated PR size: tiny (1 file edit, comment block only).
 
-- [ ] **T2.4. Standardize JSON-parse error tests across services.**
+- [x] **T2.4. Standardize JSON-parse error tests across services.** — shipped in #71.
   - Source: D8 #2.
   - Where: each service's `mappers.test.ts`.
   - Action: for each service, add the missing parse-error categories
@@ -158,8 +158,8 @@ The PRs are mostly independent. A natural shipping order:
 3. ~~**PR 3: T2.2 + T2.3** (bundle) — both are doc-only edits that
    document intentional duplication / specialization. Bundling makes
    sense since neither changes behavior.~~ **Shipped in #69.**
-4. **PR 4: T2.4** — JSON-parse-error test standardization. Touches
-   8 test files but is purely additive.
+4. ~~**PR 4: T2.4** — JSON-parse-error test standardization. Touches
+   8 test files but is purely additive.~~ **Shipped in #71.**
 5. ~~**PR 5: T3.1 + T3.4 + T3.5** (bundle) — documentation cluster
    in architecture.md and mapper comments.~~ **Shipped in #70.**
 6. **PR 6: T3.3** (optional) — thicker booking service tests, only
