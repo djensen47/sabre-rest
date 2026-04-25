@@ -2,7 +2,11 @@
 # booking-e2e.sh — full end-to-end smoke test.
 #
 # bargain-finder-max → revalidate-itinerary → create-booking → get-booking
-# → modify-booking → cancel-booking → get-booking (verify).
+# → get-seats → modify-booking → cancel-booking → get-booking (verify).
+#
+# get-ancillaries is intentionally not chained here: it requires an NDC
+# orderId, but createBooking from the BFM flow produces a classic Sabre
+# PNR. Cover NDC ancillaries in a separate scenario script.
 #
 # Designed for single-leg, single-segment, same-day one-way searches.
 # Multi-leg / connecting itineraries are intentionally out of scope for
@@ -262,7 +266,27 @@ echo "flights:          $(echo "$GET_OUT" | jq -r '.flights | length // 0')"
 [[ -z "$BOOKING_SIGNATURE" ]] && fail "get-booking (no bookingSignature)"
 
 # ---------------------------------------------------------------------------
-step 5 "modify-booking (add GENERAL remark)"
+# Best-effort: getSeats is informational here, not gating. We've observed
+# it return HTTP 500 with a structured `errors[]` body (e.g. "All seat
+# maps have errors" / "UNABLE TO DISPLAY") on at least one CERT PNR
+# instead of returning a 200 with empty seat maps. We don't yet know
+# whether that's canonical Sabre behavior, a quirk of that carrier/fare,
+# or a CERT-only thing — so we log and continue rather than aborting.
+step 5 "get-seats (stateless, by PNR locator) — best-effort"
+SEATS_BODY=$(jq -n --arg pnr "$CONFIRMATION_ID" \
+  '{requestType: "stateless", pnrLocator: $pnr}')
+if SEATS_OUT=$(run_cli $CLI get-seats "${BASE_URL_FLAG[@]}" --body "$SEATS_BODY"); then
+  echo "seatMaps:     $(echo "$SEATS_OUT" | jq -r '.seatMaps | length // 0')"
+  echo "compartments: $(echo "$SEATS_OUT" | jq -r '[.seatMaps[]? | (.cabinCompartments // []) | length] | add // 0')"
+  echo "errors:       $(echo "$SEATS_OUT" | jq -r '.errors | length // 0')"
+  echo "warnings:     $(echo "$SEATS_OUT" | jq -r '.warnings | length // 0')"
+else
+  echo "get-seats failed (continuing — informational only):"
+  sed 's/^/  /' "$TMP_ERR" >&2
+fi
+
+# ---------------------------------------------------------------------------
+step 6 "modify-booking (add GENERAL remark)"
 MODIFY_BODY=$(echo "$GET_OUT" | jq \
   --arg cid "$CONFIRMATION_ID" \
   --arg sig "$BOOKING_SIGNATURE" \
@@ -280,7 +304,7 @@ fi
 echo "remarks: $(echo "$MODIFY_OUT" | jq -r '.booking.remarks | length // 0')"
 
 # ---------------------------------------------------------------------------
-step 6 "cancel-booking (cancelAll)"
+step 7 "cancel-booking (cancelAll)"
 if ! CANCEL_OUT=$(run_cli $CLI cancel-booking "${BASE_URL_FLAG[@]}" \
     --confirmation-id "$CONFIRMATION_ID" --cancel-all --retrieve-booking); then
   cat "$TMP_ERR" >&2
@@ -291,7 +315,7 @@ echo "voidedTickets:   $(echo "$CANCEL_OUT" | jq -r '.voidedTickets | length // 
 echo "refundedTickets: $(echo "$CANCEL_OUT" | jq -r '.refundedTickets | length // 0')"
 
 # ---------------------------------------------------------------------------
-step 7 "get-booking (post-cancel)"
+step 8 "get-booking (post-cancel)"
 if VERIFY_OUT=$(run_cli $CLI get-booking "${BASE_URL_FLAG[@]}" --confirmation-id "$CONFIRMATION_ID"); then
   echo "isCancelable: $(echo "$VERIFY_OUT" | jq -r '.isCancelable // false')"
 else
