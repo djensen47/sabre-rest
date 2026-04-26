@@ -27,7 +27,9 @@ import type {
   CancelBookingInput,
   CancelErrorPolicy,
   CancelFlightTicketOperation,
+  CheckTicketsInput,
   CreateBookingInput,
+  FulfillTicketsInput,
   GetAncillariesInput,
   GetBookingInput,
   GetSeatsInput,
@@ -39,10 +41,12 @@ import type {
   ModifyBookingInput,
   PassengerCount,
   PricedItinerary,
+  RefundTicketsInput,
   RevalidateItineraryInput,
   RevalidateItineraryOutput,
   SearchBargainFinderMaxInput,
   SearchBargainFinderMaxOutput,
+  VoidTicketsInput,
 } from './index.js';
 
 // ---------------------------------------------------------------------------
@@ -862,6 +866,118 @@ export function buildCancelBookingInput(values: {
   return input;
 }
 
+/**
+ * Builds the input for `bookingManagementV1.checkTickets` from the CLI
+ * flags. `--body` wins; otherwise at least one of `--confirmation-id`
+ * or `--tickets` must be supplied. Ticket numbers from `--tickets` are
+ * wrapped as `{ number }` records (without refund qualifiers).
+ */
+export function buildCheckTicketsInput(values: {
+  'confirmation-id'?: string;
+  tickets?: string;
+  'target-pcc'?: string;
+  body?: string;
+}): CheckTicketsInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as CheckTicketsInput;
+  }
+  const tickets = splitCommaList(values.tickets);
+  if (!values['confirmation-id'] && !tickets) {
+    throw new CliUsageError(
+      'check-tickets requires --confirmation-id or --tickets. (Or supply --body with a full JSON input.)',
+    );
+  }
+  const input: CheckTicketsInput = {};
+  if (values['confirmation-id']) input.confirmationId = values['confirmation-id'];
+  if (tickets) input.tickets = tickets.map((number) => ({ number }));
+  if (values['target-pcc'] !== undefined) input.targetPcc = values['target-pcc'];
+  return input;
+}
+
+/**
+ * Builds the input for `bookingManagementV1.fulfillTickets` from the
+ * CLI flags. The request needs nested `fulfillments[]` and
+ * `formsOfPayment[]` arrays, so this command is body-only.
+ */
+export function buildFulfillTicketsInput(values: { body?: string }): FulfillTicketsInput {
+  if (values.body === undefined) {
+    throw new CliUsageError(
+      'fulfill-tickets requires --body with a full JSON input (confirmationId, fulfillments, formsOfPayment).',
+    );
+  }
+  return JSON.parse(values.body) as FulfillTicketsInput;
+}
+
+/**
+ * Builds the input for `bookingManagementV1.voidTickets` from the CLI
+ * flags. `--body` wins; otherwise at least one of `--confirmation-id`
+ * or `--tickets` must be supplied. Tickets are passed as raw string
+ * numbers (`VoidTicketsInput.tickets` is `string[]`, unlike the
+ * `RefundFlightTicket[]` shape on check/refund).
+ */
+export function buildVoidTicketsInput(values: {
+  'confirmation-id'?: string;
+  tickets?: string;
+  'target-pcc'?: string;
+  'received-from'?: string;
+  'error-handling-policy'?: string;
+  'void-non-electronic-tickets'?: boolean;
+  body?: string;
+}): VoidTicketsInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as VoidTicketsInput;
+  }
+  const tickets = splitCommaList(values.tickets);
+  if (!values['confirmation-id'] && !tickets) {
+    throw new CliUsageError(
+      'void-tickets requires --confirmation-id or --tickets. (Or supply --body with a full JSON input.)',
+    );
+  }
+  const input: VoidTicketsInput = {};
+  if (values['confirmation-id']) input.confirmationId = values['confirmation-id'];
+  if (tickets) input.tickets = tickets;
+  if (values['target-pcc'] !== undefined) input.targetPcc = values['target-pcc'];
+  if (values['received-from'] !== undefined) input.receivedFrom = values['received-from'];
+  const policy = parseCancelErrorPolicy(values['error-handling-policy']);
+  if (policy !== undefined) input.errorHandlingPolicy = policy;
+  if (values['void-non-electronic-tickets'] === true) input.voidNonElectronicTickets = true;
+  return input;
+}
+
+/**
+ * Builds the input for `bookingManagementV1.refundTickets` from the
+ * CLI flags. `--body` wins; otherwise at least one of `--confirmation-id`
+ * or `--tickets` must be supplied. Ticket numbers from `--tickets` are
+ * wrapped as `{ number }` records — to attach refund qualifiers
+ * (waiverCode, overrideTaxes, journeyTypeCode, etc.) supply `--body`.
+ */
+export function buildRefundTicketsInput(values: {
+  'confirmation-id'?: string;
+  tickets?: string;
+  'target-pcc'?: string;
+  'received-from'?: string;
+  'error-handling-policy'?: string;
+  body?: string;
+}): RefundTicketsInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as RefundTicketsInput;
+  }
+  const tickets = splitCommaList(values.tickets);
+  if (!values['confirmation-id'] && !tickets) {
+    throw new CliUsageError(
+      'refund-tickets requires --confirmation-id or --tickets. (Or supply --body with a full JSON input.)',
+    );
+  }
+  const input: RefundTicketsInput = {};
+  if (values['confirmation-id']) input.confirmationId = values['confirmation-id'];
+  if (tickets) input.tickets = tickets.map((number) => ({ number }));
+  if (values['target-pcc'] !== undefined) input.targetPcc = values['target-pcc'];
+  if (values['received-from'] !== undefined) input.receivedFrom = values['received-from'];
+  const policy = parseCancelErrorPolicy(values['error-handling-policy']);
+  if (policy !== undefined) input.errorHandlingPolicy = policy;
+  return input;
+}
+
 // ---------------------------------------------------------------------------
 // parseArgs option configurations
 // ---------------------------------------------------------------------------
@@ -968,6 +1084,40 @@ const GET_SEATS_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const CHECK_TICKETS_OPTIONS = {
+  ...COMMON_OPTIONS,
+  'confirmation-id': { type: 'string' },
+  tickets: { type: 'string' },
+  'target-pcc': { type: 'string' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
+const FULFILL_TICKETS_OPTIONS = {
+  ...COMMON_OPTIONS,
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
+const VOID_TICKETS_OPTIONS = {
+  ...COMMON_OPTIONS,
+  'confirmation-id': { type: 'string' },
+  tickets: { type: 'string' },
+  'target-pcc': { type: 'string' },
+  'received-from': { type: 'string' },
+  'error-handling-policy': { type: 'string' },
+  'void-non-electronic-tickets': { type: 'boolean' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
+const REFUND_TICKETS_OPTIONS = {
+  ...COMMON_OPTIONS,
+  'confirmation-id': { type: 'string' },
+  tickets: { type: 'string' },
+  'target-pcc': { type: 'string' },
+  'received-from': { type: 'string' },
+  'error-handling-policy': { type: 'string' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 // ---------------------------------------------------------------------------
 // Help text
 // ---------------------------------------------------------------------------
@@ -982,12 +1132,16 @@ Commands:
   airline-alliance-lookup   Sabre Airline Alliance Lookup v1
   bargain-finder-max        Sabre Bargain Finder Max v5
   cancel-booking            Sabre Booking Management v1 — Cancel Booking
+  check-tickets             Sabre Booking Management v1 — Check Tickets
   create-booking            Sabre Booking Management v1 — Create Booking
+  fulfill-tickets           Sabre Booking Management v1 — Fulfill Flight Tickets
   get-ancillaries           Sabre Get Ancillaries v2
   get-booking               Sabre Booking Management v1 — Get Booking
   get-seats                 Sabre Get Seats v2
   modify-booking            Sabre Booking Management v1 — Modify Booking
+  refund-tickets            Sabre Booking Management v1 — Refund Tickets
   revalidate-itinerary      Sabre Revalidate Itinerary v5
+  void-tickets              Sabre Booking Management v1 — Void Tickets
 
 Common flags:
   --base-url <url>          Override SABRE_BASE_URL
@@ -1257,6 +1411,101 @@ Flags:
 Examples:
   sabre-rest get-seats --body '{"requestType":"orderId","pointOfSale":{"countryCode":"US","cityCode":"TPA"},"orderId":"ORDER-123"}'
   sabre-rest get-seats --body '{"requestType":"stateless","pnrLocator":"ABC123"}'
+`;
+
+const CHECK_TICKETS_HELP = `Usage: sabre-rest check-tickets [flags]
+
+Sabre Booking Management v1 — Check Tickets. Read-only check of per-
+ticket eligibility for void, refund, and exchange. Does not mutate the
+booking.
+
+Provide --confirmation-id to scope by PNR, --tickets to scope by ticket
+numbers, or both. Or supply a full --body to bypass flag-based input.
+
+Flags:
+  --confirmation-id <id>        Confirmation ID / PNR locator (required unless --tickets or --body)
+  --tickets <list>              Comma-separated 13-char ticket numbers (optionally with /NN suffix)
+  --target-pcc <pcc>            Pseudo city code for the call context
+  --body <json>                 Override input with raw JSON (ignores other flags)
+  --base-url <url>              Override SABRE_BASE_URL
+  --format json|table           Output format (default: json)
+  --debug-request               Print the outbound HTTP request to stderr
+  -h, --help                    Show this help
+
+Examples:
+  sabre-rest check-tickets --confirmation-id GLEBNY
+  sabre-rest check-tickets --tickets 0011234567890,0011234567891
+`;
+
+const FULFILL_TICKETS_HELP = `Usage: sabre-rest fulfill-tickets [flags]
+
+Sabre Booking Management v1 — Fulfill Flight Tickets. Issues electronic
+tickets (and EMDs) for an existing PNR or NDC order. This is a billable
+operation — once fulfillment succeeds, void or refund is required to
+reverse it.
+
+The request body needs nested fulfillments[] and formsOfPayment[]
+arrays, so this command is body-only.
+
+Flags:
+  --body <json>             Full JSON FulfillTicketsInput (required)
+  --base-url <url>          Override SABRE_BASE_URL
+  --format json|table       Output format (default: json)
+  --debug-request           Print the outbound HTTP request to stderr
+  -h, --help                Show this help
+
+Examples:
+  sabre-rest fulfill-tickets --body '{"confirmationId":"GLEBNY","fulfillments":[{}],"formsOfPayment":[{"type":"PAYMENTCARD","cardTypeCode":"VI","cardNumber":"4111111111111111","cardSecurityCode":"123","expiryDate":"2027-12"}]}'
+`;
+
+const VOID_TICKETS_HELP = `Usage: sabre-rest void-tickets [flags]
+
+Sabre Booking Management v1 — Void Tickets. Voids electronic tickets or
+EMDs (same-day, no fee). Provide --confirmation-id to void by PNR scope,
+--tickets to void specific ticket numbers, or both.
+
+Flags:
+  --confirmation-id <id>              Confirmation ID / PNR locator (required unless --tickets or --body)
+  --tickets <list>                    Comma-separated 13-char ticket numbers (optionally with /NN suffix)
+  --target-pcc <pcc>                  Pseudo city code for the call context
+  --received-from <string>            Entity authorizing the changes
+  --error-handling-policy <policy>    HALT_ON_ERROR | ALLOW_PARTIAL_CANCEL
+  --void-non-electronic-tickets       Include paper (non-electronic) tickets
+  --body <json>                       Override input with raw JSON (ignores other flags)
+  --base-url <url>                    Override SABRE_BASE_URL
+  --format json|table                 Output format (default: json)
+  --debug-request                     Print the outbound HTTP request to stderr
+  -h, --help                          Show this help
+
+Examples:
+  sabre-rest void-tickets --confirmation-id GLEBNY
+  sabre-rest void-tickets --tickets 0011234567890
+`;
+
+const REFUND_TICKETS_HELP = `Usage: sabre-rest refund-tickets [flags]
+
+Sabre Booking Management v1 — Refund Tickets. Refunds electronic
+tickets after the void window has closed (fees may apply). Provide
+--confirmation-id, --tickets, or both.
+
+Flag-based input wraps each ticket number as { number }. To pass refund
+qualifiers (waiver code, override taxes, journey type, etc.), supply a
+full --body instead.
+
+Flags:
+  --confirmation-id <id>              Confirmation ID / PNR locator (required unless --tickets or --body)
+  --tickets <list>                    Comma-separated 13-char ticket numbers (optionally with /NN suffix)
+  --target-pcc <pcc>                  Pseudo city code for the call context
+  --received-from <string>            Entity authorizing the changes
+  --error-handling-policy <policy>    HALT_ON_ERROR | ALLOW_PARTIAL_CANCEL
+  --body <json>                       Override input with raw JSON (ignores other flags)
+  --base-url <url>                    Override SABRE_BASE_URL
+  --format json|table                 Output format (default: json)
+  --debug-request                     Print the outbound HTTP request to stderr
+  -h, --help                          Show this help
+
+Examples:
+  sabre-rest refund-tickets --confirmation-id GLEBNY --tickets 0011234567890
 `;
 
 // ---------------------------------------------------------------------------
@@ -1550,6 +1799,102 @@ async function getSeatsCommand(
   emitResult(result, format, io, () => formatJson(result));
 }
 
+async function checkTicketsCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: CHECK_TICKETS_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(CHECK_TICKETS_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildCheckTicketsInput(values);
+  const result = await client.bookingManagementV1.checkTickets(input);
+  emitResult(result, format, io, () => formatJson(result));
+}
+
+async function fulfillTicketsCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: FULFILL_TICKETS_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(FULFILL_TICKETS_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildFulfillTicketsInput(values);
+  const result = await client.bookingManagementV1.fulfillTickets(input);
+  emitResult(result, format, io, () => formatJson(result));
+}
+
+async function voidTicketsCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: VOID_TICKETS_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(VOID_TICKETS_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildVoidTicketsInput(values);
+  const result = await client.bookingManagementV1.voidTickets(input);
+  emitResult(result, format, io, () => formatJson(result));
+}
+
+async function refundTicketsCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: REFUND_TICKETS_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(REFUND_TICKETS_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildRefundTicketsInput(values);
+  const result = await client.bookingManagementV1.refundTickets(input);
+  emitResult(result, format, io, () => formatJson(result));
+}
+
 /** Mapping from subcommand name to its handler. Exported so tests can introspect it. */
 export const COMMANDS: Record<
   string,
@@ -1559,12 +1904,16 @@ export const COMMANDS: Record<
   'airline-alliance-lookup': airlineAllianceLookupCommand,
   'bargain-finder-max': bargainFinderMaxCommand,
   'cancel-booking': cancelBookingCommand,
+  'check-tickets': checkTicketsCommand,
   'create-booking': createBookingCommand,
+  'fulfill-tickets': fulfillTicketsCommand,
   'get-ancillaries': getAncillariesCommand,
   'get-booking': getBookingCommand,
   'get-seats': getSeatsCommand,
   'modify-booking': modifyBookingCommand,
+  'refund-tickets': refundTicketsCommand,
   'revalidate-itinerary': revalidateItineraryCommand,
+  'void-tickets': voidTicketsCommand,
 };
 
 // ---------------------------------------------------------------------------
