@@ -9,10 +9,14 @@ import {
   buildAirlineLookupInput,
   buildBfmInput,
   buildCancelBookingInput,
+  buildCheckTicketsInput,
+  buildFulfillTicketsInput,
   buildGetAncillariesInput,
   buildGetBookingInput,
   buildModifyBookingInput,
+  buildRefundTicketsInput,
   buildRevalidateInput,
+  buildVoidTicketsInput,
   formatJson,
   formatTotalFare,
   normalizeBfmDateTime,
@@ -926,12 +930,16 @@ describe('COMMANDS dispatch table', () => {
       'airline-lookup',
       'bargain-finder-max',
       'cancel-booking',
+      'check-tickets',
       'create-booking',
+      'fulfill-tickets',
       'get-ancillaries',
       'get-booking',
       'get-seats',
       'modify-booking',
+      'refund-tickets',
       'revalidate-itinerary',
+      'void-tickets',
     ]);
   });
 });
@@ -1068,5 +1076,146 @@ describe('buildCancelBookingInput', () => {
     const out = buildCancelBookingInput({ body });
     expect(out.confirmationId).toBe('FROM-BODY');
     expect(out.cancelAll).toBe(true);
+  });
+});
+
+describe('buildCheckTicketsInput', () => {
+  it('builds minimal input from --confirmation-id', () => {
+    const out = buildCheckTicketsInput({ 'confirmation-id': 'GLEBNY' });
+    expect(out).toEqual({ confirmationId: 'GLEBNY' });
+  });
+
+  it('wraps comma-separated --tickets as { number } records', () => {
+    const out = buildCheckTicketsInput({ tickets: '0011234567890,0011234567891' });
+    expect(out.tickets).toEqual([{ number: '0011234567890' }, { number: '0011234567891' }]);
+  });
+
+  it('forwards --target-pcc', () => {
+    const out = buildCheckTicketsInput({ 'confirmation-id': 'GLEBNY', 'target-pcc': 'G7HE' });
+    expect(out.targetPcc).toBe('G7HE');
+  });
+
+  it('throws when neither --confirmation-id nor --tickets is supplied', () => {
+    expect(() => buildCheckTicketsInput({})).toThrow(CliUsageError);
+  });
+
+  it('parses --body verbatim', () => {
+    const body = JSON.stringify({ confirmationId: 'FROM-BODY', targetPcc: 'G7HE' });
+    const out = buildCheckTicketsInput({ body });
+    expect(out.confirmationId).toBe('FROM-BODY');
+    expect(out.targetPcc).toBe('G7HE');
+  });
+});
+
+describe('buildFulfillTicketsInput', () => {
+  it('throws without --body', () => {
+    expect(() => buildFulfillTicketsInput({})).toThrow(CliUsageError);
+  });
+
+  it('parses --body verbatim', () => {
+    const body = JSON.stringify({
+      confirmationId: 'GLEBNY',
+      fulfillments: [{}],
+      formsOfPayment: [
+        {
+          type: 'PAYMENTCARD',
+          cardTypeCode: 'VI',
+          cardNumber: '4111111111111111',
+          cardSecurityCode: '123',
+          expiryDate: '2027-12',
+        },
+      ],
+    });
+    const out = buildFulfillTicketsInput({ body });
+    expect(out.confirmationId).toBe('GLEBNY');
+    expect(out.fulfillments).toHaveLength(1);
+    expect(out.formsOfPayment?.[0]?.type).toBe('PAYMENTCARD');
+  });
+});
+
+describe('buildVoidTicketsInput', () => {
+  it('builds minimal input from --confirmation-id', () => {
+    const out = buildVoidTicketsInput({ 'confirmation-id': 'GLEBNY' });
+    expect(out).toEqual({ confirmationId: 'GLEBNY' });
+  });
+
+  it('keeps --tickets as raw string numbers (not wrapped)', () => {
+    const out = buildVoidTicketsInput({ tickets: '0011234567890,0011234567891' });
+    expect(out.tickets).toEqual(['0011234567890', '0011234567891']);
+  });
+
+  it('forwards optional flags', () => {
+    const out = buildVoidTicketsInput({
+      'confirmation-id': 'GLEBNY',
+      'target-pcc': 'G7HE',
+      'received-from': 'smoke-test',
+      'error-handling-policy': 'ALLOW_PARTIAL_CANCEL',
+      'void-non-electronic-tickets': true,
+    });
+    expect(out.targetPcc).toBe('G7HE');
+    expect(out.receivedFrom).toBe('smoke-test');
+    expect(out.errorHandlingPolicy).toBe('ALLOW_PARTIAL_CANCEL');
+    expect(out.voidNonElectronicTickets).toBe(true);
+  });
+
+  it('throws when neither --confirmation-id nor --tickets is supplied', () => {
+    expect(() => buildVoidTicketsInput({})).toThrow(CliUsageError);
+  });
+
+  it('throws for invalid --error-handling-policy', () => {
+    expect(() =>
+      buildVoidTicketsInput({ 'confirmation-id': 'GLEBNY', 'error-handling-policy': 'NOPE' }),
+    ).toThrow(CliUsageError);
+  });
+
+  it('parses --body verbatim', () => {
+    const body = JSON.stringify({ confirmationId: 'FROM-BODY', tickets: ['001999'] });
+    const out = buildVoidTicketsInput({ body });
+    expect(out.confirmationId).toBe('FROM-BODY');
+    expect(out.tickets).toEqual(['001999']);
+  });
+});
+
+describe('buildRefundTicketsInput', () => {
+  it('builds minimal input from --confirmation-id', () => {
+    const out = buildRefundTicketsInput({ 'confirmation-id': 'GLEBNY' });
+    expect(out).toEqual({ confirmationId: 'GLEBNY' });
+  });
+
+  it('wraps comma-separated --tickets as { number } records', () => {
+    const out = buildRefundTicketsInput({ tickets: '0011234567890,0011234567891' });
+    expect(out.tickets).toEqual([{ number: '0011234567890' }, { number: '0011234567891' }]);
+  });
+
+  it('forwards optional flags', () => {
+    const out = buildRefundTicketsInput({
+      'confirmation-id': 'GLEBNY',
+      'target-pcc': 'G7HE',
+      'received-from': 'smoke-test',
+      'error-handling-policy': 'ALLOW_PARTIAL_CANCEL',
+    });
+    expect(out.targetPcc).toBe('G7HE');
+    expect(out.receivedFrom).toBe('smoke-test');
+    expect(out.errorHandlingPolicy).toBe('ALLOW_PARTIAL_CANCEL');
+  });
+
+  it('throws when neither --confirmation-id nor --tickets is supplied', () => {
+    expect(() => buildRefundTicketsInput({})).toThrow(CliUsageError);
+  });
+
+  it('throws for invalid --error-handling-policy', () => {
+    expect(() =>
+      buildRefundTicketsInput({ 'confirmation-id': 'GLEBNY', 'error-handling-policy': 'NOPE' }),
+    ).toThrow(CliUsageError);
+  });
+
+  it('parses --body verbatim (preserves refundQualifiers)', () => {
+    const body = JSON.stringify({
+      confirmationId: 'FROM-BODY',
+      tickets: [{ number: '001999', refundQualifiers: { waiverCode: 'WAIVER1' } }],
+    });
+    const out = buildRefundTicketsInput({ body });
+    expect(out.confirmationId).toBe('FROM-BODY');
+    expect(out.tickets?.[0]?.refundQualifiers?.waiverCode).toBe('WAIVER1');
   });
 });
