@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.13.0](https://github.com/djensen47/sabre-rest/compare/v0.12.0...v0.13.0) (2026-04-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* **booking-management-v1:** the exported type `CancelDocumentsType` is renamed to `DocumentsType`. Consumers importing it from `sabre-rest` must update the import. The underlying string-literal union is unchanged.
+
+### Features
+
+* add booking-management-v1 checkTickets operation ([#62](https://github.com/djensen47/sabre-rest/issues/62)) ([aed68a8](https://github.com/djensen47/sabre-rest/commit/aed68a8e5920d1da2c7424177d2f8b7f614a7a4f))
+* add booking-management-v1 fulfillTickets operation ([#58](https://github.com/djensen47/sabre-rest/issues/58)) ([2530680](https://github.com/djensen47/sabre-rest/commit/253068082580e729121dd712617fa0d41c429983))
+* add booking-management-v1 refundTickets operation ([#63](https://github.com/djensen47/sabre-rest/issues/63)) ([363d7c5](https://github.com/djensen47/sabre-rest/commit/363d7c5f3619279aedab9034de43b74dc1feedc4))
+* add booking-management-v1 voidTickets operation ([#61](https://github.com/djensen47/sabre-rest/issues/61)) ([fca94d5](https://github.com/djensen47/sabre-rest/commit/fca94d524a986115f0e60e80d7bff3b3a5a5d9c1))
+* **cli:** add ticketing commands check/fulfill/void/refund ([#74](https://github.com/djensen47/sabre-rest/issues/74)) ([4ff999e](https://github.com/djensen47/sabre-rest/commit/4ff999eba988a1bf4321a453b1ac802ebbe1d1b6))
+
+
+### Bug Fixes
+
+* **booking-management-v1:** correct MonetaryValue, HotelPenaltyValue, FareDifferenceBreakdown drift ([#60](https://github.com/djensen47/sabre-rest/issues/60)) ([44bb010](https://github.com/djensen47/sabre-rest/commit/44bb01085b962d1b7cf4b0503ce60125272ded81))
+
+
+### Code Refactoring
+
+* **booking-management-v1:** rename CancelDocumentsType to DocumentsType ([#64](https://github.com/djensen47/sabre-rest/issues/64)) ([5ecaea6](https://github.com/djensen47/sabre-rest/commit/5ecaea6a626200f01e236ba3f270a09e64aec6ef))
+
 ## [0.12.0](https://github.com/djensen47/sabre-rest/compare/v0.11.0...v0.12.0) (2026-04-22)
 
 
