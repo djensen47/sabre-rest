@@ -24,6 +24,10 @@ import {
   type GetAncillariesV2Service,
 } from './services/get-ancillaries-v2/service.js';
 import {
+  DefaultGetHotelAvailV5Service,
+  type GetHotelAvailV5Service,
+} from './services/get-hotel-avail-v5/service.js';
+import {
   DefaultGetSeatsV2Service,
   type GetSeatsV2Service,
 } from './services/get-seats-v2/service.js';
@@ -97,6 +101,14 @@ export interface SabreClient {
    * given Sabre order in NDC format.
    */
   readonly getAncillariesV2: GetAncillariesV2Service;
+
+  /**
+   * Sabre Get Hotel Avail v5.
+   *
+   * Returns lead rates across multiple hotel properties in one call and
+   * produces the rate keys required by {@link HotelPriceCheckV5Service}.
+   */
+  readonly getHotelAvailV5: GetHotelAvailV5Service;
 
   /**
    * Sabre Get Seats v2.
@@ -218,6 +230,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
   const bargainFinderMaxV5 = new DefaultBargainFinderMaxV5Service(deps);
   const bookingManagementV1 = new DefaultBookingManagementV1Service(deps);
   const getAncillariesV2 = new DefaultGetAncillariesV2Service(deps);
+  const getHotelAvailV5 = new DefaultGetHotelAvailV5Service(deps);
   const getSeatsV2 = new DefaultGetSeatsV2Service(deps);
   const hotelPriceCheckV5 = new DefaultHotelPriceCheckV5Service(deps);
   const hotelSearchV2 = new DefaultHotelSearchV2Service(deps);
@@ -230,6 +243,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
     bargainFinderMaxV5,
     bookingManagementV1,
     getAncillariesV2,
+    getHotelAvailV5,
     getSeatsV2,
     hotelPriceCheckV5,
     hotelSearchV2,
@@ -244,6 +258,7 @@ interface SabreClientServices {
   bargainFinderMaxV5: BargainFinderMaxV5Service;
   bookingManagementV1: BookingManagementV1Service;
   getAncillariesV2: GetAncillariesV2Service;
+  getHotelAvailV5: GetHotelAvailV5Service;
   getSeatsV2: GetSeatsV2Service;
   hotelPriceCheckV5: HotelPriceCheckV5Service;
   hotelSearchV2: HotelSearchV2Service;
@@ -263,6 +278,7 @@ class DefaultSabreClient implements SabreClient {
   readonly bargainFinderMaxV5: BargainFinderMaxV5Service;
   readonly bookingManagementV1: BookingManagementV1Service;
   readonly getAncillariesV2: GetAncillariesV2Service;
+  readonly getHotelAvailV5: GetHotelAvailV5Service;
   readonly getSeatsV2: GetSeatsV2Service;
   readonly hotelPriceCheckV5: HotelPriceCheckV5Service;
   readonly hotelSearchV2: HotelSearchV2Service;
@@ -276,6 +292,7 @@ class DefaultSabreClient implements SabreClient {
     this.bargainFinderMaxV5 = services.bargainFinderMaxV5;
     this.bookingManagementV1 = services.bookingManagementV1;
     this.getAncillariesV2 = services.getAncillariesV2;
+    this.getHotelAvailV5 = services.getHotelAvailV5;
     this.getSeatsV2 = services.getSeatsV2;
     this.hotelPriceCheckV5 = services.hotelPriceCheckV5;
     this.hotelSearchV2 = services.hotelSearchV2;

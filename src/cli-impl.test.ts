@@ -4,6 +4,7 @@ import {
   CliUsageError,
   airlinesToTableRows,
   alliancesToTableRows,
+  availToTableRows,
   bfmToTableRows,
   buildAirlineAllianceLookupInput,
   buildAirlineLookupInput,
@@ -13,6 +14,7 @@ import {
   buildFulfillTicketsInput,
   buildGetAncillariesInput,
   buildGetBookingInput,
+  buildHotelAvailInput,
   buildHotelPriceCheckInput,
   buildHotelSearchInput,
   buildModifyBookingInput,
@@ -939,6 +941,7 @@ describe('COMMANDS dispatch table', () => {
       'fulfill-tickets',
       'get-ancillaries',
       'get-booking',
+      'get-hotel-avail',
       'get-seats',
       'hotel-price-check',
       'hotel-search',
@@ -1496,5 +1499,213 @@ describe('priceCheckToTableRows', () => {
       },
     });
     expect(out.rows[0]?.[4]).toBe('110');
+  });
+});
+
+describe('buildHotelAvailInput', () => {
+  const common = {
+    'currency-code': 'USD',
+    'start-date': '2026-06-20',
+    'end-date': '2026-06-22',
+  };
+
+  it('builds a minimum geo-code body with a default single room', () => {
+    const out = buildHotelAvailInput({ ...common, 'geo-code': '32.758,-97.08' });
+    expect(out).toEqual({
+      search: {
+        kind: 'geo',
+        geoRef: {
+          kind: 'geoCode',
+          radius: 25,
+          uom: 'MI',
+          latitude: 32.758,
+          longitude: -97.08,
+        },
+      },
+      rateInfoRef: {
+        currencyCode: 'USD',
+        bestOnly: '1',
+        stayDateTimeRange: { startDate: '2026-06-20', endDate: '2026-06-22' },
+        rooms: [{ index: 1, adults: 1 }],
+      },
+    });
+  });
+
+  it('builds a RefPoint anchor with restrict-country and custom radius/uom', () => {
+    const out = buildHotelAvailInput({
+      ...common,
+      'ref-point': '6:DFW:CODE',
+      radius: '5',
+      uom: 'KM',
+      'restrict-country': 'US',
+    });
+    expect(out.search).toEqual({
+      kind: 'geo',
+      geoRef: {
+        kind: 'refPoint',
+        radius: 5,
+        uom: 'KM',
+        refPointType: '6',
+        value: 'DFW',
+        valueContext: 'CODE',
+        restrictToCountry: 'US',
+      },
+    });
+  });
+
+  it('builds a HotelRefs anchor from a comma list', () => {
+    const out = buildHotelAvailInput({
+      ...common,
+      hotels: '100072188,8315',
+    });
+    expect(out.search).toEqual({
+      kind: 'hotels',
+      hotels: [{ code: '100072188' }, { code: '8315' }],
+    });
+  });
+
+  it('requires exactly one anchor flag', () => {
+    expect(() => buildHotelAvailInput({ ...common })).toThrowError(CliUsageError);
+    expect(() => buildHotelAvailInput({ ...common, 'geo-code': '1,2', hotels: 'X' })).toThrowError(
+      CliUsageError,
+    );
+  });
+
+  it('requires currency + dates', () => {
+    expect(() => buildHotelAvailInput({ 'geo-code': '1,2' })).toThrowError(CliUsageError);
+  });
+
+  it('parses repeated --room and rate criteria', () => {
+    const out = buildHotelAvailInput({
+      ...common,
+      'geo-code': '1,2',
+      room: ['2', '1:1:10'],
+      'best-only': '4',
+      'rate-sources': '100,110',
+      'prepaid-qualifier': 'PrepaidOnly',
+      'refundable-only': true,
+      'converted-only': true,
+    });
+    expect(out.rateInfoRef.rooms).toEqual([
+      { index: 1, adults: 2 },
+      { index: 2, adults: 1, children: 1, childAges: [10] },
+    ]);
+    expect(out.rateInfoRef.bestOnly).toBe('4');
+    expect(out.rateInfoRef.rateSource).toEqual(['100', '110']);
+    expect(out.rateInfoRef.prepaidQualifier).toBe('PrepaidOnly');
+    expect(out.rateInfoRef.refundableOnly).toBe(true);
+    expect(out.rateInfoRef.convertedRateInfoOnly).toBe(true);
+  });
+
+  it('rejects invalid enum-like values', () => {
+    expect(() =>
+      buildHotelAvailInput({ ...common, 'geo-code': '1,2', 'best-only': '9' }),
+    ).toThrowError(CliUsageError);
+    expect(() =>
+      buildHotelAvailInput({ ...common, 'geo-code': '1,2', 'prepaid-qualifier': 'XYZ' }),
+    ).toThrowError(CliUsageError);
+    expect(() =>
+      buildHotelAvailInput({ ...common, 'geo-code': '1,2', 'sort-by': 'Name' }),
+    ).toThrowError(CliUsageError);
+    expect(() =>
+      buildHotelAvailInput({ ...common, 'geo-code': '1,2', 'sort-order': 'asc' }),
+    ).toThrowError(CliUsageError);
+  });
+
+  it('attaches criteria / hotelPref / POS / corporateNumber', () => {
+    const out = buildHotelAvailInput({
+      ...common,
+      'geo-code': '1,2',
+      'max-results': '50',
+      'sort-by': 'AverageNightlyRate',
+      'sort-order': 'ASC',
+      'hotel-name': 'Hilton',
+      'chain-codes': 'HY,MC',
+      pcc: 'TM61',
+      'corporate-number': 'DK1',
+    });
+    expect(out.criteria).toEqual({
+      pageSize: 50,
+      sortBy: 'AverageNightlyRate',
+      sortOrder: 'ASC',
+    });
+    expect(out.hotelPref).toEqual({ hotelName: 'Hilton', chainCodes: ['HY', 'MC'] });
+    expect(out.pointOfSale).toEqual({ pseudoCityCode: 'TM61' });
+    expect(out.corporateNumber).toBe('DK1');
+  });
+
+  it('parses --body verbatim, ignoring other flags', () => {
+    const body = JSON.stringify({
+      search: {
+        kind: 'hotels',
+        hotels: [{ code: 'FROM-BODY' }],
+      },
+      rateInfoRef: {
+        currencyCode: 'EUR',
+        bestOnly: '2',
+        stayDateTimeRange: { startDate: '2026-01-01', endDate: '2026-01-02' },
+        rooms: [{ index: 1, adults: 1 }],
+      },
+    });
+    const out = buildHotelAvailInput({ body, 'geo-code': '99,99', 'currency-code': 'USD' });
+    expect(out.rateInfoRef.currencyCode).toBe('EUR');
+    expect(out.search.kind).toBe('hotels');
+  });
+});
+
+describe('availToTableRows', () => {
+  it('surfaces the first ConvertedRateInfo entry into a compact row', () => {
+    const out = availToTableRows({
+      hotels: [
+        {
+          code: '100074506',
+          codeContext: 'GLOBAL',
+          name: 'Baymont',
+          chainCode: 'BU',
+          rateInfo: {
+            convertedRateInfo: [
+              {
+                amountAfterTax: '136.66',
+                currencyCode: 'USD',
+                rateSource: '110',
+                rateKey: 'KEY==',
+              },
+            ],
+          },
+        },
+      ],
+    });
+    expect(out.headers).toEqual([
+      'code',
+      'name',
+      'chain',
+      'rate',
+      'currency',
+      'rateSource',
+      'rateKey',
+    ]);
+    expect(out.rows).toEqual([['100074506', 'Baymont', 'BU', '136.66', 'USD', '110', 'KEY==']]);
+  });
+
+  it('falls back to RateInfo when ConvertedRateInfo is absent', () => {
+    const out = availToTableRows({
+      hotels: [
+        {
+          code: 'X',
+          codeContext: 'GLOBAL',
+          rateInfo: {
+            rateInfo: [{ amountAfterTax: '50.00', currencyCode: 'USD', rateSource: '100' }],
+          },
+        },
+      ],
+    });
+    expect(out.rows[0]?.[3]).toBe('50.00');
+    expect(out.rows[0]?.[5]).toBe('100');
+    expect(out.rows[0]?.[6]).toBe('');
+  });
+
+  it('renders empty cells for hotels with no rate info', () => {
+    const out = availToTableRows({ hotels: [{ code: 'X', codeContext: 'GLOBAL' }] });
+    expect(out.rows).toEqual([['X', '', '', '', '', '', '']]);
   });
 });
