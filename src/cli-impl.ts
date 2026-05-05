@@ -30,9 +30,14 @@ import type {
   CheckTicketsInput,
   CreateBookingInput,
   FulfillTicketsInput,
+  GeoRef,
   GetAncillariesInput,
   GetBookingInput,
   GetSeatsInput,
+  Hotel,
+  HotelDistanceUnit,
+  HotelSortBy,
+  HotelSortOrder,
   ItineraryLeg,
   LookupAirlineAlliancesInput,
   LookupAirlineAlliancesOutput,
@@ -46,6 +51,8 @@ import type {
   RevalidateItineraryOutput,
   SearchBargainFinderMaxInput,
   SearchBargainFinderMaxOutput,
+  SearchHotelsInput,
+  SearchHotelsOutput,
   VoidTicketsInput,
 } from './index.js';
 
@@ -303,6 +310,31 @@ export function bfmToTableRows(out: SearchBargainFinderMaxOutput): {
     itin.distributionModel ?? '',
   ]);
   return { headers: ['id', 'legs', 'total', 'carrier', 'model'], rows };
+}
+
+/**
+ * Converts a Hotel Search v2 output into a one-row-per-hotel summary
+ * table. Columns: code, name, chain, distance (with unit), address (city,
+ * state, country). Table view is a quick eyeballing tool; drilling
+ * deeper requires `--format json`.
+ */
+export function hotelsToTableRows(out: SearchHotelsOutput): {
+  headers: readonly string[];
+  rows: readonly string[][];
+} {
+  const rows = out.hotels.map((h: Hotel) => {
+    const distance =
+      h.distance !== undefined
+        ? `${h.distance}${h.distanceUnit !== undefined ? ` ${h.distanceUnit}` : ''}`
+        : '';
+    const addr = h.location?.address;
+    const cityPart = addr?.city?.name ?? addr?.city?.code ?? '';
+    const statePart = addr?.stateProv?.code ?? '';
+    const countryPart = addr?.country?.code ?? '';
+    const address = [cityPart, statePart, countryPart].filter(Boolean).join(', ');
+    return [h.code, h.name ?? '', h.chainCode ?? '', distance, address];
+  });
+  return { headers: ['code', 'name', 'chain', 'distance', 'address'], rows };
 }
 
 // ---------------------------------------------------------------------------
@@ -593,6 +625,198 @@ export function buildBfmInput(
   }
 
   return input;
+}
+
+/** Flag set for `hotel-search`. */
+export interface HotelSearchFlagValues {
+  'geo-code'?: string;
+  'ref-point'?: string;
+  address?: string;
+  radius?: string;
+  uom?: string;
+  'max-results'?: string;
+  'sort-by'?: string;
+  'sort-order'?: string;
+  'hotel-name'?: string;
+  'chain-codes'?: string;
+  'brand-codes'?: string;
+  pcc?: string;
+  body?: string;
+}
+
+const HOTEL_UOMS: ReadonlySet<HotelDistanceUnit> = new Set(['MI', 'KM']);
+const HOTEL_SORT_BY: ReadonlySet<HotelSortBy> = new Set([
+  'TotalRate',
+  'DistanceFrom',
+  'SabreRating',
+]);
+const HOTEL_SORT_ORDER: ReadonlySet<HotelSortOrder> = new Set(['ASC', 'DESC']);
+const HOTEL_REF_POINT_TYPES: ReadonlySet<string> = new Set(['5', '6', '7', '11', '16', '18', '37']);
+
+/**
+ * Builds the input for `hotelSearchV2.search` from the CLI flags.
+ *
+ * - When `--body` is supplied, it is parsed as JSON and returned verbatim;
+ *   all other flags are ignored.
+ * - Otherwise exactly one of `--geo-code`, `--ref-point`, or `--address`
+ *   is required to anchor the search, plus `--radius` (default `25` when
+ *   omitted) and `--uom` (default `MI`).
+ * - `--geo-code` accepts `lat,lon` (e.g., `32.758,-97.08`).
+ * - `--ref-point` accepts `TYPE:VALUE:CONTEXT` (e.g., `6:DFW:CODE`),
+ *   where `TYPE` is an OTA code and `CONTEXT` is `CODE` or `NAME`.
+ * - `--address` accepts `COUNTRY[,CITY[,STATE]]`.
+ *
+ * Throws {@link CliUsageError} on malformed flags or missing required ones.
+ */
+export function buildHotelSearchInput(values: HotelSearchFlagValues): SearchHotelsInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as SearchHotelsInput;
+  }
+
+  const anchors = [values['geo-code'], values['ref-point'], values.address].filter(
+    (v): v is string => v !== undefined,
+  );
+  if (anchors.length === 0) {
+    throw new CliUsageError(
+      'hotel-search requires one of --geo-code, --ref-point, or --address. (Or supply --body with a full JSON input.)',
+    );
+  }
+  if (anchors.length > 1) {
+    throw new CliUsageError(
+      'hotel-search: --geo-code, --ref-point, and --address are mutually exclusive. Pick one.',
+    );
+  }
+
+  const uom = parseHotelUom(values.uom);
+  const radius = parseHotelRadius(values.radius);
+  const geoRef = parseHotelGeoRef(values, radius, uom);
+
+  const input: SearchHotelsInput = { geoSearch: { geoRef } };
+
+  if (values['max-results'] !== undefined) {
+    const n = Number(values['max-results']);
+    if (!Number.isInteger(n) || n < 1 || n > 300) {
+      throw new CliUsageError(
+        `Invalid --max-results value '${values['max-results']}'. Expected an integer in [1, 300].`,
+      );
+    }
+    input.maxResults = n;
+  }
+
+  if (values['sort-by'] !== undefined) {
+    if (!HOTEL_SORT_BY.has(values['sort-by'] as HotelSortBy)) {
+      throw new CliUsageError(
+        `Invalid --sort-by value '${values['sort-by']}'. Expected one of: ${Array.from(HOTEL_SORT_BY).join(', ')}.`,
+      );
+    }
+    input.sortBy = values['sort-by'] as HotelSortBy;
+  }
+
+  if (values['sort-order'] !== undefined) {
+    if (!HOTEL_SORT_ORDER.has(values['sort-order'] as HotelSortOrder)) {
+      throw new CliUsageError(
+        `Invalid --sort-order value '${values['sort-order']}'. Expected ASC or DESC.`,
+      );
+    }
+    input.sortOrder = values['sort-order'] as HotelSortOrder;
+  }
+
+  const hotelName = values['hotel-name'];
+  const chainCodes = splitCommaList(values['chain-codes']);
+  const brandCodes = splitCommaList(values['brand-codes']);
+  if (hotelName !== undefined || chainCodes !== undefined || brandCodes !== undefined) {
+    input.hotelPref = {};
+    if (hotelName !== undefined) input.hotelPref.hotelName = hotelName;
+    if (chainCodes !== undefined) input.hotelPref.chainCodes = chainCodes;
+    if (brandCodes !== undefined) input.hotelPref.brandCodes = brandCodes;
+  }
+
+  if (values.pcc !== undefined) {
+    input.pos = { pseudoCityCode: values.pcc };
+  }
+
+  return input;
+}
+
+function parseHotelUom(raw: string | undefined): HotelDistanceUnit {
+  if (raw === undefined) return 'MI';
+  if (!HOTEL_UOMS.has(raw as HotelDistanceUnit)) {
+    throw new CliUsageError(`Invalid --uom value '${raw}'. Expected MI or KM.`);
+  }
+  return raw as HotelDistanceUnit;
+}
+
+function parseHotelRadius(raw: string | undefined): number {
+  if (raw === undefined) return 25;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new CliUsageError(`Invalid --radius value '${raw}'. Expected a positive number.`);
+  }
+  return n;
+}
+
+function parseHotelGeoRef(
+  values: HotelSearchFlagValues,
+  radius: number,
+  uom: HotelDistanceUnit,
+): GeoRef {
+  if (values['geo-code'] !== undefined) {
+    const [latRaw, lonRaw, ...extra] = values['geo-code'].split(',').map((s) => s.trim());
+    if (!latRaw || !lonRaw || extra.length > 0) {
+      throw new CliUsageError(
+        `Invalid --geo-code value '${values['geo-code']}'. Expected 'lat,lon' (e.g. 32.758,-97.08).`,
+      );
+    }
+    const lat = Number(latRaw);
+    const lon = Number(lonRaw);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+      throw new CliUsageError(`Invalid --geo-code latitude '${latRaw}'. Expected [-90, 90].`);
+    }
+    if (!Number.isFinite(lon) || lon < -180 || lon > 180) {
+      throw new CliUsageError(`Invalid --geo-code longitude '${lonRaw}'. Expected [-180, 180].`);
+    }
+    return { kind: 'geoCode', radius, uom, latitude: lat, longitude: lon };
+  }
+
+  if (values['ref-point'] !== undefined) {
+    const parts = values['ref-point'].split(':').map((s) => s.trim());
+    if (parts.length !== 3 || parts.some((p) => p === '')) {
+      throw new CliUsageError(
+        `Invalid --ref-point value '${values['ref-point']}'. Expected 'TYPE:VALUE:CONTEXT' (e.g. 6:DFW:CODE).`,
+      );
+    }
+    const [type, value, context] = parts as [string, string, string];
+    if (!HOTEL_REF_POINT_TYPES.has(type)) {
+      throw new CliUsageError(
+        `Invalid --ref-point type '${type}'. Expected one of: ${Array.from(HOTEL_REF_POINT_TYPES).join(', ')}.`,
+      );
+    }
+    if (context !== 'CODE' && context !== 'NAME') {
+      throw new CliUsageError(`Invalid --ref-point context '${context}'. Expected CODE or NAME.`);
+    }
+    return {
+      kind: 'refPoint',
+      radius,
+      uom,
+      refPointType: type as '5' | '6' | '7' | '11' | '16' | '18' | '37',
+      value,
+      valueContext: context,
+    };
+  }
+
+  // --address: COUNTRY[,CITY[,STATE]]
+  const address = values.address as string;
+  const parts = address.split(',').map((s) => s.trim());
+  const [countryCode, city, stateProv, ...extra] = parts;
+  if (!countryCode || extra.length > 0) {
+    throw new CliUsageError(
+      `Invalid --address value '${address}'. Expected 'COUNTRY[,CITY[,STATE]]' (e.g. US,Irving,TX).`,
+    );
+  }
+  const out: GeoRef = { kind: 'addressRef', radius, uom, countryCode };
+  if (city) out.city = city;
+  if (stateProv) out.stateProv = stateProv;
+  return out;
 }
 
 /** Flag set for `revalidate-itinerary`. */
@@ -1011,6 +1235,23 @@ const BFM_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const HOTEL_SEARCH_OPTIONS = {
+  ...COMMON_OPTIONS,
+  'geo-code': { type: 'string' },
+  'ref-point': { type: 'string' },
+  address: { type: 'string' },
+  radius: { type: 'string' },
+  uom: { type: 'string' },
+  'max-results': { type: 'string' },
+  'sort-by': { type: 'string' },
+  'sort-order': { type: 'string' },
+  'hotel-name': { type: 'string' },
+  'chain-codes': { type: 'string' },
+  'brand-codes': { type: 'string' },
+  pcc: { type: 'string' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 const REVALIDATE_OPTIONS = {
   ...COMMON_OPTIONS,
   from: { type: 'string' },
@@ -1138,6 +1379,7 @@ Commands:
   get-ancillaries           Sabre Get Ancillaries v2
   get-booking               Sabre Booking Management v1 — Get Booking
   get-seats                 Sabre Get Seats v2
+  hotel-search              Sabre Hotel Search v2
   modify-booking            Sabre Booking Management v1 — Modify Booking
   refund-tickets            Sabre Booking Management v1 — Refund Tickets
   revalidate-itinerary      Sabre Revalidate Itinerary v5
@@ -1223,6 +1465,40 @@ Examples:
   sabre-rest bargain-finder-max --from JFK --to LHR \\
     --departure-date 2025-12-25 --return-date 2026-01-05 \\
     --pax ADT:1 --pax CHD:1 --cabin Business --non-stop
+`;
+
+const HOTEL_SEARCH_HELP = `Usage: sabre-rest hotel-search [flags]
+
+Sabre Hotel Search v2. Property discovery for a geographic anchor plus a
+radius. Availability and rates are not part of this API.
+
+Anchor (exactly one required, unless --body):
+  --geo-code <lat,lon>      Latitude,longitude (e.g. 32.758,-97.08)
+  --ref-point <T:V:C>       OTA reference point TYPE:VALUE:CONTEXT
+                            (e.g. 6:DFW:CODE for airport-code DFW)
+                            TYPE is one of 5,6,7,11,16,18,37. CONTEXT is CODE or NAME.
+  --address <fields>        COUNTRY[,CITY[,STATE]] (e.g. US,Irving,TX)
+
+Other flags:
+  --radius <n>              Search radius (default: 25)
+  --uom <MI|KM>             Unit of measure for radius (default: MI)
+  --max-results <n>         Max properties to return (1-300)
+  --sort-by <key>           TotalRate | DistanceFrom | SabreRating
+  --sort-order <order>      ASC or DESC
+  --hotel-name <name>       Partial name match (min 3 chars)
+  --chain-codes <list>      Comma-separated chain codes (e.g. HY,MC)
+  --brand-codes <list>      Comma-separated brand codes
+  --pcc <code>              Optional branch PCC (POS/Source)
+  --body <json>             Override input with raw JSON (ignores other flags)
+  --base-url <url>          Override SABRE_BASE_URL
+  --format json|table       Output format (default: json). Table is one-row-per-hotel.
+  --debug-request           Print the outbound HTTP request to stderr
+  -h, --help                Show this help
+
+Examples:
+  sabre-rest hotel-search --geo-code 32.758,-97.08 --radius 10 --uom MI
+  sabre-rest hotel-search --ref-point 6:DFW:CODE --max-results 20 --format table
+  sabre-rest hotel-search --address "US,Irving,TX" --chain-codes HY,MC
 `;
 
 const REVALIDATE_HELP = `Usage: sabre-rest revalidate-itinerary [flags]
@@ -1608,6 +1884,33 @@ async function bargainFinderMaxCommand(
   });
 }
 
+async function hotelSearchCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: HOTEL_SEARCH_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(HOTEL_SEARCH_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildHotelSearchInput(values);
+  const result = await client.hotelSearchV2.search(input);
+  emitResult(result, format, io, () => {
+    const { headers, rows } = hotelsToTableRows(result);
+    return renderTable(headers, rows);
+  });
+}
+
 /**
  * Writes a result to stdout in the requested format. The `tableFn`
  * callback only runs when `format === 'table'`, so commands that don't
@@ -1910,6 +2213,7 @@ export const COMMANDS: Record<
   'get-ancillaries': getAncillariesCommand,
   'get-booking': getBookingCommand,
   'get-seats': getSeatsCommand,
+  'hotel-search': hotelSearchCommand,
   'modify-booking': modifyBookingCommand,
   'refund-tickets': refundTicketsCommand,
   'revalidate-itinerary': revalidateItineraryCommand,

@@ -13,12 +13,14 @@ import {
   buildFulfillTicketsInput,
   buildGetAncillariesInput,
   buildGetBookingInput,
+  buildHotelSearchInput,
   buildModifyBookingInput,
   buildRefundTicketsInput,
   buildRevalidateInput,
   buildVoidTicketsInput,
   formatJson,
   formatTotalFare,
+  hotelsToTableRows,
   normalizeBfmDateTime,
   parseCabin,
   parseOutputFormat,
@@ -936,6 +938,7 @@ describe('COMMANDS dispatch table', () => {
       'get-ancillaries',
       'get-booking',
       'get-seats',
+      'hotel-search',
       'modify-booking',
       'refund-tickets',
       'revalidate-itinerary',
@@ -1217,5 +1220,169 @@ describe('buildRefundTicketsInput', () => {
     const out = buildRefundTicketsInput({ body });
     expect(out.confirmationId).toBe('FROM-BODY');
     expect(out.tickets?.[0]?.refundQualifiers?.waiverCode).toBe('WAIVER1');
+  });
+});
+
+describe('buildHotelSearchInput', () => {
+  it('builds a GeoCode anchor with default radius and UOM', () => {
+    const out = buildHotelSearchInput({ 'geo-code': '32.758,-97.08' });
+    expect(out).toEqual({
+      geoSearch: {
+        geoRef: {
+          kind: 'geoCode',
+          radius: 25,
+          uom: 'MI',
+          latitude: 32.758,
+          longitude: -97.08,
+        },
+      },
+    });
+  });
+
+  it('builds a RefPoint anchor from TYPE:VALUE:CONTEXT', () => {
+    const out = buildHotelSearchInput({
+      'ref-point': '6:DFW:CODE',
+      radius: '10',
+      uom: 'KM',
+    });
+    expect(out.geoSearch.geoRef).toEqual({
+      kind: 'refPoint',
+      radius: 10,
+      uom: 'KM',
+      refPointType: '6',
+      value: 'DFW',
+      valueContext: 'CODE',
+    });
+  });
+
+  it('builds an AddressRef anchor with optional city and state', () => {
+    const out = buildHotelSearchInput({ address: 'US,Irving,TX', radius: '5' });
+    expect(out.geoSearch.geoRef).toEqual({
+      kind: 'addressRef',
+      radius: 5,
+      uom: 'MI',
+      countryCode: 'US',
+      city: 'Irving',
+      stateProv: 'TX',
+    });
+  });
+
+  it('requires exactly one anchor flag', () => {
+    expect(() => buildHotelSearchInput({})).toThrowError(CliUsageError);
+    expect(() =>
+      buildHotelSearchInput({ 'geo-code': '1,2', 'ref-point': '6:DFW:CODE' }),
+    ).toThrowError(CliUsageError);
+  });
+
+  it('rejects malformed --geo-code values', () => {
+    expect(() => buildHotelSearchInput({ 'geo-code': '32.758' })).toThrowError(CliUsageError);
+    expect(() => buildHotelSearchInput({ 'geo-code': '95,0' })).toThrowError(CliUsageError);
+    expect(() => buildHotelSearchInput({ 'geo-code': '0,200' })).toThrowError(CliUsageError);
+  });
+
+  it('rejects malformed --ref-point values', () => {
+    expect(() => buildHotelSearchInput({ 'ref-point': '99:DFW:CODE' })).toThrowError(CliUsageError);
+    expect(() => buildHotelSearchInput({ 'ref-point': '6:DFW:GIBBERISH' })).toThrowError(
+      CliUsageError,
+    );
+    expect(() => buildHotelSearchInput({ 'ref-point': '6:DFW' })).toThrowError(CliUsageError);
+  });
+
+  it('rejects invalid --uom / --radius / --max-results / --sort-by / --sort-order', () => {
+    const anchor = { 'geo-code': '32.758,-97.08' };
+    expect(() => buildHotelSearchInput({ ...anchor, uom: 'XX' })).toThrowError(CliUsageError);
+    expect(() => buildHotelSearchInput({ ...anchor, radius: '-1' })).toThrowError(CliUsageError);
+    expect(() => buildHotelSearchInput({ ...anchor, 'max-results': '0' })).toThrowError(
+      CliUsageError,
+    );
+    expect(() => buildHotelSearchInput({ ...anchor, 'max-results': '301' })).toThrowError(
+      CliUsageError,
+    );
+    expect(() => buildHotelSearchInput({ ...anchor, 'sort-by': 'Name' })).toThrowError(
+      CliUsageError,
+    );
+    expect(() => buildHotelSearchInput({ ...anchor, 'sort-order': 'desc' })).toThrowError(
+      CliUsageError,
+    );
+  });
+
+  it('attaches optional filters, sort preferences, and POS when supplied', () => {
+    const out = buildHotelSearchInput({
+      'geo-code': '32.758,-97.08',
+      'max-results': '50',
+      'sort-by': 'SabreRating',
+      'sort-order': 'DESC',
+      'hotel-name': 'Regency',
+      'chain-codes': 'HY,MC',
+      'brand-codes': '10008',
+      pcc: 'TM61',
+    });
+    expect(out.maxResults).toBe(50);
+    expect(out.sortBy).toBe('SabreRating');
+    expect(out.sortOrder).toBe('DESC');
+    expect(out.hotelPref).toEqual({
+      hotelName: 'Regency',
+      chainCodes: ['HY', 'MC'],
+      brandCodes: ['10008'],
+    });
+    expect(out.pos).toEqual({ pseudoCityCode: 'TM61' });
+  });
+
+  it('parses --body verbatim, ignoring all other flags', () => {
+    const body = JSON.stringify({
+      geoSearch: {
+        geoRef: {
+          kind: 'geoCode',
+          radius: 1,
+          uom: 'KM',
+          latitude: 0,
+          longitude: 0,
+        },
+      },
+      maxResults: 5,
+    });
+    const out = buildHotelSearchInput({ body, 'geo-code': '99,99' });
+    expect(out.maxResults).toBe(5);
+    expect(out.geoSearch.geoRef.radius).toBe(1);
+  });
+});
+
+describe('hotelsToTableRows', () => {
+  it('renders one row per hotel with code, name, chain, distance, address', () => {
+    const out = hotelsToTableRows({
+      hotels: [
+        {
+          code: '100072188',
+          codeContext: 'GLOBAL',
+          name: 'Hyatt Regency Tulsa',
+          chainCode: 'HY',
+          distance: 23.45,
+          distanceUnit: 'MI',
+          location: {
+            address: {
+              city: { code: 'TUL', name: 'Tulsa' },
+              stateProv: { code: 'OK' },
+              country: { code: 'US' },
+            },
+          },
+        },
+      ],
+    });
+    expect(out.headers).toEqual(['code', 'name', 'chain', 'distance', 'address']);
+    expect(out.rows).toEqual([
+      ['100072188', 'Hyatt Regency Tulsa', 'HY', '23.45 MI', 'Tulsa, OK, US'],
+    ]);
+  });
+
+  it('preserves hotels with missing optional fields as empty cells', () => {
+    const out = hotelsToTableRows({
+      hotels: [{ code: 'X', codeContext: 'GLOBAL' }],
+    });
+    expect(out.rows).toEqual([['X', '', '', '', '']]);
+  });
+
+  it('returns an empty rows list for an empty hotels array', () => {
+    const out = hotelsToTableRows({ hotels: [] });
+    expect(out.rows).toEqual([]);
   });
 });

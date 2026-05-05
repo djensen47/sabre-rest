@@ -1,0 +1,1195 @@
+openapi: 3.0.0
+info:
+  title: Hotel Search
+  description: The Hotel Search API provides multiple location resolution methods (including polygon search) to search and retrieve matching property content that does not contain availability.
+  version: v2
+servers:
+- url: https://api.cert.platform.sabre.com/
+security:
+- oauth2_authentication: []
+paths:
+  /v2.0.0/hotel/search:
+    post:
+      operationId: hotelSearch
+      tags:
+        - HotelSearch
+      parameters:
+        - name: Application-ID
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Specifies the customer application ID. Recommended, but not needed. Work with your account manager to generate an application ID if you don't already have one.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HotelSearchRequest'
+        required: true
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HotelSearchResponse'
+        400:
+          description: |
+            Bad Request
+
+            - Invalid format for request.
+          content: {}
+        404:
+          description: |
+            Not Found
+
+            - No results were found.
+          content: {}
+
+components:
+  schemas:
+    HotelSearchRequest:
+      required:
+      - HotelSearchRQ
+      type: object
+      properties:
+        HotelSearchRQ:
+          type: object
+          required:
+            - SearchCriteria
+          properties:
+            POS:
+              $ref: '#/components/schemas/POS'
+            SearchCriteria:
+              $ref: '#/components/schemas/SearchCriteria'
+    HotelSearchResponse:
+      type: object
+      properties:
+        HotelSearchRS:
+          type: object
+          properties:
+            ApplicationResults:
+              $ref: '#/components/schemas/ApplicationResults'
+            HotelSearchInfos:
+              $ref: '#/components/schemas/HotelSearchInfos'
+
+    POS:
+      description: Point of Sale information to support shopping in an authorized(AAA Access)  branch location (PCC) while remaining signed-into the home branch or IPCC
+      required:
+      - Source
+      type: object
+      properties:
+        Source:
+          $ref: '#/components/schemas/Source'
+    Source:
+      description: Shop in an authorized branch location PCC. Although the shopping happens in the branch location PCC given in the request, the underlying Session or Token used to authenticate or call this API remains unchanged. This is different from how AAA branch shopping worked in legacy GDS where the underlying session itself is AAAed into the branch location
+      required:
+      - PseudoCityCode
+      type: object
+      properties:
+        PseudoCityCode:
+          pattern: ^[a-zA-Z0-9]{4}$
+          type: string
+          description: Four-character pseudo city code (PCC) of authorized branch
+            location.
+          example: TM61
+
+    SearchCriteria:
+      description: Contains the request to get the static and price information
+        for a list of hotel.
+      type: object
+      required:
+        - GeoSearch
+      properties:
+        MaxResults:
+          type: integer
+          description: Indicates the page number.
+          minimum: 1
+          maximum: 300
+          example: 200
+        SortBy:
+          type: string
+          description: Indicates the sorting preference for properties to be returned in the response.
+          default: TotalRate
+          enum:
+          - TotalRate
+          - DistanceFrom
+          - SabreRating
+        SortOrder:
+          type: string
+          description: Indicates whether results should be sorted in ascending or
+            descending order. This attribute takes a default value based on `SortBy`.
+            `TotalRate`:`ASC` | `DistanceFrom`:`ASC` | `SabreRating`:`DESC`
+          example: ASC
+          enum:
+          - ASC
+          - DESC
+        TierLabels:
+          type: boolean
+          description: If true, the `TierLabel` value is visible for preferenced properties
+            in the response.
+          example: false
+          default: true
+        GeoSearch:
+          $ref: '#/components/schemas/GeoSearch'
+        HotelPref:
+          $ref: '#/components/schemas/HotelPref'
+        ImageRef:
+          $ref: '#/components/schemas/ImageRef'
+    GeoSearch:
+      required:
+      - GeoRef
+      type: object
+      properties:
+        GeoRef:
+          $ref: '#/components/schemas/GeoRef'
+        GeoAttributes:
+          $ref: '#/components/schemas/GeoAttributes'
+      description: Contains parameters to search properties by geographic information.
+        Use either `GeoSearch` OR `HotelRefs` to search, but not both.
+    GeoRef:
+      required:
+      - Radius
+      - UOM
+      type: object
+      properties:
+        Radius:
+          type: number
+          description: Radius to be included in the search from the search point.
+          example: 200.0
+        UOM:
+          type: string
+          description: Identifies the unit of measure in either `KM` for kilometers,
+            or `MI` for miles.
+          example: MI
+          enum:
+          - KM
+          - MI
+      oneOf:
+        - $ref: '#/components/schemas/GeoCode'
+        - $ref: '#/components/schemas/RefPoint'
+        - $ref: '#/components/schemas/AddressRef'
+      description: Contains parameters to search properties by geographic information.
+    GeoCode:
+      required:
+      - Latitude
+      - Longitude
+      type: object
+      properties:
+        Latitude:
+          maximum: 90
+          minimum: -90
+          type: number
+          description: Latitude to search by.
+          example: 32.758
+        Longitude:
+          maximum: 180
+          minimum: -180
+          type: number
+          description: Longitude to search by.
+          example: -97.08
+      description: Contains parameters to search by `Latitude` and `Longitude`. Use
+        only ONE of `GeoCode` / `RefPoint` / `AddressRef` to search.
+    RefPoint:
+      required:
+      - RefPointType
+      - Value
+      - ValueContext
+      type: object
+      properties:
+        Value:
+          maxLength: 50
+          minLength: 3
+          type: string
+          description: Value of the reference point.
+          example: DFW
+        ValueContext:
+          type: string
+          description: Identifies the type of information entered into `Value`.
+          example: CODE
+          enum:
+          - NAME
+          - CODE
+        RefPointType:
+          type: string
+          description: The OTA (Online Travel Agency) code for the point of reference.
+          example: "6"
+          enum:
+          - "5"
+          - "6"
+          - "7"
+          - "11"
+          - "16"
+          - "18"
+          - "37"
+        StateProv:
+          maxLength: 50
+          minLength: 2
+          type: string
+          description: The state or province of the reference point.
+          example: TX
+        CountryCode:
+          maxLength: 50
+          minLength: 2
+          type: string
+          description: The Country code of the reference point.
+          example: US
+      description: Contains parameters to search by reference point, such as airport
+        code. Use only ONE of `GeoCode` / `RefPoint` / `AddressRef` to search.
+    AddressRef:
+      required:
+      - CountryCode
+      type: object
+      properties:
+        Street:
+          maxLength: 50
+          minLength: 0
+          type: string
+          description: The street name of the address.
+          example: Hidden Ridge
+        City:
+          maxLength: 50
+          minLength: 0
+          type: string
+          description: The city name of the address.
+          example: Irving
+        County:
+          maxLength: 50
+          minLength: 0
+          type: string
+          description: The county name of the address.
+          example: Dallas County
+        PostalCode:
+          maxLength: 50
+          minLength: 0
+          type: string
+          description: The postal code of the address.
+          example: "75038"
+        StateProv:
+          maxLength: 50
+          minLength: 0
+          type: string
+          description: The state or province of the address.
+          example: TX
+        CountryCode:
+          maxLength: 50
+          minLength: 0
+          type: string
+          description: The country code of the address.
+          example: US
+      description: Contains parameters to search by address. Use only ONE of `GeoCode`
+        / `RefPoint` / `AddressRef` to search.
+    GeoAttributes:
+      type: object
+      properties:
+        Attributes:
+          $ref: '#/components/schemas/Attributes'
+      description: Contains hotel list filters based on neighborhoods returned by
+        `GeoRef`. The filter is applied only when a search is done using `RefPoint`
+        with `RefPointType` as `37` (Polygon Search).
+    Attributes:
+      maxItems: 10
+      type: array
+      description: Lists properties to filter by `Name` and `Value`.
+      items:
+        required:
+        - Name
+        - Value
+        type: object
+        properties:
+          Name:
+            type: string
+            description: Filters the property by name. Can only be `LOCALAREA`.
+            example: LOCALAREA
+          Value:
+            type: string
+            description: Filters the response to only include hotels inside a specified
+              area when `LOCALAREA` is present in `Name`.
+            example: KRAKOW AREA
+
+    HotelPref:
+      type: object
+      properties:
+        HotelName:
+          maxLength: 100
+          minLength: 3
+          pattern: ^[0-9a-zA-Z .\/-]{3,100}$
+          type: string
+          description: Specifies hotel name (minimum 3 characters) to be searched or used in filtering results.
+          example: Inn
+        BrandCodes:
+          $ref: '#/components/schemas/BrandCodes'
+        ChainCodes:
+          $ref: '#/components/schemas/ChainCodes'
+        AmenityCodes:
+          $ref: '#/components/schemas/AmenityCodes'
+        SecurityFeatureCodes:
+          $ref: '#/components/schemas/SecurityFeatureCodes'
+        PropertyTypeCodes:
+          $ref: '#/components/schemas/PropertyTypeCodes'
+        PropertyQualityCodes:
+          $ref: '#/components/schemas/PropertyQualityCodes'
+        SabreRating:
+          $ref: '#/components/schemas/SabreRating'
+      description: Contains search filter criteria.
+
+    BrandCodes:
+      required:
+      - BrandCode
+      type: object
+      properties:
+        BrandCode:
+          $ref: '#/components/schemas/BrandCode'
+      description: Contains a list of brand codes. Properties must belong to at least
+        1 brand code from this list to be shown in the response.
+    BrandCode:
+      maxItems: 20
+      type: array
+      description: Lists hotel brand codes associated with the property.
+      example:
+      - "10008"
+      - "10009"
+      items:
+        maxLength: 20
+        minLength: 1
+        pattern: ^[0-9a-zA-Z ]{1,20}$
+        type: string
+        description: Specifies brand code to be searched or used in filtering the results.
+        example: "10008"
+    ChainCodes:
+      required:
+      - ChainCode
+      type: object
+      properties:
+        ChainCode:
+          $ref: '#/components/schemas/ChainCode'
+      description: Contains a list of chain codes. Properties must belong to at least
+        1 chain code from this list to be shown in the response.
+    ChainCode:
+      maxItems: 20
+      type: array
+      description: Lists chain codes associated with the property.
+      example:
+      - MC
+      - YX
+      items:
+        maxLength: 20
+        minLength: 1
+        pattern: ^[0-9a-zA-Z]{2}$
+        type: string
+        description: Specifies chain code to be searched or used in filtering the results.
+    AmenityCodes:
+      required:
+      - AmenityCode
+      type: object
+      properties:
+        Inclusive:
+          type: boolean
+          description: If true, the returned properties must have all the requested
+            amenity codes. If false, the returned properties must have at least one
+            of the requested codes.
+          example: false
+          default: false
+        AmenityCode:
+          $ref: '#/components/schemas/AmenityCode'
+      description: Contains a list of amenity codes. Properties must have 1 or all
+        of the amenities from this list to be shown in the response, depending on
+        the value of `Inclusive` - true (must have all amenities) or false (must have
+        at least 1 amenity).
+    AmenityCode:
+      maxItems: 20
+      type: array
+      description: Lists amenity codes associated with the property.
+      example:
+      - 15
+      - 16
+      items:
+        minimum: 1
+        type: integer
+        description: Specifies amenity,mapped to the OTA code `HAC`, to be searched or used in filtering the results.
+        example: 15
+    SecurityFeatureCodes:
+      required:
+      - SecurityFeatureCode
+      type: object
+      properties:
+        Inclusive:
+          type: boolean
+          description: If true, the returned properties must have all the requested
+            security feature codes. If false, the returned properties must have at
+            least one of the requested codes.
+          example: false
+          default: false
+        SecurityFeatureCode:
+          $ref: '#/components/schemas/SecurityFeatureCode'
+      description: Contains a list of security feature codes. Properties must have
+        1 or all of the security features from this list to be shown in the response,
+        depending on the value of `Inclusive` - true (must have all security features)
+        or false (must have at least 1 security features).
+    SecurityFeatureCode:
+      maxItems: 20
+      type: array
+      description: Lists security feature codes associated with the property.
+      items:
+        minimum: 1
+        type: integer
+        description: Specifies security feature code,mapped to the OTA code `SEC`, to be searched or used in filtering the results.
+        example: 15
+    PropertyTypeCodes:
+      required:
+      - PropertyTypeCode
+      type: object
+      properties:
+        Inclusive:
+          type: boolean
+          description: If true, the returned properties must belong to all the property
+            type codes. If false, the returned properties must belong to at least
+            one of the requested property type codes.
+          example: false
+          default: false
+        PropertyTypeCode:
+          $ref: '#/components/schemas/PropertyTypeCode'
+      description: Contains a list of property type codes. Properties must belong
+        to at least 1 or all of the property types from this list to be shown in the
+        response, depending on the value of `Inclusive` - true (must fall under all
+        property types ) or false (must fall under at least 1 property type).
+    PropertyTypeCode:
+      maxItems: 20
+      type: array
+      example:
+      - 15
+      - 16
+      items:
+        minimum: 1
+        type: integer
+        description: Specifies property type code,mapped to the OTA code `PCT`, to be searched or used in filtering the results.
+        example: 15
+    PropertyQualityCodes:
+      required:
+      - PropertyQualityCode
+      type: object
+      properties:
+        Inclusive:
+          type: boolean
+          description: If true, the returned properties must belong to all the property
+            quality codes. If false, the returned properties must belong to at least
+            one of the requested property quality codes.
+          example: false
+          default: false
+        PropertyQualityCode:
+          $ref: '#/components/schemas/PropertyQualityCode'
+      description: Contains a list of property quality codes. Properties must belong
+        to at least 1 or all of the property quality types from this list to be shown in the
+        response, depending on the value of `Inclusive` - true (must fall under all
+        property types ) or false (must fall under at least 1 property type).
+    PropertyQualityCode:
+      maxItems: 20
+      type: array
+      example:
+      - 15
+      - 16
+      items:
+        minimum: 1
+        type: integer
+        description: Specifies the property's quality code, mapped to the OTA codeLOS, to be searched or used in filtering the results.
+        example: 15
+    SabreRating:
+      type: object
+      properties:
+        Min:
+          pattern: ^[0]{1}\.[5]{1}|[1-4]{1}\.[0,5]{0,1}|[5]{1}\.[0]{1}|[1-5]{1}$
+          type: string
+          description: Properties returned in the response will have a rating greater
+            than this value. Defaults to 0.5 if `Max` is specified but `Min` is not.
+          example: "1.5"
+        Max:
+          pattern: ^[0]{1}\.[5]{1}|[1-4]{1}\.[0,5]{0,1}|[5]{1}\.[0]{1}|[1-5]{1}$
+          type: string
+          description: Properties returned in the response will have a rating lower
+            than this value. Defaults to 5 if `Min` is specified but `Max` is not.
+          example: "4.5"
+      description: Contains filters for all properties to ensure that their ratings
+        fall between a specified `Min` / `Max` rating.
+    ImageRef:
+      type: object
+      properties:
+        Type:
+          type: string
+          description: Identifies the different types of images.
+          example: MEDIUM
+          default: THUMBNAIL
+          enum:
+          - ORIGINAL
+          - THUMBNAIL
+          - SMALL
+          - MEDIUM
+          - LARGE
+        CategoryCode:
+          minimum: 1
+          type: integer
+          description: The media item category code. It is mapped to the PCI OTA code.
+            table.
+          example: 3
+        LanguageCode:
+          pattern: ^([a-z][a-z][_][A-Z][A-Z])|([a-zA-Z]{2})$
+          type: string
+          description: The two-letter ISO 639-1 language code.
+          example: EN
+      description: Contains hotel image details.
+
+    ApplicationResults:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Specifies if the status is complete/incomplete/not processed/unknown.
+          example: Complete
+          enum:
+          - Complete
+          - Incomplete
+          - NotProcessed
+          - Unknown
+        Success:
+          $ref: '#/components/schemas/ElementStructure'
+        Error:
+          $ref: '#/components/schemas/ElementStructure'
+        Warning:
+          $ref: '#/components/schemas/ElementStructure'
+      description: Contains the Sabre SOAP Fault/detail element content, specifically
+        where results is referred.
+    ElementStructure:
+      type: array
+      description: Lists the results of the application's search, as well as any errors
+        that may have occured.
+      items:
+        type: object
+        properties:
+          type:
+            type: string
+            description: Specifies the source of error when processing the request.
+            example: Transport
+          timeStamp:
+            type: string
+            description: Contains current application server time stamp.
+            example: "2024-06-09T20:45:04+05:30"
+          SystemSpecificResults:
+            type: array
+            description: Lists the application response status.
+            items:
+              type: object
+              properties:
+                timeStamp:
+                  type: string
+                  description: Contains current application server time stamp.
+                  example: "2024-06-09T20:45:04+05:30"
+                reference:
+                  type: string
+                  description: If present, provides the name of the field for which
+                    the results apply.
+                  example: reference
+                ShortText:
+                  type: object
+                  properties: {}
+                  description: Contains an abbreviated version of the error in text
+                    format.
+                Element:
+                  type: object
+                  properties: {}
+                  description: Contains the identity of the unknown or misspelled
+                    tag that caused the processing error.
+                RecordID:
+                  type: object
+                  properties: {}
+                  description: Contains the identity of the record that failed among
+                    a group of records. This value may contain a concatenation of
+                    a unique failed transaction ID with specific record(s) associated
+                    with that transaction.
+                DocURL:
+                  type: object
+                  properties: {}
+                  description: Contains an online description of the error that occurred.
+                HostCommand:
+                  type: object
+                  properties:
+                    LNIATA:
+                      type: string
+                      description: The Line Number Interchange Address Terminal Address
+                        (LNIATA) number.
+                      example: AAVTYZ
+                  description: Contains the host system common run to create the result.
+                Message:
+                  type: array
+                  description: Lists application-specific codes and messages. A textual
+                    description to provide more information about the specific condition,
+                    warning, or error with the code attribute as a numeric value.
+                  items:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        description: The code, if returned, for an error or warning.
+                        example: ERR.0381
+                      value:
+                        type: string
+                        description: The message associated to the above code.
+                        example: Invalid check-in date
+
+    HotelSearchInfos:
+      type: object
+      properties:
+        MaxSearchResults:
+          minimum: 0
+          type: integer
+          description: Specifies maximum number of Hotel Properties matching for the given search criteria. The number
+            of pages can be derived using this integer and the number of hotels per
+            page (`PageSize` from the request).
+          example: 763
+        SearchLatitude:
+          type: number
+          description: Geolocation coordinates for requested search criteria. This is populated in response only if request is made using 'GeoRef' and not 'HotelRefs'
+          example: 32.758
+        SearchLongitude:
+          type: number
+          description: Geolocation coordinates for requested search criteria. This is populated in response only if request is made using 'GeoRef' and not 'HotelRefs'
+          example: -97.08
+        HotelSearchInfo:
+          $ref: '#/components/schemas/HotelSearchInfo'
+      description: Contains hotel availability details for all properties found.
+
+    HotelSearchInfo:
+      type: array
+      description: Lists basic hotel, rate, and image information.
+      items:
+        required:
+        - HotelInfo
+        type: object
+        properties:
+          HotelInfo:
+            $ref: '#/components/schemas/HotelInfo'
+          HotelImageInfo:
+            $ref: '#/components/schemas/HotelImageInfo'
+    HotelInfo:
+      required:
+      - CodeContext
+      - HotelCode
+      type: object
+      properties:
+        HotelCode:
+          maxLength: 20
+          minLength: 1
+          type: string
+          description: The Hotel Code / Property ID. This field will always contain the Global ID, irrespective of the property code / context in the request. If the request was made using a valid Sabre property ID, it will be returned under the 'SabreHotelCode' field.
+          example: "100072188"
+        CodeContext:
+          type: string
+          description: Identifies a context for hotel code that is represented by
+            HotelCode. This will always be 'GLOBAL'.
+          example: GLOBAL
+          enum:
+          - SABRE
+          - GLOBAL
+        SabreHotelCode:
+          maxLength: 20
+          minLength: 1
+          type: string
+          description: Sabre property ID for the Global ID. This is populated if the property in the response is mapped to a Sabre hotel code.
+          example: "8315"
+        HotelName:
+          maxLength: 500
+          minLength: 0
+          type: string
+          description: The name of the hotel property.
+          example: Hyatt Regency Tulsa
+        ChainCode:
+          maxLength: 20
+          minLength: 0
+          type: string
+          description: Identifies the chain code to which the hotel belongs.
+          example: HY
+        ChainName:
+          maxLength: 500
+          minLength: 0
+          type: string
+          description: The name of the hotel chain.
+          example: Hyatt Hotels And Resorts
+        BrandCode:
+          maxLength: 50
+          minLength: 0
+          type: string
+          description: The hotel brand code.
+          example: "10008"
+        BrandName:
+          maxLength: 500
+          minLength: 0
+          type: string
+          description: The name of the hotel brand.
+          example: Hyatt
+        Distance:
+          multipleOf: 0.01
+          type: number
+          description: Distance of hotel from point of search.
+          example: 23.45
+        Direction:
+          type: string
+          description: Direction of the hotel from the search point.
+          example: S
+        UOM:
+          type: string
+          description: Unit of measurement for distance. Possible values are MI and KM.
+          example: MI
+          enum:
+          - MI
+          - KM
+        Logo:
+          type: string
+          description: URL belonging to the hotel's logo image.
+          format: uri
+          example: http://vcmp-hotels.cert.sabre.com/image/upload/t_vcmp_thumb/hotel/i/1/jdbkyzhiy4tmmm0a30e3.jpg
+        SabreRating:
+          maxLength: 10
+          minLength: 0
+          type: string
+          description: The Sabre Property Rating.
+          example: "3.5"
+        Ordinal:
+          type: integer
+          description: Displays position at which preferred properties are shown in the response.
+          example: 1
+        TierLabels:
+          $ref: '#/components/schemas/TierLabels'
+        LocationInfo:
+          $ref: '#/components/schemas/LocationInfo'
+        Amenities:
+          $ref: '#/components/schemas/Amenities'
+        SecurityFeatures:
+          $ref: '#/components/schemas/SecurityFeatures'
+        PropertyTypeInfo:
+          $ref: '#/components/schemas/PropertyTypeInfo'
+        PropertyQualityInfo:
+          $ref: '#/components/schemas/PropertyQualityInfo'
+      description: Contains basic hotel information.
+    TierLabels:
+      type: object
+      properties:
+        TierLabel:
+          $ref: '#/components/schemas/TierLabel'
+      description: Contains agency or Supplier labels assigned to the property.
+    TierLabel:
+      maxItems: 5
+      minItems: 0
+      type: array
+      description: Lists all agency or Supplier labels assigned to the property.
+      items:
+        type: object
+        properties:
+          Type:
+            maxLength: 500
+            minLength: 0
+            type: string
+            description: Type of the tier label.
+            example: Agency
+          Value:
+            maxLength: 500
+            minLength: 0
+            type: string
+            description: Value assigned to the tier level.
+            example: Platinum
+          ProgramId:
+            pattern: ^[0-9]{1,10}$
+            type: string
+            description: Preferencing program to which the `TierLabel` belongs.
+            example: "1082"
+    LocationInfo:
+      type: object
+      properties:
+        Latitude:
+          maxLength: 20
+          minLength: 0
+          type: string
+          description: Specifies the geographical latitude of the hotel location.
+          example: "36.154800"
+        Longitude:
+          maxLength: 20
+          minLength: 0
+          type: string
+          description: Specifies the geographical longitude of the hotel location.
+          example: "-95.990356"
+        Address:
+          $ref: '#/components/schemas/Address'
+        Neighborhoods:
+          $ref: '#/components/schemas/Neighborhoods'
+        Contact:
+          $ref: '#/components/schemas/Contact'
+      description: Contains location information for a hotel.
+    Address:
+      required:
+      - AddressLine1
+      - CityName
+      - CountryName
+      type: object
+      properties:
+        AddressLine1:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: The first address line (mandatory)
+          example: 50 N MARTINGALE RD
+        AddressLine2:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: The second address line (optional).
+          example: Pointer Square
+        AddressLine3:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: The third address line (optional).
+          example: Orlando
+        CityName:
+          $ref: '#/components/schemas/CityName'
+        StateProv:
+          $ref: '#/components/schemas/StateProv'
+        PostalCode:
+          maxLength: 20
+          minLength: 0
+          type: string
+          description: The postal code information for the property.
+          example: "60173"
+        CountryName:
+          $ref: '#/components/schemas/CountryName'
+      description: Contains address information for a hotel.
+    CityName:
+      type: object
+      properties:
+        CityCode:
+          pattern: ^([A-Z0-9]{0,5})$
+          type: string
+          description: The City Code.
+          example: TUL
+        value:
+          maxLength: 50
+          minLength: 0
+          type: string
+          description: The City Name.
+          example: Tulsa
+    StateProv:
+      type: object
+      properties:
+        StateCode:
+          maxLength: 10
+          minLength: 0
+          type: string
+          description: The property, state or province code.
+          example: OK
+        value:
+          type: string
+          description: The state or province name.
+          example: Oklahoma
+    CountryName:
+      type: object
+      properties:
+        Code:
+          pattern: ^([A-Z0-9]{0,3})$
+          type: string
+          description: The two-letter code of the country where the property is located.
+          example: US
+        value:
+          type: string
+          description: The name of the country.
+          example: United States
+      description: The name of the country where the property is located.
+    Neighborhoods:
+      type: object
+      properties:
+        Neighborhood:
+          $ref: '#/components/schemas/Neighborhood'
+      description: Contains the list of neighborhood information. This is a placeholder for now.
+    Neighborhood:
+      maxItems: 10
+      type: array
+      description: Lists the information about neighborhood polygons such as MSA/Area/Hood
+        under which the property location falls.
+      items:
+        type: object
+        properties:
+          Id:
+            maxLength: 20
+            minLength: 0
+            type: string
+            description: The polygon ID of the neighborhood.
+            example: "90000092"
+          value:
+            type: string
+            description: The name of the polygon.
+            example: Tulsa OK
+    Contact:
+      type: object
+      properties:
+        Phone:
+          maxLength: 50
+          minLength: 0
+          type: string
+          description: The phone number of the hotel.
+          example: 999-222-1111
+        Fax:
+          maxLength: 20
+          minLength: 0
+          type: string
+          description: The fax number of the hotel.
+          example: 999-222-1110
+      description: Contains the contact details for the hotel.
+    Amenities:
+      type: object
+      properties:
+        Amenity:
+          $ref: '#/components/schemas/Amenity'
+      description: Contains the amenities offered by the hotel.
+    Amenity:
+      type: array
+      items:
+        type: object
+        properties:
+          Code:
+            minimum: 1
+            type: integer
+            description: The OTA Code mapped to the HAC OTA Code.
+            example: 5
+          Description:
+            maxLength: 255
+            minLength: 0
+            type: string
+            description: A description of the OTA Code.
+            example: Parking
+          ComplimentaryInd:
+            type: boolean
+            description: If true, the amenity mentioned is free of charge.
+            example: false
+          value:
+            type: string
+            example: Ask at reception for car park charges
+            description: Amenity value
+    SecurityFeatures:
+      type: object
+      properties:
+        SecurityFeature:
+          $ref: '#/components/schemas/SecurityFeature'
+    SecurityFeature:
+      type: array
+      items:
+        type: object
+        properties:
+          Code:
+            minimum: 1
+            type: integer
+            description: The OTA Code mapped to the SEC OTA Code
+            example: 15
+          Description:
+            type: string
+            description: A description of the OTA Code.
+            example: Complies with Local/State/Federal fire laws
+          value:
+            type: string
+            description: Additional textual description for the security feature.
+            example: Fire safety law compliant
+    PropertyTypeInfo:
+      type: object
+      properties:
+        PropertyType:
+          $ref: '#/components/schemas/PropertyType'
+      description: Contains the Property Class Type. It is mapped to OTA Code PCT.
+    PropertyType:
+      type: array
+      description: Lists the type of properties.
+      items:
+        type: object
+        properties:
+          Code:
+            minimum: 1
+            type: integer
+            description: The OTA code for Property Class.
+              code.
+            example: 1
+          Description:
+            maxLength: 255
+            minLength: 0
+            type: string
+            description: The Property Class description for the OTA Code.
+            example: All Suite
+    PropertyQualityInfo:
+      type: object
+      properties:
+        PropertyQuality:
+          $ref: '#/components/schemas/PropertyQuality'
+      description: Contains information on Hotel quality. It is mapped to OTA Code LOS.
+    PropertyQuality:
+      type: array
+      items:
+        type: object
+        properties:
+          Code:
+            minimum: 1
+            type: integer
+            description: OTA Code mapped to LOS OTA Table to represent the level of service at the property
+              code.
+            example: 1
+          Description:
+            maxLength: 255
+            minLength: 0
+            type: string
+            description: The OTA description for the LOS OTA Code.
+            example: Regular
+
+    HotelImageInfo:
+      type: object
+      properties:
+        ImageItem:
+          $ref: '#/components/schemas/ImageItem'
+      description: Contains image information for a hotel.
+    ImageItem:
+      required:
+      - AdditionalInfo
+      - Category
+      - Format
+      - Id
+      - Image
+      - LastModifedDate
+      - Ordinal
+      type: object
+      properties:
+        Id:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Unique ID for the media item returned.
+          example: "1377631"
+        Ordinal:
+          minimum: 0
+          type: number
+          description: The priority of the media item. The lower the number, the priority.
+          example: 2.0
+        LastModifedDate:
+          type: string
+          description: Date when the media item was last updated/changed in YYYY-MM-DD
+            format.
+          format: date
+          example: '2024-06-28'
+        Format:
+          type: string
+          description: Indicates the format of the media returned.
+          example: JPG
+          enum:
+          - BMP
+          - GIF
+          - ICO
+          - JPG
+          - PNG
+          - TIFF
+          - WEBP
+        Image:
+          $ref: '#/components/schemas/Image'
+        Category:
+          $ref: '#/components/schemas/Category'
+        AdditionalInfo:
+          $ref: '#/components/schemas/AdditionalInfo'
+      description: Contains image information for a hotel.
+    Image:
+      required:
+      - Height
+      - Type
+      - Url
+      - Width
+      type: object
+      properties:
+        Url:
+          type: string
+          description: URL of the image item returned.
+          format: uri
+          example: http://vcmp-hotels.cert.sabre.com/image/upload/t_vcmp_thumb/hotel/i/1276/uvitpha0qioacl6c2tin.jpg
+        Height:
+          minimum: 0
+          type: integer
+          description: Height of the image in pixels.
+          example: 100
+        Width:
+          minimum: 0
+          type: integer
+          description: Width of the image in pixels.
+          example: 150
+        Type:
+          type: string
+          description: Indicates the image type by size or original/thumbnail.
+          enum:
+          - ORIGINAL
+          - MEDIUM
+          - LARGE
+          - THUMBNAIL
+          - SMALL
+      description: Contains details of the hotel image.
+    Category:
+      required:
+      - Description
+      type: object
+      properties:
+        CategoryCode:
+          minimum: 1
+          type: number
+          description: Image category code, mapped to the `PCI` OTA code.
+          example: 3.0
+        Description:
+          $ref: '#/components/schemas/Description'
+      description: Contains the category the image item belongs to. This is mapped
+        to the `PCI` OTA code.
+    Description:
+      type: object
+      properties:
+        Text:
+          type: array
+          description: Lists descriptions in all requested language codes.
+          items:
+            type: object
+            properties:
+              Language:
+                pattern: ^([a-z][a-z][_][A-Z][A-Z])|([a-zA-Z]{2})$
+                type: string
+                description: The ISO 639-1 two-letter language code.
+                example: en
+              value:
+                type: string
+                description: Language Code
+                example: The text description of the image.
+      description: Contains image description details.
+    AdditionalInfo:
+      type: object
+      properties:
+        Info:
+          $ref: '#/components/schemas/Info'
+      description: Contains any additional information related to the media item.
+    Info:
+      maxItems: 10
+      type: array
+      description: Lists additional information, like caption, in the response.
+      items:
+        required:
+        - Description
+        - Type
+        type: object
+        properties:
+          Type:
+            type: string
+            description: Identifies the type of additional information present.
+            example: CAPTION
+            enum:
+            - CAPTION
+          Description:
+            $ref: '#/components/schemas/Description'
+
+
+  securitySchemes:
+    oauth2_authentication:
+      type: oauth2
+      x-base64-encode-client-credentials: true
+      flows:
+        clientCredentials:
+          tokenUrl: https://api.cert.platform.sabre.com/v2/auth/token
+          scopes: {}
