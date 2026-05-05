@@ -27,6 +27,8 @@ import type {
   CancelBookingInput,
   CancelErrorPolicy,
   CancelFlightTicketOperation,
+  CheckHotelPriceInput,
+  CheckHotelPriceOutput,
   CheckTicketsInput,
   CreateBookingInput,
   FulfillTicketsInput,
@@ -335,6 +337,36 @@ export function hotelsToTableRows(out: SearchHotelsOutput): {
     return [h.code, h.name ?? '', h.chainCode ?? '', distance, address];
   });
   return { headers: ['code', 'name', 'chain', 'distance', 'address'], rows };
+}
+
+/**
+ * Converts a Hotel Price Check v5 output into a compact summary table.
+ * Columns: bookingKey, priceChange, priceDifference, currency, hotel,
+ * rateSource. Table view is a quick eyeballing tool; drilling into
+ * rooms / rates / penalties requires `--format json`.
+ */
+export function priceCheckToTableRows(out: CheckHotelPriceOutput): {
+  headers: readonly string[];
+  rows: readonly string[][];
+} {
+  const rateSource =
+    out.rateInfo?.rateInfos?.[0]?.rateSource ??
+    out.rateInfo?.rooms?.[0]?.ratePlans?.[0]?.rateSource ??
+    out.rateInfo?.unavailability?.sources[0]?.source ??
+    '';
+  const priceChange = out.priceChange === undefined ? '' : out.priceChange ? 'yes' : 'no';
+  const diff =
+    out.priceDifference !== undefined && out.currencyCode !== undefined
+      ? `${out.priceDifference} ${out.currencyCode}`
+      : (out.priceDifference ?? '');
+  const hotelCell =
+    out.hotel === undefined
+      ? ''
+      : `${out.hotel.code}${out.hotel.name !== undefined ? ` — ${out.hotel.name}` : ''}`;
+  return {
+    headers: ['bookingKey', 'priceChange', 'priceDiff', 'hotel', 'rateSource'],
+    rows: [[out.bookingKey ?? '', priceChange, diff, hotelCell, rateSource]],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -819,6 +851,118 @@ function parseHotelGeoRef(
   return out;
 }
 
+/** Flag set for `hotel-price-check`. */
+export interface HotelPriceCheckFlagValues {
+  'rate-key'?: string;
+  pcc?: string;
+  'corporate-number'?: string;
+  'start-date'?: string;
+  'end-date'?: string;
+  room?: string[];
+  body?: string;
+}
+
+/**
+ * Builds the input for `hotelPriceCheckV5.check` from the CLI flags.
+ *
+ * - When `--body` is supplied, it is parsed as JSON and returned verbatim.
+ * - Otherwise `--rate-key` is required — the opaque rate identifier from
+ *   a prior shop response.
+ * - `--start-date` and `--end-date` must be supplied together (or
+ *   omitted together).
+ * - `--room` is repeatable and accepts `ADULTS[:CHILDREN[:AGES]]`
+ *   (e.g. `2`, `2:1:10`, `1:2:8,10`). `index` is assigned from the
+ *   flag order starting at 1.
+ *
+ * Throws {@link CliUsageError} on malformed flags.
+ */
+export function buildHotelPriceCheckInput(values: HotelPriceCheckFlagValues): CheckHotelPriceInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as CheckHotelPriceInput;
+  }
+
+  if (!values['rate-key']) {
+    throw new CliUsageError(
+      'hotel-price-check requires --rate-key. (Or supply --body with a full JSON input.)',
+    );
+  }
+
+  const input: CheckHotelPriceInput = { rateKey: values['rate-key'] };
+
+  if (values.pcc !== undefined) {
+    input.pointOfSale = { pseudoCityCode: values.pcc };
+  }
+  if (values['corporate-number'] !== undefined) {
+    input.corporateNumber = values['corporate-number'];
+  }
+
+  const startDate = values['start-date'];
+  const endDate = values['end-date'];
+  if (startDate !== undefined || endDate !== undefined) {
+    if (startDate === undefined || endDate === undefined) {
+      throw new CliUsageError(
+        'hotel-price-check --start-date and --end-date must be supplied together.',
+      );
+    }
+    input.stay = { startDate, endDate };
+  }
+
+  if (values.room !== undefined && values.room.length > 0) {
+    input.rooms = values.room.map((spec, i) => parseHotelRoomSpec(spec, i + 1));
+  }
+
+  return input;
+}
+
+function parseHotelRoomSpec(
+  spec: string,
+  index: number,
+): NonNullable<CheckHotelPriceInput['rooms']>[number] {
+  const parts = spec.split(':');
+  if (parts.length === 0 || parts.length > 3) {
+    throw new CliUsageError(
+      `Invalid --room value '${spec}'. Expected 'ADULTS[:CHILDREN[:AGES]]' (e.g. 2, 2:1:10).`,
+    );
+  }
+  const adultsRaw = parts[0];
+  if (!adultsRaw) {
+    throw new CliUsageError(`Invalid --room value '${spec}'. ADULTS is required.`);
+  }
+  const adults = Number(adultsRaw);
+  if (!Number.isInteger(adults) || adults < 1) {
+    throw new CliUsageError(
+      `Invalid --room adults '${adultsRaw}' in '${spec}'. Expected a positive integer.`,
+    );
+  }
+  const out: NonNullable<CheckHotelPriceInput['rooms']>[number] = { index, adults };
+  if (parts.length >= 2 && parts[1] !== undefined && parts[1] !== '') {
+    const children = Number(parts[1]);
+    if (!Number.isInteger(children) || children < 0) {
+      throw new CliUsageError(
+        `Invalid --room children '${parts[1]}' in '${spec}'. Expected a non-negative integer.`,
+      );
+    }
+    out.children = children;
+  }
+  if (parts.length === 3 && parts[2] !== undefined && parts[2] !== '') {
+    const ages = parts[2]
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((a) => {
+        const n = Number(a);
+        if (!Number.isInteger(n) || n < 0) {
+          throw new CliUsageError(
+            `Invalid --room age '${a}' in '${spec}'. Expected a non-negative integer.`,
+          );
+        }
+        return n;
+      });
+    if (ages.length > 0) out.childAges = ages;
+  }
+  return out;
+}
+
 /** Flag set for `revalidate-itinerary`. */
 export interface RevalidateFlagValues {
   from?: string;
@@ -1252,6 +1396,17 @@ const HOTEL_SEARCH_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const HOTEL_PRICE_CHECK_OPTIONS = {
+  ...COMMON_OPTIONS,
+  'rate-key': { type: 'string' },
+  pcc: { type: 'string' },
+  'corporate-number': { type: 'string' },
+  'start-date': { type: 'string' },
+  'end-date': { type: 'string' },
+  room: { type: 'string', multiple: true },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 const REVALIDATE_OPTIONS = {
   ...COMMON_OPTIONS,
   from: { type: 'string' },
@@ -1379,6 +1534,7 @@ Commands:
   get-ancillaries           Sabre Get Ancillaries v2
   get-booking               Sabre Booking Management v1 — Get Booking
   get-seats                 Sabre Get Seats v2
+  hotel-price-check         Sabre Hotel Price Check v5
   hotel-search              Sabre Hotel Search v2
   modify-booking            Sabre Booking Management v1 — Modify Booking
   refund-tickets            Sabre Booking Management v1 — Refund Tickets
@@ -1499,6 +1655,35 @@ Examples:
   sabre-rest hotel-search --geo-code 32.758,-97.08 --radius 10 --uom MI
   sabre-rest hotel-search --ref-point 6:DFW:CODE --max-results 20 --format table
   sabre-rest hotel-search --address "US,Irving,TX" --chain-codes HY,MC
+`;
+
+const HOTEL_PRICE_CHECK_HELP = `Usage: sabre-rest hotel-price-check [flags]
+
+Sabre Hotel Price Check v5. Revalidates a shopped hotel rate and returns
+the booking key needed by the downstream hotel-booking call.
+
+Note: the rate-key comes from a prior Sabre hotel-price / shop response.
+The library does NOT currently wrap such an API — hotel-search v2 returns
+property content only, not rates. Supply --rate-key from another source.
+
+Flags:
+  --rate-key <key>          Opaque rate key from a prior shop response (required unless --body)
+  --pcc <code>              Optional branch PCC (POS/Source)
+  --corporate-number <n>    Optional corporate number
+  --start-date <YYYY-MM-DD> Optional stay start date (must pair with --end-date)
+  --end-date <YYYY-MM-DD>   Optional stay end date (must pair with --start-date)
+  --room <spec>             Repeatable; ADULTS[:CHILDREN[:AGES]]
+                            (e.g. 2, 2:1:10, 1:2:8,10). Index is 1-based in flag order.
+  --body <json>             Override input with raw JSON (ignores other flags)
+  --base-url <url>          Override SABRE_BASE_URL
+  --format json|table       Output format (default: json). Table is a single-row summary.
+  --debug-request           Print the outbound HTTP request to stderr
+  -h, --help                Show this help
+
+Examples:
+  sabre-rest hotel-price-check --rate-key 'NFZ6Y...==' --format table
+  sabre-rest hotel-price-check --rate-key 'KEY' --start-date 2026-06-20 --end-date 2026-06-22 \\
+    --room 2:1:10
 `;
 
 const REVALIDATE_HELP = `Usage: sabre-rest revalidate-itinerary [flags]
@@ -1884,6 +2069,33 @@ async function bargainFinderMaxCommand(
   });
 }
 
+async function hotelPriceCheckCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: HOTEL_PRICE_CHECK_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(HOTEL_PRICE_CHECK_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildHotelPriceCheckInput(values);
+  const result = await client.hotelPriceCheckV5.check(input);
+  emitResult(result, format, io, () => {
+    const { headers, rows } = priceCheckToTableRows(result);
+    return renderTable(headers, rows);
+  });
+}
+
 async function hotelSearchCommand(
   argv: readonly string[],
   env: CliEnvConfig,
@@ -2213,6 +2425,7 @@ export const COMMANDS: Record<
   'get-ancillaries': getAncillariesCommand,
   'get-booking': getBookingCommand,
   'get-seats': getSeatsCommand,
+  'hotel-price-check': hotelPriceCheckCommand,
   'hotel-search': hotelSearchCommand,
   'modify-booking': modifyBookingCommand,
   'refund-tickets': refundTicketsCommand,

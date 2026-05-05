@@ -13,6 +13,7 @@ import {
   buildFulfillTicketsInput,
   buildGetAncillariesInput,
   buildGetBookingInput,
+  buildHotelPriceCheckInput,
   buildHotelSearchInput,
   buildModifyBookingInput,
   buildRefundTicketsInput,
@@ -26,6 +27,7 @@ import {
   parseOutputFormat,
   parsePassenger,
   pickNotableResponseHeaders,
+  priceCheckToTableRows,
   readEnvConfig,
   renderError,
   renderTable,
@@ -938,6 +940,7 @@ describe('COMMANDS dispatch table', () => {
       'get-ancillaries',
       'get-booking',
       'get-seats',
+      'hotel-price-check',
       'hotel-search',
       'modify-booking',
       'refund-tickets',
@@ -1384,5 +1387,114 @@ describe('hotelsToTableRows', () => {
   it('returns an empty rows list for an empty hotels array', () => {
     const out = hotelsToTableRows({ hotels: [] });
     expect(out.rows).toEqual([]);
+  });
+});
+
+describe('buildHotelPriceCheckInput', () => {
+  it('builds a minimum input from --rate-key', () => {
+    expect(buildHotelPriceCheckInput({ 'rate-key': 'KEY==' })).toEqual({ rateKey: 'KEY==' });
+  });
+
+  it('throws CliUsageError when --rate-key is missing', () => {
+    expect(() => buildHotelPriceCheckInput({})).toThrowError(CliUsageError);
+  });
+
+  it('attaches pcc and corporateNumber when supplied', () => {
+    const out = buildHotelPriceCheckInput({
+      'rate-key': 'KEY',
+      pcc: 'TM61',
+      'corporate-number': 'DK1',
+    });
+    expect(out.pointOfSale).toEqual({ pseudoCityCode: 'TM61' });
+    expect(out.corporateNumber).toBe('DK1');
+  });
+
+  it('pairs --start-date and --end-date into stay', () => {
+    const out = buildHotelPriceCheckInput({
+      'rate-key': 'KEY',
+      'start-date': '2026-06-20',
+      'end-date': '2026-06-22',
+    });
+    expect(out.stay).toEqual({ startDate: '2026-06-20', endDate: '2026-06-22' });
+  });
+
+  it('rejects --start-date without --end-date (or vice versa)', () => {
+    expect(() =>
+      buildHotelPriceCheckInput({ 'rate-key': 'KEY', 'start-date': '2026-06-20' }),
+    ).toThrowError(CliUsageError);
+    expect(() =>
+      buildHotelPriceCheckInput({ 'rate-key': 'KEY', 'end-date': '2026-06-22' }),
+    ).toThrowError(CliUsageError);
+  });
+
+  it('parses repeated --room specs with 1-based index from flag order', () => {
+    const out = buildHotelPriceCheckInput({
+      'rate-key': 'KEY',
+      room: ['2', '1:2:8,10'],
+    });
+    expect(out.rooms).toEqual([
+      { index: 1, adults: 2 },
+      { index: 2, adults: 1, children: 2, childAges: [8, 10] },
+    ]);
+  });
+
+  it('rejects malformed --room values', () => {
+    expect(() => buildHotelPriceCheckInput({ 'rate-key': 'KEY', room: [''] })).toThrowError(
+      CliUsageError,
+    );
+    expect(() => buildHotelPriceCheckInput({ 'rate-key': 'KEY', room: ['0'] })).toThrowError(
+      CliUsageError,
+    );
+    expect(() => buildHotelPriceCheckInput({ 'rate-key': 'KEY', room: ['2:-1'] })).toThrowError(
+      CliUsageError,
+    );
+    expect(() => buildHotelPriceCheckInput({ 'rate-key': 'KEY', room: ['2:1:blah'] })).toThrowError(
+      CliUsageError,
+    );
+    expect(() => buildHotelPriceCheckInput({ 'rate-key': 'KEY', room: ['1:2:3:4'] })).toThrowError(
+      CliUsageError,
+    );
+  });
+
+  it('parses --body verbatim, ignoring all other flags', () => {
+    const body = JSON.stringify({ rateKey: 'FROM-BODY', corporateNumber: 'X' });
+    const out = buildHotelPriceCheckInput({ body, 'rate-key': 'FROM-FLAG' });
+    expect(out.rateKey).toBe('FROM-BODY');
+    expect(out.corporateNumber).toBe('X');
+  });
+});
+
+describe('priceCheckToTableRows', () => {
+  it('renders a single-row summary with bookingKey, priceChange, diff, hotel, rateSource', () => {
+    const out = priceCheckToTableRows({
+      bookingKey: 'BK-42',
+      priceChange: true,
+      priceDifference: '12.02',
+      currencyCode: 'AUD',
+      hotel: { code: '100', codeContext: 'GLOBAL', name: 'Test Hotel' },
+      rateInfo: {
+        rateInfos: [{ rateSource: '100', rateKey: 'K' }],
+      },
+    });
+    expect(out.headers).toEqual(['bookingKey', 'priceChange', 'priceDiff', 'hotel', 'rateSource']);
+    expect(out.rows).toEqual([['BK-42', 'yes', '12.02 AUD', '100 — Test Hotel', '100']]);
+  });
+
+  it('renders empty cells when top-level fields are missing', () => {
+    const out = priceCheckToTableRows({});
+    expect(out.rows).toEqual([['', '', '', '', '']]);
+  });
+
+  it('falls back to unavailability source when no rateInfo entries exist', () => {
+    const out = priceCheckToTableRows({
+      bookingKey: 'BK-U',
+      hotel: { code: 'X', codeContext: 'GLOBAL' },
+      rateInfo: {
+        unavailability: {
+          sources: [{ source: '110', reason: 'filtered' }],
+        },
+      },
+    });
+    expect(out.rows[0]?.[4]).toBe('110');
   });
 });
