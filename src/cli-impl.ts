@@ -21,6 +21,10 @@ import type { Middleware, SabreRequest } from './http/types.js';
 import type {
   Airline,
   AirlineAlliance,
+  AvailAddressRef,
+  AvailGeoCodeRef,
+  AvailHotel,
+  AvailReferencePointRef,
   BookingReturnOnly,
   BookingSource,
   CabinClass,
@@ -35,6 +39,8 @@ import type {
   GeoRef,
   GetAncillariesInput,
   GetBookingInput,
+  GetHotelAvailInput,
+  GetHotelAvailOutput,
   GetSeatsInput,
   Hotel,
   HotelDistanceUnit,
@@ -366,6 +372,31 @@ export function priceCheckToTableRows(out: CheckHotelPriceOutput): {
   return {
     headers: ['bookingKey', 'priceChange', 'priceDiff', 'hotel', 'rateSource'],
     rows: [[out.bookingKey ?? '', priceChange, diff, hotelCell, rateSource]],
+  };
+}
+
+/**
+ * Converts a Get Hotel Avail v5 output into a one-row-per-hotel summary
+ * table. Columns: code, name, chain, rate, currency, rateSource, rateKey.
+ * Rate / source / key come from the first `ConvertedRateInfo` entry when
+ * present, falling back to the first `RateInfo` entry. Drilling into
+ * rooms and rate plans requires `--format json`.
+ */
+export function availToTableRows(out: GetHotelAvailOutput): {
+  headers: readonly string[];
+  rows: readonly string[][];
+} {
+  const rows = out.hotels.map((h: AvailHotel) => {
+    const firstEntry = h.rateInfo?.convertedRateInfo?.[0] ?? h.rateInfo?.rateInfo?.[0];
+    const rate = firstEntry?.amountAfterTax ?? firstEntry?.averageNightlyRate ?? '';
+    const currency = firstEntry?.currencyCode ?? '';
+    const rateSource = firstEntry?.rateSource ?? '';
+    const rateKey = firstEntry?.rateKey ?? '';
+    return [h.code, h.name ?? '', h.chainCode ?? '', rate, currency, rateSource, rateKey];
+  });
+  return {
+    headers: ['code', 'name', 'chain', 'rate', 'currency', 'rateSource', 'rateKey'],
+    rows,
   };
 }
 
@@ -849,6 +880,289 @@ function parseHotelGeoRef(
   if (city) out.city = city;
   if (stateProv) out.stateProv = stateProv;
   return out;
+}
+
+/** Flag set for `get-hotel-avail`. */
+export interface HotelAvailFlagValues {
+  'geo-code'?: string;
+  'ref-point'?: string;
+  address?: string;
+  hotels?: string;
+  radius?: string;
+  uom?: string;
+  'restrict-country'?: string;
+  'currency-code'?: string;
+  'best-only'?: string;
+  'start-date'?: string;
+  'end-date'?: string;
+  room?: string[];
+  'rate-sources'?: string;
+  'prepaid-qualifier'?: string;
+  'refundable-only'?: boolean;
+  'converted-only'?: boolean;
+  'chain-codes'?: string;
+  'brand-codes'?: string;
+  'hotel-name'?: string;
+  'lenient-name'?: string;
+  'max-results'?: string;
+  'page-size'?: string;
+  'sort-by'?: string;
+  'sort-order'?: string;
+  pcc?: string;
+  'corporate-number'?: string;
+  body?: string;
+}
+
+const AVAIL_SORT_BY: ReadonlySet<NonNullable<GetHotelAvailInput['criteria']>['sortBy']> = new Set([
+  'NegotiatedRateAvailability',
+  'DistanceFrom',
+  'SabreRating',
+  'AverageNightlyRate',
+  'AverageNightlyRateBeforeTax',
+]);
+
+const AVAIL_PREPAID: ReadonlySet<
+  NonNullable<GetHotelAvailInput['rateInfoRef']['prepaidQualifier']>
+> = new Set(['IncludePrepaid', 'PrepaidOnly', 'ExcludePrepaid']);
+
+const AVAIL_BEST_ONLY: ReadonlySet<GetHotelAvailInput['rateInfoRef']['bestOnly']> = new Set([
+  '1',
+  '2',
+  '3',
+  '4',
+]);
+
+/**
+ * Builds the input for `getHotelAvailV5.getAvail` from the CLI flags.
+ *
+ * - `--body` wins and is parsed as JSON verbatim.
+ * - Otherwise exactly one search anchor is required: `--geo-code`,
+ *   `--ref-point`, `--address`, or `--hotels`. The geo anchors reuse
+ *   the same formats as the hotel-search CLI.
+ * - `--currency-code`, `--start-date`, `--end-date` are required.
+ *   `--best-only` defaults to `1` (lowest across sources).
+ * - `--room` is repeatable and accepts `ADULTS[:CHILDREN[:AGES]]`.
+ *   When no `--room` is given, defaults to one room with one adult.
+ */
+export function buildHotelAvailInput(values: HotelAvailFlagValues): GetHotelAvailInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as GetHotelAvailInput;
+  }
+
+  const anchorCount = [
+    values['geo-code'],
+    values['ref-point'],
+    values.address,
+    values.hotels,
+  ].filter((v): v is string => v !== undefined).length;
+  if (anchorCount === 0) {
+    throw new CliUsageError(
+      'get-hotel-avail requires one of --geo-code, --ref-point, --address, or --hotels. (Or --body.)',
+    );
+  }
+  if (anchorCount > 1) {
+    throw new CliUsageError(
+      'get-hotel-avail: --geo-code, --ref-point, --address, --hotels are mutually exclusive.',
+    );
+  }
+
+  const missing: string[] = [];
+  if (!values['currency-code']) missing.push('--currency-code');
+  if (!values['start-date']) missing.push('--start-date');
+  if (!values['end-date']) missing.push('--end-date');
+  if (missing.length > 0) {
+    throw new CliUsageError(`get-hotel-avail requires: ${missing.join(', ')}.`);
+  }
+
+  const bestOnly = (values['best-only'] ?? '1') as GetHotelAvailInput['rateInfoRef']['bestOnly'];
+  if (!AVAIL_BEST_ONLY.has(bestOnly)) {
+    throw new CliUsageError(
+      `Invalid --best-only value '${values['best-only']}'. Expected 1, 2, 3, or 4.`,
+    );
+  }
+
+  const uom = parseHotelUom(values.uom);
+  const radius = parseHotelRadius(values.radius);
+  const search = parseHotelAvailAnchor(values, radius, uom);
+
+  const rooms: GetHotelAvailInput['rateInfoRef']['rooms'] =
+    values.room !== undefined && values.room.length > 0
+      ? values.room.map((spec, i) => parseHotelRoomSpec(spec, i + 1))
+      : [{ index: 1, adults: 1 }];
+
+  const rateInfoRef: GetHotelAvailInput['rateInfoRef'] = {
+    currencyCode: values['currency-code'] as string,
+    bestOnly,
+    stayDateTimeRange: {
+      startDate: values['start-date'] as string,
+      endDate: values['end-date'] as string,
+    },
+    rooms,
+  };
+  if (values['prepaid-qualifier'] !== undefined) {
+    if (!AVAIL_PREPAID.has(values['prepaid-qualifier'] as never)) {
+      throw new CliUsageError(
+        `Invalid --prepaid-qualifier value '${values['prepaid-qualifier']}'. Expected IncludePrepaid, PrepaidOnly, or ExcludePrepaid.`,
+      );
+    }
+    rateInfoRef.prepaidQualifier = values['prepaid-qualifier'] as NonNullable<
+      typeof rateInfoRef.prepaidQualifier
+    >;
+  }
+  if (values['refundable-only'] !== undefined)
+    rateInfoRef.refundableOnly = values['refundable-only'];
+  if (values['converted-only'] !== undefined)
+    rateInfoRef.convertedRateInfoOnly = values['converted-only'];
+  const rateSources = splitCommaList(values['rate-sources']);
+  if (rateSources !== undefined) rateInfoRef.rateSource = rateSources;
+
+  const input: GetHotelAvailInput = { search, rateInfoRef };
+
+  const criteria: NonNullable<GetHotelAvailInput['criteria']> = {};
+  if (values['max-results'] !== undefined) {
+    const n = Number(values['max-results']);
+    if (!Number.isInteger(n) || n < 1 || n > 200) {
+      throw new CliUsageError(
+        `Invalid --max-results value '${values['max-results']}'. Expected an integer in [1, 200].`,
+      );
+    }
+    criteria.pageSize = n;
+  } else if (values['page-size'] !== undefined) {
+    const n = Number(values['page-size']);
+    if (!Number.isInteger(n) || n < 1 || n > 200) {
+      throw new CliUsageError(
+        `Invalid --page-size value '${values['page-size']}'. Expected an integer in [1, 200].`,
+      );
+    }
+    criteria.pageSize = n;
+  }
+  if (values['sort-by'] !== undefined) {
+    if (!AVAIL_SORT_BY.has(values['sort-by'] as never)) {
+      throw new CliUsageError(
+        `Invalid --sort-by value '${values['sort-by']}'. Expected one of: ${Array.from(AVAIL_SORT_BY).join(', ')}.`,
+      );
+    }
+    criteria.sortBy = values['sort-by'] as NonNullable<typeof criteria.sortBy>;
+  }
+  if (values['sort-order'] !== undefined) {
+    if (values['sort-order'] !== 'ASC' && values['sort-order'] !== 'DESC') {
+      throw new CliUsageError(
+        `Invalid --sort-order value '${values['sort-order']}'. Expected ASC or DESC.`,
+      );
+    }
+    criteria.sortOrder = values['sort-order'];
+  }
+  if (Object.keys(criteria).length > 0) input.criteria = criteria;
+
+  const hotelName = values['hotel-name'];
+  const lenientName = values['lenient-name'];
+  const chainCodes = splitCommaList(values['chain-codes']);
+  const brandCodes = splitCommaList(values['brand-codes']);
+  if (
+    hotelName !== undefined ||
+    lenientName !== undefined ||
+    chainCodes !== undefined ||
+    brandCodes !== undefined
+  ) {
+    input.hotelPref = {};
+    if (hotelName !== undefined) input.hotelPref.hotelName = hotelName;
+    if (lenientName !== undefined) input.hotelPref.lenientHotelName = lenientName;
+    if (chainCodes !== undefined) input.hotelPref.chainCodes = chainCodes;
+    if (brandCodes !== undefined) input.hotelPref.brandCodes = brandCodes;
+  }
+
+  if (values.pcc !== undefined) input.pointOfSale = { pseudoCityCode: values.pcc };
+  if (values['corporate-number'] !== undefined) input.corporateNumber = values['corporate-number'];
+
+  return input;
+}
+
+function parseHotelAvailAnchor(
+  values: HotelAvailFlagValues,
+  radius: number,
+  uom: 'MI' | 'KM',
+): GetHotelAvailInput['search'] {
+  if (values.hotels !== undefined) {
+    const hotels = splitCommaList(values.hotels);
+    if (hotels === undefined) {
+      throw new CliUsageError('Invalid --hotels value. Expected a comma-separated list of codes.');
+    }
+    return {
+      kind: 'hotels',
+      hotels: hotels.map((code) => ({ code })),
+    };
+  }
+  if (values['geo-code'] !== undefined) {
+    const [latRaw, lonRaw, ...extra] = values['geo-code'].split(',').map((s) => s.trim());
+    if (!latRaw || !lonRaw || extra.length > 0) {
+      throw new CliUsageError(
+        `Invalid --geo-code value '${values['geo-code']}'. Expected 'lat,lon'.`,
+      );
+    }
+    const lat = Number(latRaw);
+    const lon = Number(lonRaw);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+      throw new CliUsageError(`Invalid --geo-code latitude '${latRaw}'.`);
+    }
+    if (!Number.isFinite(lon) || lon < -180 || lon > 180) {
+      throw new CliUsageError(`Invalid --geo-code longitude '${lonRaw}'.`);
+    }
+    const geoRef: AvailGeoCodeRef = {
+      kind: 'geoCode',
+      radius,
+      uom,
+      latitude: lat,
+      longitude: lon,
+    };
+    if (values['restrict-country'] !== undefined)
+      geoRef.restrictToCountry = values['restrict-country'];
+    return { kind: 'geo', geoRef };
+  }
+  if (values['ref-point'] !== undefined) {
+    const parts = values['ref-point'].split(':').map((s) => s.trim());
+    if (parts.length !== 3 || parts.some((p) => p === '')) {
+      throw new CliUsageError(
+        `Invalid --ref-point value '${values['ref-point']}'. Expected 'TYPE:VALUE:CONTEXT'.`,
+      );
+    }
+    const [type, value, context] = parts as [string, string, string];
+    if (!['5', '6', '7', '11', '16', '18', '37'].includes(type)) {
+      throw new CliUsageError(`Invalid --ref-point type '${type}'.`);
+    }
+    if (context !== 'CODE' && context !== 'NAME') {
+      throw new CliUsageError(`Invalid --ref-point context '${context}'. Expected CODE or NAME.`);
+    }
+    const rp: AvailReferencePointRef = {
+      kind: 'refPoint',
+      radius,
+      uom,
+      refPointType: type as '5' | '6' | '7' | '11' | '16' | '18' | '37',
+      value,
+      valueContext: context,
+    };
+    if (values['restrict-country'] !== undefined) rp.restrictToCountry = values['restrict-country'];
+    return { kind: 'geo', geoRef: rp };
+  }
+  // --address
+  const address = values.address as string;
+  const parts = address.split(',').map((s) => s.trim());
+  const [countryCode, city, stateProv, ...extra] = parts;
+  if (!countryCode || extra.length > 0) {
+    throw new CliUsageError(
+      `Invalid --address value '${address}'. Expected 'COUNTRY[,CITY[,STATE]]'.`,
+    );
+  }
+  const geoRef: AvailAddressRef = {
+    kind: 'addressRef',
+    radius,
+    uom,
+    countryCode,
+  };
+  if (city) geoRef.city = city;
+  if (stateProv) geoRef.stateProv = stateProv;
+  if (values['restrict-country'] !== undefined)
+    geoRef.restrictToCountry = values['restrict-country'];
+  return { kind: 'geo', geoRef };
 }
 
 /** Flag set for `hotel-price-check`. */
@@ -1396,6 +1710,37 @@ const HOTEL_SEARCH_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const HOTEL_AVAIL_OPTIONS = {
+  ...COMMON_OPTIONS,
+  'geo-code': { type: 'string' },
+  'ref-point': { type: 'string' },
+  address: { type: 'string' },
+  hotels: { type: 'string' },
+  radius: { type: 'string' },
+  uom: { type: 'string' },
+  'restrict-country': { type: 'string' },
+  'currency-code': { type: 'string' },
+  'best-only': { type: 'string' },
+  'start-date': { type: 'string' },
+  'end-date': { type: 'string' },
+  room: { type: 'string', multiple: true },
+  'rate-sources': { type: 'string' },
+  'prepaid-qualifier': { type: 'string' },
+  'refundable-only': { type: 'boolean' },
+  'converted-only': { type: 'boolean' },
+  'chain-codes': { type: 'string' },
+  'brand-codes': { type: 'string' },
+  'hotel-name': { type: 'string' },
+  'lenient-name': { type: 'string' },
+  'max-results': { type: 'string' },
+  'page-size': { type: 'string' },
+  'sort-by': { type: 'string' },
+  'sort-order': { type: 'string' },
+  pcc: { type: 'string' },
+  'corporate-number': { type: 'string' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 const HOTEL_PRICE_CHECK_OPTIONS = {
   ...COMMON_OPTIONS,
   'rate-key': { type: 'string' },
@@ -1533,6 +1878,7 @@ Commands:
   fulfill-tickets           Sabre Booking Management v1 — Fulfill Flight Tickets
   get-ancillaries           Sabre Get Ancillaries v2
   get-booking               Sabre Booking Management v1 — Get Booking
+  get-hotel-avail           Sabre Get Hotel Avail v5
   get-seats                 Sabre Get Seats v2
   hotel-price-check         Sabre Hotel Price Check v5
   hotel-search              Sabre Hotel Search v2
@@ -1655,6 +2001,69 @@ Examples:
   sabre-rest hotel-search --geo-code 32.758,-97.08 --radius 10 --uom MI
   sabre-rest hotel-search --ref-point 6:DFW:CODE --max-results 20 --format table
   sabre-rest hotel-search --address "US,Irving,TX" --chain-codes HY,MC
+`;
+
+const HOTEL_AVAIL_HELP = `Usage: sabre-rest get-hotel-avail [flags]
+
+Sabre Get Hotel Avail v5. Lead-rates call that produces rateKeys for the
+downstream hotel-price-check call.
+
+Anchor (exactly one, unless --body):
+  --geo-code <lat,lon>       Latitude,longitude (e.g. 32.758,-97.08)
+  --ref-point <T:V:C>        OTA reference point TYPE:VALUE:CONTEXT
+                             (e.g. 6:DFW:CODE for airport DFW). TYPE is one of
+                             5,6,7,11,16,18,37. CONTEXT is CODE or NAME.
+  --address <fields>         COUNTRY[,CITY[,STATE]] (e.g. US,Irving,TX)
+  --hotels <codes>           Comma-separated hotel codes
+
+Required unless --body:
+  --currency-code <ISO>      ISO 4217 currency code (e.g. USD)
+  --start-date <YYYY-MM-DD>  Stay check-in date
+  --end-date <YYYY-MM-DD>    Stay check-out date
+
+Rate criteria:
+  --best-only <1-4>          1=lowest across, 2=lowest per source,
+                             3=per source + negotiated, 4=public + negotiated
+                             + rateRanges for GDS. Default: 1
+  --room <spec>              Repeatable; ADULTS[:CHILDREN[:AGES]] (default: 1)
+  --rate-sources <list>      Comma-separated source codes (e.g. 100,110,112,113)
+  --prepaid-qualifier <v>    IncludePrepaid | PrepaidOnly | ExcludePrepaid
+  --refundable-only          Only return refundable rates
+  --converted-only           Only return ConvertedRateInfo entries
+
+Geo options:
+  --radius <n>               Radius (default: 25)
+  --uom <MI|KM>              Unit of measure (default: MI)
+  --restrict-country <code>  Restrict to a country (e.g. US)
+
+Sort / paging:
+  --max-results <n>          Alias for --page-size (1-200)
+  --page-size <n>            Page size (1-200)
+  --sort-by <key>            NegotiatedRateAvailability | DistanceFrom | SabreRating
+                             | AverageNightlyRate | AverageNightlyRateBeforeTax
+  --sort-order <order>       ASC or DESC
+
+Filters / POS:
+  --chain-codes <list>       Comma-separated chain codes (e.g. HY,MC)
+  --brand-codes <list>       Comma-separated brand codes
+  --hotel-name <name>        Exact hotel name (3-100 chars)
+  --lenient-name <name>      Lenient name match
+  --pcc <code>               Optional branch PCC
+  --corporate-number <n>     Optional corporate number
+
+Other:
+  --body <json>              Override input with raw JSON (ignores other flags)
+  --base-url <url>           Override SABRE_BASE_URL
+  --format json|table        Output format (default: json). Table is one row
+                             per hotel with the first rateKey surfaced.
+  --debug-request            Print the outbound HTTP request to stderr
+  -h, --help                 Show this help
+
+Examples:
+  sabre-rest get-hotel-avail --ref-point 6:DFW:CODE --currency-code USD \\
+    --start-date 2026-06-20 --end-date 2026-06-22 --max-results 5 --format table
+  sabre-rest get-hotel-avail --hotels 100072188,100074506 --currency-code USD \\
+    --start-date 2026-06-20 --end-date 2026-06-22
 `;
 
 const HOTEL_PRICE_CHECK_HELP = `Usage: sabre-rest hotel-price-check [flags]
@@ -2069,6 +2478,33 @@ async function bargainFinderMaxCommand(
   });
 }
 
+async function getHotelAvailCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: HOTEL_AVAIL_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(HOTEL_AVAIL_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildHotelAvailInput(values);
+  const result = await client.getHotelAvailV5.getAvail(input);
+  emitResult(result, format, io, () => {
+    const { headers, rows } = availToTableRows(result);
+    return renderTable(headers, rows);
+  });
+}
+
 async function hotelPriceCheckCommand(
   argv: readonly string[],
   env: CliEnvConfig,
@@ -2424,6 +2860,7 @@ export const COMMANDS: Record<
   'fulfill-tickets': fulfillTicketsCommand,
   'get-ancillaries': getAncillariesCommand,
   'get-booking': getBookingCommand,
+  'get-hotel-avail': getHotelAvailCommand,
   'get-seats': getSeatsCommand,
   'hotel-price-check': hotelPriceCheckCommand,
   'hotel-search': hotelSearchCommand,
