@@ -43,6 +43,7 @@ describe('toGetRateInfoRequest — hotel-ref flow', () => {
     });
     expect(JSON.parse(req.body ?? '')).toEqual({
       GetHotelRateInfoRQ: {
+        version: '5.0.0',
         HotelRefs: { HotelRef: { HotelCode: '100072188', CodeContext: 'GLOBAL' } },
         RateInfoRef: {
           StayDateTimeRange: { StartDate: '2026-06-20', EndDate: '2026-06-22' },
@@ -173,7 +174,7 @@ describe('toGetRateInfoRequest — rate-key flow', () => {
   it('builds a POST with only the rate key', () => {
     const req = toGetRateInfoRequest(BASE, rateKeyInput());
     expect(JSON.parse(req.body ?? '')).toEqual({
-      GetHotelRateInfoRQ: { RateKeyRef: { RateKey: 'OPAQUE-RATE-KEY==' } },
+      GetHotelRateInfoRQ: { version: '5.0.0', RateKeyRef: { RateKey: 'OPAQUE-RATE-KEY==' } },
     });
   });
 
