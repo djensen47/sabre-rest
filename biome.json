@@ -1,7 +1,14 @@
 {
   "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
   "files": {
-    "ignore": ["dist/**", "node_modules/**", "src/generated/**", "CHANGELOG.md", ".claude/**"]
+    "ignore": [
+      "dist/**",
+      "node_modules/**",
+      "src/generated/**",
+      "CHANGELOG.md",
+      ".claude/**",
+      ".playwright-mcp/**"
+    ]
   },
   "formatter": {
     "enabled": true,
