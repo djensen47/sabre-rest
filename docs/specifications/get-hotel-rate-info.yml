@@ -1,0 +1,1939 @@
+openapi: 3.0.0
+info:
+  title: Get Hotel Rate Info
+  description: The Get Hotel Rate Info API is used to retrieve all available rates for a specified property. The rates are obtained from multiple supply sources based on stay criteria, including the GDS and aggregators.
+  version: v5
+
+servers:
+  - url: https://{environment}.sabre.com
+    variables:
+      environment:
+        default: 'api.cert.platform'
+        enum:
+          - 'api.cert.platform' # Public Certification Server
+          - 'api.platform' # Public Production Server
+security:
+  - oauth2_authentication: []
+paths:
+  /v5/get/hotelrateinfo:
+    post:
+      description: Creates a request for the lowest rates available for multiple hotel properties.
+      operationId: getHotelRateInfo
+      parameters:
+        - name: Application-ID
+          in: header
+          description: The customer application ID. Recommended, but not mandatory. To generate an application ID, contact your account manager.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetHotelRateInfoRequest'
+              description: Contains all details of a request for hotel rate information.
+        required: true
+      responses:
+        '200':
+          description: Request successfully processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetHotelRateInfoResponse'
+        '400':
+          description: Invalid request format.
+      x-codegen-request-body-name: getHotelRateInfoRequest
+
+components:
+  schemas:
+    GetHotelRateInfoRequest:
+      required:
+        - GetHotelRateInfoRQ
+      type: object
+      description: Contains all details of a request for hotel rate information.
+      properties:
+        GetHotelRateInfoRQ:
+          type: object
+          description:  Contains either a `SearchByHotelRefsAndRateInfoRef` or a `SearchByRateKey` object, depending on whether you wish to retrieve rates for a particular hotel property or by using a previously generated `RateKey` respectively.
+          oneOf:
+            - $ref: '#/components/schemas/SearchByHotelRefsAndRateInfoRef'
+            - $ref: '#/components/schemas/SearchByRateKey'
+
+
+    GetHotelRateInfoResponse:
+      type: object
+      description: Contains all information returned in response to a request for hotel rates.
+      properties:
+        GetHotelRateInfoRS:
+          type: object
+          properties:
+            ApplicationResults:
+              description: Contains the parent object used to return request processing details, including errors, warnings, and timestamps.
+              $ref: '#/components/schemas/ApplicationResults'
+            HotelRateInfos:
+              $ref: '#/components/schemas/HotelRateInfos'
+          description: Contains results of the rate check for the requested product.
+
+    SearchByHotelRefsAndRateInfoRef:
+      type: object
+      description: Contains the hotel code and other rate search criteria.
+      properties:
+        CorporateNumber:
+          description: The corporate number of the agency for whom the shopping request in CSL is made. Useful for corporate-level functionalities, such as preferencing and credentials.
+          type: string
+          minLength: 1
+          example: "DK44391RC"
+        POS:
+          $ref: '#/components/schemas/POS'
+          description: Contains PCC value.
+        HotelRefs:
+          $ref: '#/components/schemas/HotelRefs'
+          description: Contains reference information about the hotel property for
+            which media and descriptive content needs to be retrieved.
+        RateInfoRef:
+          $ref: '#/components/schemas/RateInfoRef'
+          description: Contains rate search criteria for the request.
+
+
+    SearchByRateKey:
+      type: object
+      description: Contains the hotel code and all previously requested search criteria accessed using a rate key.
+      properties:
+        POS:
+          $ref: '#/components/schemas/POS'
+          description: Contains PCC value.
+        RateKeyRef:
+          $ref: '#/components/schemas/RateKeyRef'
+          description: Contains a previously generated rate key, which allows to perform a new search with the same search criteria applied.
+
+    POS:
+      description: Contains Point of Sale information used to support shopping in an authorized branch location (AAA Access to the PCC) while remaining logged in to the home branch or IPCC.
+      required:
+        - Source
+      type: object
+      properties:
+        Source:
+          description: Contains the pseudo city code.
+          $ref: '#/components/schemas/Source'
+    Source:
+      description: Contains the PCC of an authorized branch shop location.
+      required:
+        - PseudoCityCode
+      type: object
+      properties:
+        PseudoCityCode:
+          pattern: '^[A-Z0-9]{4}$'
+          type: string
+          description: The unique identification code assigned to a travel agency by GDS.
+          example: 'TM61'
+
+    RateKeyRef:
+      type: object
+      description: Contains a previously generated rate key, which allows to perform a new search with the same search criteria applied.
+      required:
+        - RateKey
+      properties:
+        RateKey:
+          type: string
+          description: The key associated with a specific rate.
+          example: "NFZ6Y/BZlGHH9Rhc6f/Qe4KgDhaUpTYQj+xMd/8l49JfzOrYgIdZkKNtngnbjkr4IvmCmKu+MVh9fQZe1RkYSPcCUa+TefaO1YkzIy4zJXrdnNBDuU/imR3Ob+d8hZZL3Q/+vNfbxzRLX3CQ=="
+        PrepaidQualifier:
+          type: string
+          description: Identifies the type of rates to search for. Can be `IncludePrepaid` (both prepaid and postpaid rates), `PrepaidOnly` (prepaid rates only), or `ExcludePrepaid` (postpaid rates only). All rates with `RateSource` equal `112` are treated as prepaid.
+          example: "IncludePrepaid"
+          default: IncludePrepaid
+          enum:
+            - IncludePrepaid
+            - PrepaidOnly
+            - ExcludePrepaid
+        RefundableOnly:
+          type: boolean
+          description: If `true`, displays only refundable rates in the response.
+          example: true
+          default: false
+        ConvertedRateInfoOnly:
+          type: boolean
+          description: If `true`, rates are returned under `ConvertedRateInfo` in the response. If `false`, rates are returned under both `ConvertedRateInfo` and `RateInfos.RateInfo` in the response.
+          example: true
+          default: true
+        ExactMatchOnly:
+          type: boolean
+          description: If `true`, returns only rates that are an exact match to the requested `RatePlanCandidate` criteria.
+          example: false
+          default: false
+        TravellerCountry:
+          pattern: ^([a-zA-Z]{2})
+          type: string
+          description: The code identifying the country of the traveler.
+          example: "IN"
+        ShopKey:
+          type: string
+          description: The key used to apply previously requested rate search criteria and to get the next set of rates. Returned in the response when there are additional rates retrieved from the same source. Works similarly to the `HOD*M` command in legacy versions.
+          example: "1VPTneIQZRZ05aTk5wgCn0RX3x5yTNO6HtAtsaydr5My3ejpv0USJUNcTsjIfr/v2VB/Z/nHlU1IE45Yt8ayWw=="
+        RateRange:
+          $ref: '#/components/schemas/RateRange'
+          description: Contains rate range which include min and max rate.
+        RoomSetTypes:
+          $ref: '#/components/schemas/RoomSetTypes'
+          description: List of Attributes on which rooms are grouped.
+        RateSource:
+          type: string
+          description: The content sources from which rate data is fetched, provided as a comma-separated string. By default, all available sources are selected.
+          example: "100,112,110,113"
+
+    HotelRefs:
+      required:
+        - HotelRef
+      type: object
+      properties:
+        HotelRef:
+          $ref: '#/components/schemas/HotelRef'
+          description: Contains reference information about a hotel.
+      description: Contains reference information about the hotel property for 
+            which media and descriptive content needs to be retrieved.
+    HotelRef:
+      required:
+        - HotelCode
+      type: object
+      properties:
+        HotelCode:
+          maxLength: 20
+          minLength: 1
+          type: string
+          description: The hotel or property identification code. Can be defined either as a global or as a Sabre hotel code, depending on the `CodeContext` value.
+          example: "100123982"
+        CodeContext:
+          type: string
+          description:  Identifies the type of code passed under `HotelCode`. Can be `SABRE` (the default value) or `GLOBAL`.
+          example: "GLOBAL"
+          default: SABRE
+          enum:
+            - SABRE
+            - GLOBAL
+      description: Contains reference information about a hotel. Regardless of the hotel code and code context specified
+          in the request, the response always contains both the global hotel code and the Sabre hotel code if available.
+    RateInfoRef:
+      required:
+        - Rooms
+        - StayDateTimeRange
+      type: object
+      description: Contains rate search criteria for the request.
+      properties:
+        CurrencyCode:
+          pattern: ^[A-Z]{3}$
+          type: string
+          description: The three-letter ISO 4217 currency code. This parameter is required if you want to define a `RateRange` in your request. Otherwise, a `CurrencyCode` is optional.
+          example: 'USD'
+        PrepaidQualifier:
+          type: string
+          description: Identifies the type of rates to search for. Can be `IncludePrepaid` (both prepaid and postpaid rates), `PrepaidOnly` (prepaid rates only), or `ExcludePrepaid` (postpaid rates only). All rates with `RateSource` equal `100` are currently treated as postpaid, and rates with `RateSource` equal `112` are treated as prepaid.
+          example: "IncludePrepaid"
+          default: IncludePrepaid
+          enum:
+            - IncludePrepaid
+            - PrepaidOnly
+            - ExcludePrepaid
+        RefundableOnly:
+          type: boolean
+          description: If `true`, displays only refundable rates in the response.
+          example: true
+          default: false
+        ConvertedRateInfoOnly:
+          type: boolean
+          description: If `true`, rates are returned under the `ConvertedRateInfo` object in the response. If `false`, rates are returned under both the `ConvertedRateInfo` and `RateInfos.RateInfo` objects in the response.
+          example: true
+          default: true
+        TravellerCountry:
+          pattern: ^([a-zA-Z]{2})
+          type: string
+          description: The code identifying the country of the traveler. If available, country-specific rates are returned in the response.
+          example: "IN"
+        LanguageCode:
+          type: string
+          description: The code of the language in which rate information is returned in the response.
+          example: 'EN'
+        ShowNegotiatedRatesFirst:
+          type: boolean
+          description: If `false`, all rates are returned in increasing order of their `AmountBeforeTax` in the response. 
+            If `true`, negotiated or contractual rates (N/X) are displayed at the top of the response in the order returned by the suppliers; 
+            all remaining rates are shown below the N/X rates and sorted in increasing order of the `AmountBeforeTax`.
+          example: true
+          default: false
+        ShopKey:
+          type: string
+          description:  The key used to apply previously requested rate search criteria and to get the next set of rates. Returned in the response when there are additional rates retrieved from the same source. Works similarly to the `HOD*M` command in legacy versions.
+          example: "1VPTneIQZRZ05aTk5wgCn0RX3x5yTNO6HtAtsaydr5My3ejpv0USJUNcTsjIfr/v2VB/Z/nHlU1IE45Yt8ayWw=="
+
+        StayDateTimeRange:
+          description: Contains the check-in date and time for hotel availability search.
+          $ref: '#/components/schemas/StayDateTimeRange'
+        RateRange:
+          description: Contains the minimum and maximum nightly rates in the requested currency.
+          $ref: '#/components/schemas/RateRange'
+        Rooms:
+          description: Contains room configuration details for availability search.
+          $ref: '#/components/schemas/Rooms'
+        RatePlanCandidates:
+          description: Contains details of preferred negotiated or contractual rates.
+          $ref: '#/components/schemas/RatePlanCandidates'
+        LoyaltyIds:
+          description: Contains the traveler's loyalty program details used to retrieve loyalty rates from hotel suppliers.
+          $ref: '#/components/schemas/LoyaltyIds'
+        RateFilters:
+          description: Contains filters used to exclude unwanted rates from the response.
+          $ref: '#/components/schemas/RateFilters'
+        SortOrder:
+          description: Identifies whether rate search results are sorted in ascending or descending order in the response. Applied to the attribute defined under `SortBy`.
+          $ref: '#/components/schemas/SortOrderType'
+        FrequentFlyerNumber:
+          type: string
+          description: The frequent flyer number of the traveler.
+          example: "AQ1234"
+        CorpDiscount:
+          pattern: ^[0-9a-zA-Z]{1,20}$
+          type: string
+          description: The traveler's corporate discount code.
+          example: "9876"
+        RateSource:
+          type: string
+          description: The content sources from which rate data is fetched, provided as a comma-separated string. By default, all available sources are selected.
+          example: "100,112,110,113"
+        SortBy:
+          type: string
+          default: NegotiatedRates
+          description: Identifies the rate attribute to sort search results by.
+          enum:
+          - AverageNightlyRateBeforeTax
+          - NightlyRate
+          - RateSource
+          - CommissionableRates
+          - Refundability
+          - CommissionPercentage
+          - AccessibleRates
+          - CancellationPenaltyDeadline
+          - NegotiatedRates
+          - PrepaidRates
+          - PostpaidRates
+    StayDateTimeRange:
+      required:
+        - EndDate
+        - StartDate
+      type: object
+      properties:
+        StartDate:
+          type: string
+          description: The check-in date in `YYYY-MM-DD` format.
+          format: date
+          example: '2024-06-20'
+        EndDate:
+          type: string
+          description: The checkout date in `YYYY-MM-DD` format.
+          format: date
+          example: '2024-06-21'
+      description: Contains information regarding the hotel stay duration.
+    RateRange:
+      type: object
+      properties:
+        Min:
+          multipleOf: 0.001
+          type: number
+          description: Only hotels with the average nightly rate before tax greater than this value are returned in the response.
+          example: 100.005
+        Max:
+          multipleOf: 0.001
+          type: number
+          description: Only hotels with the average nightly rate before tax lower than this value are returned in the response.
+          example: 1013.005
+      description: Contains the minimum and maximum limits for nightly rates to return, applied to the `AverageNightlyRateBeforeTax` value for all data sources.
+    RateFilters:
+      required:
+        - RateFilter
+      type: object
+      properties:
+        RateFilter:
+          $ref: '#/components/schemas/RateFilter'
+          description: Contains rate filter information as Type, Value and Action.
+      description: Contains rate filters to search by.
+    RateFilter:
+      minItems: 1
+      type: array
+      description: Lists rate filters to apply during search.
+      items:
+        required:
+          - Type
+          - Value
+          - Action
+        type: object
+        description: Contains the definition of a single rate filter.
+        properties:
+          Type:
+            minimum: 1
+            type: string
+            description: The type of rate to which the filter is applied.
+            example: "commission"
+          Value:
+            minimum: 1
+            type: string
+            description: The rate filter value associated with `Type`.
+            example: "NC"
+          Action:
+            minimum: 1
+            type: string
+            description: Identifies the operation performed by the rate filter with respect to the `Type` and `Value` parameters.
+            example: "Exclude"
+            enum:
+              - Exclude
+              - Include
+    SortOrderType:
+      description: Identifies whether rate search results are sorted in ascending or descending order in the response. Applied to the attribute defined under `SortBy`.
+      type: string
+      enum:
+        - ASC
+        - DESC
+    Rooms:
+      required:
+        - Room
+      type: object
+      description: Contains room search criteria.
+      properties:
+        RoomSetTypes:
+          description: List of Attributes on which rooms are grouped.
+          $ref: '#/components/schemas/RoomSetTypes'
+        Room:
+          description: Contains the room parameters to search by.
+          $ref: '#/components/schemas/Room'
+
+    RoomSetTypes:
+      type: object
+      description: Contains the definition of a room set used to group rates and rooms returned in the response.
+      properties:
+        RoomSet:
+          $ref: '#/components/schemas/RoomSetForReq'
+          description: Lists room attributes by which rooms and rates are grouped in the response.
+
+    RoomSetForReq:
+      minItems: 1
+      maxItems: 10
+      type: array
+      description: Lists room attributes by which rooms and rates are grouped in the response.
+      items:
+        required:
+          - Type
+        type: object
+        description: Contains a singular room attribute.
+        properties:
+          Type:
+            type: string
+            description:  A room attribute by which rates are grouped in the response.
+            example: "RoomView"
+
+    Room:
+      minItems: 1
+      type: array
+      description: Lists room information.
+      items:
+        required:
+          - Adults
+          - Index
+        type: object
+        description: Contains room details to use for a rate search.
+        properties:
+          Index:
+            minimum: 1
+            type: integer
+            description: The index number of a room. If multiple rooms are specified in the request, their indices must be provided in numerical order. All rooms must have the same `Adults` and `Children` guest counts.
+            example: 1
+          Adults:
+            minimum: 1
+            type: integer
+            description: The number of adults to stay in the room.
+            example: 1
+          Children:
+            minimum: 0
+            type: integer
+            description: The number of children to stay in the room. Support for infants may vary by data source. Rates from the GDS do not support infants; a GDS availability call for 1 adult and 1 infant returns results for 1 adult.
+            example: 1
+          ChildAges:
+            type: string
+            description: The ages of the children staying in the room, provided as a comma-separated string. Required if the number of `Children` is higher than zero.
+            example: "10"
+    RatePlanCandidates:
+      required:
+        - RatePlanCandidate
+      type: object
+      properties:
+        ExactMatchOnly:
+          type: boolean
+          description: If `true`, returns only rates that are an exact match 
+            to the requested `RatePlanCandidate` criteria.
+          example: false
+          default: false
+        RatePlanCandidate:
+          description: Lists properties that are candidates for specific rate plans.
+          $ref: '#/components/schemas/RatePlanCandidate'
+      description: Contains the rate types, client IDs, or rate codes to shop rates for.
+
+    RatePlanCandidate:
+      maxItems: 11
+      minItems: 1
+      type: array
+      description: Lists parameters to use as rate search criteria.
+
+      items:
+        type: object
+        description: Contains a set of rate search criteria.
+        properties:
+          RatePlanType:
+            pattern: '^[0-9]{1,2}$'
+            type: string
+            description: The rate category type as defined by the OpenTravel Code List Rate Plan Type (RPT). Allows for a comparison of major categories offered across brands.
+            example: "11"
+          RatePlanCode:
+            type: string
+            description: The code or ID associated with a rate type. Used to indicate that the traveler qualifies for a specific rate (such as AARP, AAA,
+                a corporate rate, etc.) or to define the code of a negotiated rate.
+            example: 'ABC'
+
+    LoyaltyIds:
+      type: object
+      properties:
+        LoyaltyId:
+          description: Lists the traveler's loyalty IDs with different hotel chains. Passed on to supported suppliers only if the hotel `ChainCode` is provided in the request.
+          $ref: '#/components/schemas/LoyaltyId'
+      description: Contains the traveler's loyalty IDs.
+    LoyaltyId:
+      maxItems: 10
+      minItems: 1
+      type: array
+      description: Lists the loyalty IDs to apply during rate search. Must be used in combination with the appropriate hotel chain code.
+      example:
+        - YX1123
+        - MC1234
+      items:
+        type: string
+        description: The traveler's loyalty ID with the hotel chain.
+        example: "YX1123"
+
+    ApplicationResults:
+      type: object
+      description: Contains the parent object used to return request processing details, including errors, warnings, and timestamps.
+      properties:
+        status:
+          type: string
+          description: Identifies the processing status of a request.
+          example: "Complete"
+          enum:
+            - Complete
+            - Incomplete
+            - NotProcessed
+            - Unknown
+        Success:
+          description: Lists results of the search performed by the service, as well as any errors that may have occurred.
+          $ref: "#/components/schemas/ElementStructure"
+        Error:
+          description: Lists results of the search performed by the service, as well as any errors that may have occurred.
+          $ref: "#/components/schemas/ElementStructure"
+        Warning:
+          description: Lists results of the search performed by the service, as well as any errors that may have occurred.
+          $ref: "#/components/schemas/ElementStructure"
+
+    ElementStructure:
+      type: array
+      description:
+        Lists results of the search performed by the service, as well as any errors that may have occurred.
+      items:
+        type: object
+        properties:
+          type:
+            type: string
+            description: The source of a request processing result (error or warning).
+            example: "Transport"
+          timeStamp:
+            type: string
+            description: Timestamp when the request processing result was returned, in ISO 8601 format.
+            example: "2024-06-09T20:45:04+05:30"
+          SystemSpecificResults:
+            type: array
+            description: Lists details of the service response status.
+            items:
+              type: object
+              properties:
+                timeStamp:
+                  type: string
+                  description: Timestamp when the result was returned, in ISO 8601 format.
+                  example: "2024-06-09T20:45:04+05:30"
+                reference:
+                  type: string
+                  description: The name of the parameter for which the status details apply.
+                  example: "reference"
+                HostCommand:
+                  type: object
+                  properties:
+                    LNIATA:
+                      type: string
+                      description:
+                        The Line Number Interchange Address Terminal Address
+                        (LNIATA) number.
+                      example: "AAVTYZ"
+                  description: Contains the host system command run to create the result.
+                Message:
+                  type: array
+                  description:
+                    Lists application-specific codes and messages. A textual
+                    description to provide more information about the specific condition,
+                    warning, or error, with the `Code` attribute as a numeric value.
+                  items:
+                    type: object
+                    description: Contains a message definition.
+                    properties:
+                      code:
+                        type: string
+                        description: The code that represents an error or warning when returned.
+                        example: "ERR.0381"
+                      value:
+                        type: string
+                        description: The message associated to the above code.
+                        example: "Invalid check-in date"
+
+    HotelRateInfos:
+      required:
+        - HotelRateInfo
+      description: Contains hotel rate information returned for the requested property.
+      type: object
+      properties:
+        HotelRateInfo:
+          description: Contains details of property rates.
+          $ref: '#/components/schemas/HotelRateInfo'
+
+    HotelRateInfo:
+      type: object
+      description: Contains all data retrieved for a single hotel - static details, rates, and media content.
+      oneOf:
+        - $ref: '#/components/schemas/ResponseWithRoomSets'
+        - $ref: '#/components/schemas/ResponseWithRooms'
+
+    ResponseWithRooms:
+      type: object
+      description: Contains hotel data, including requested rooms.
+      required:
+        - HotelInfo
+        - RateInfos
+      properties:
+        HotelInfo:
+          description: Contains basic hotel information.
+          $ref: '#/components/schemas/HotelInfo'
+        AlternateHotelInfos:
+          description: Contains details of alternate property.
+          $ref: '#/components/schemas/AlternateHotelInfos'
+        RateInfos:
+          description: Contains details of property availability and rates.
+          $ref: '#/components/schemas/RateInfos'
+        RateUnavailability:
+          description: Contains additional information returned when a rate is not retrieved from the source for any reason.
+          $ref: '#/components/schemas/RateUnavailability'
+        Rooms:
+          description: Contains information related to the returned rooms.
+          $ref: '#/components/schemas/response.Rooms'
+        LanguageCode:
+          type: string
+          description: The ISO 639 two-character language code.
+          example: "EN"
+
+    ResponseWithRoomSets:
+      type: object
+      description: Contains hotel data, including requested room sets.
+      required:
+        - HotelInfo
+        - RateInfos
+      properties:
+        HotelInfo:
+          description: Contains basic hotel information.
+          $ref: '#/components/schemas/HotelInfo'
+        AlternateHotelInfos:
+          description: Contains details of alternate property.
+          $ref: '#/components/schemas/AlternateHotelInfos'
+        RateInfos:
+          description: Contains details of property availability and rates.
+          $ref: '#/components/schemas/RateInfos'
+        RateUnavailability:
+          description: Contains additional information returned when a rate is not retrieved from the source for any reason.
+          $ref: '#/components/schemas/RateUnavailability'
+        RoomSets:
+          description: Lists of room with the same type.
+          $ref: '#/components/schemas/RoomSets'
+
+    RateUnavailability:
+      type: object
+      description: Contains details of rate unavailability, retrieved from the rate source.
+      required:
+        - RateSource
+      properties:
+        RateSource:
+          $ref: '#/components/schemas/RateSource'
+          description: Lists the additional information returned when a rate is not retrieved from the source for any reason.
+    RateSource:
+      minItems: 1
+      type: array
+      description: Lists the rate sources and reasons for rate unavailability.
+      items:
+        required:
+          - Reason
+          - Source
+        type: object
+        description: Contains details of why a rate is not available.
+        properties:
+          Reason:
+            type: string
+            description: The reason for the rate not being returned.
+            example: 'Results filtered due to rate range search criteria.'
+          DisplayMessage:
+            type: string
+            description: The message to displayed to traveler.
+            example: 'Rate range filtered all the rate'
+          Source:
+            type: string
+            description: The source of the rate.
+            example: '100'
+    HotelInfo:
+      required:
+        - CodeContext
+        - HotelCode
+      type: object
+      description: Contains codes used to identify the hotel property.
+      properties:
+        HotelCode:
+          maxLength: 20
+          minLength: 1
+          type: string
+          description: The hotel code or property ID. Always returns the global ID, irrespective of the property code or context in the request. If the request was made using a valid Sabre property ID, it is returned under the `SabreHotelCode` parameter.
+          example: "100072188"
+        CodeContext:
+          type: string
+          description: The context for the corresponding `HotelCode`. Always returns `GLOBAL`.
+          enum:
+            - GLOBAL
+        SabreHotelCode:
+          maxLength: 20
+          minLength: 1
+          type: string
+          description: The Sabre property ID associated with the global ID. Populated if the property is mapped to a Sabre hotel code.
+          example: "8315"
+        ChainCode:
+          maxLength: 2
+          minLength: 1
+          type: string
+          description: The code of the hotel chain to which the property belongs.
+          example: "HY"
+
+    AlternateHotelInfos:
+      required:
+        - AlternateHotelInfo
+      type: object
+      properties:
+        AlternateHotelInfo:
+          $ref: '#/components/schemas/AlternateHotelInfo'
+          description: Contains details of alternate hotels.
+      description: Contains information returned if rates are not available for the requested hotel code. 
+            This feature may be enhanced in the future to recommend alternate properties irrespective of the source.
+    AlternateHotelInfo:
+      minItems: 1
+      type: array
+      description: Lists details of alternate hotels.
+      items:
+        type: object
+        description: Contains information about an alternate hotel.
+        properties:
+          HotelCode:
+            maxLength: 20
+            minLength: 1
+            type: string
+            description: The code of an alternate hotel. Always returns the global property code.
+            example: "100097634"
+          CodeContext:
+            type: string
+            description: The context code for the `HotelCode` of the alternate property. Always returns `GLOBAL`.
+            example: "GLOBAL"
+            enum:
+              - GLOBAL
+          SabreHotelCode:
+            maxLength: 20
+            minLength: 1
+            type: string
+            description: The Sabre hotel code for the global property ID.
+            example: "11111"
+          ChainCode:
+            pattern: "^([a-zA-Z]{1,2})$"
+            type: string
+            description: The chain code for the alternate hotel.
+            example: "MC"
+
+    RateInfos:
+      type: object
+      description: Contains information about the product rates.
+      properties:
+        ShopKey:
+          type: string
+          description: The code used to signify that more products are available for the property from the supplier.
+          example: "06a8f6abd91b-"
+        RateInfo:
+          $ref: '#/components/schemas/RateInfos.RateInfo'
+          description:  Contains details of a product in the supplier provided currency.
+        ConvertedRateInfo:
+          $ref: '#/components/schemas/RateInfos.RateInfo'
+          description: Contains details of a product in the requested currency.
+
+
+    RateInfos.RateInfo:
+      minItems: 1
+      type: array
+      description: Lists information about the returned rates.
+      items:
+        required:
+          - RateKey
+          - RateSource
+        type: object
+        properties:
+          StartDate:
+            type: string
+            description: The date of the traveler's check-in.
+            format: date
+            example: "2024-01-16"
+          EndDate:
+            type: string
+            description: The date of the traveler's checkout.
+            format: date
+            example: "2024-01-22"
+          AmountBeforeTax:
+            type: string
+            description: The total amount chargeable for the booking, before any taxes
+              have been applied.
+            example: "923.12"
+          AmountAfterTax:
+            type: string
+            description: The total amount chargeable for the booking, with taxes included
+              in the value.
+            example: "1023.12"
+          MinSellingRate:
+            type: string
+            description: The minimum selling rate. Returns the rate recommended by the supplier when working with net rates (if retrieved).
+            example: "976.33"
+          AverageNightlyRate:
+            type: string
+            description: The average rate per night for the duration of the stay.
+            example: "170.52"
+          AverageNightlyRateBeforeTax:
+            type: string
+            description: The average rate per night for the duration of the stay, excluding taxes.
+            example: "134.52"
+          CurrencyCode:
+            pattern: ^[A-Z]{3}$
+            type: string
+            description: The ISO 4217 currency code of the returned rates.
+            example: "AUD"
+          AdditionalFeesInclusive:
+            type: boolean
+            description: If `true`, all additional fees are included in the returned rates.
+            example: true
+          TaxInclusive:
+            type: boolean
+            description: If `true`, all taxes are included in the returned rates.
+            example: true
+          LocalFeesInclusive:
+            type: boolean
+            description: If `true`, all local fees are included in the returned rates.
+            example: true
+          IncidentalsInclusive:
+            type: boolean
+            description: If `true`, all incidental fees are included in the returned rates.
+            example: true
+          RateSource:
+            type: string
+            description: The code of the supplier the rates are returned from.
+            example: "100"
+          RateKey:
+            type: string
+            description: The specific key associated with the rate.
+            example: 'NFZ6Y/BZlGHH9RhcPEBtCN6zQTOAckUn8C11PGKuz9BaSMsJXduJuKzEeFe7t24KvAItmy9bNxc1kL3b6g31NPQGvihdWaZCsVfLg6f/Qe4KgDhaUpTYQj+xMd/8l49JTQRreXBUK4EqtYhVkY0aqA5WIxCfzOrYgIdZkKNtngnbjkr4IvmCmKu+MVMNFKgpADA3rjwPCaxFM5MY1s5NYEBHdP2LnMHNvmuLxp1kYoBNIUlAPYFdUh9fQZe1RkYSPcCUaPYJMH5RgC9FyW6E2cu+TefaO1YkzIy4zJXrdnNBDuU/imR3O4FA0n8R0Vb+d8hZZL3Q/+vNfbxzRLX3CQ=='
+          Commission:
+            $ref: '#/components/schemas/Commission'
+            description: Contains the commission percentage, amount, and description.
+        description: Contains details of a given rate.
+    Commission:
+      type: object
+      properties:
+        Percent:
+          multipleOf: 0.01
+          type: number
+          description: The percentage of the total rate that will be taken as a commission.
+          example: 12.01
+        Amount:
+          type: string
+          description: The total amount of commission that will be taken out of the rate.
+          example: "82.41"
+        CurrencyCode:
+          pattern: ^[A-Z]{3}$
+          type: string
+          description: The ISO 4217 currency code of the commission `Amount`.
+          example: "AUD"
+        Type:
+          type: string
+          description: The type of commission.
+          example: "Variable"
+        CommissionDescription:
+          $ref: '#/components/schemas/CommissionDescription'
+          description: Contains a description of the commission.
+      description: Contains the commission percentage, amount, and description.
+    CommissionDescription:
+      required:
+        - Text
+      type: object
+      description: Contains the description of the commission.
+      properties:
+        Text:
+          type: array
+          description: Lists descriptions of the commission.
+          items:
+            type: string
+            description: The text description of the commission, including its value or type.
+            example: "30 percent"
+
+    response.Rooms:
+      required:
+        - Room
+      type: object
+      description: Contains retrieved room details.
+      properties:
+        Room:
+          $ref: '#/components/schemas/response.Room'
+          description: Lists data retrieved for the returned rooms.
+
+    RoomSets:
+      required:
+        - RoomSet
+      type: object
+      description: Contains retrieved room sets. Populated only if room sets were requested.
+      properties:
+        RoomSet:
+          $ref: '#/components/schemas/RoomSet'
+          description: Lists of room with the same type.
+    RoomSet:
+      minItems: 1
+      type: array
+      description: Lists returned room sets.
+      items:
+        type: object
+        description: Contains a room set.
+        properties:
+          RoomSetAttributes:
+            $ref: '#/components/schemas/RoomSetAttributes'
+            description: List of attributes that match in rooms within the room set.
+          Room:
+            $ref: '#/components/schemas/response.Room'
+
+
+    RoomSetAttributes:
+      type: object
+      description: Contains a collection of attributes used to generate a specific room set.
+      properties:
+        RoomSetAttribute:
+          $ref: '#/components/schemas/RoomSetAttribute'
+          description: Lists of attribute that match in rooms within the room zset.
+
+    RoomSetAttribute:
+      minItems: 1
+      type: array
+      description: Lists room set attributes with search criteria that were a part of the requested criteria. If a criterion can have more than one value, it is repeated multiple times.
+      items:
+        type: object
+        description: Contains an individual room set attribute.
+        properties:
+          Type:
+            type: string
+            description: The type of room that was used for the grouping.
+            example: "RoomType"
+          Code:
+            type: integer
+            minimum: 1
+            description: The OTA code for the room `Type`. If the room `Type` is `RateSource`, a `Code` is not returned.
+            example: 3
+          Value:
+            type: string
+            description: The description of the room that was used for the grouping.
+            example: "Suite"
+
+    response.Room:
+      minItems: 1
+      type: array
+      description: Lists retrieved room data.
+      items:
+        required:
+          - RatePlans
+          - RoomIndex
+        type: object
+        properties:
+          RoomIndex:
+            minimum: 1
+            type: integer
+            description: The index number of the room.
+            example: 3
+          RoomType:
+            type: string
+            description: The OTA description for the `RoomTypeCode` mapped to a GRI OTA code.
+            example: "Suite"
+          RoomTypeCode:
+            type: integer
+            minimum: 1
+            description: The code of the room code. Refer to OpenTravel Code List Guest Room Info (GRI).
+            example: 3
+          RoomCategory:
+            type: string
+            description: The category to which the room belongs.
+            example: "Suite"
+          RoomID:
+            type: string
+            description: The property-specific ID of the room.
+            example: "B11"
+          Floor:
+            type: integer
+            description: The floor of the hotel where the room is located.
+            example: 5
+          RoomViewCode:
+            minimum: 6
+            type: integer
+            description: The room code required to retrieve its interior. Mapped to an RVT OTA code.
+            example: 6
+          RoomViewDescription:
+            type: string
+            description: The OTA description for the `RoomViewCode`.
+            example: "Harbor View"
+          NonSmoking:
+            type: boolean
+            description: If `true`, smoking is not allowed inside the room.
+            example: true
+          BedTypeOptions:
+            $ref: '#/components/schemas/BedTypeOptions'
+          RoomDescription:
+            $ref: '#/components/schemas/RoomDescription'
+          AdditionalDetails:
+            $ref: '#/components/schemas/AdditionalDetails'
+          Amenities:
+            $ref: '#/components/schemas/RoomAmenities'
+          Occupancy:
+            $ref: '#/components/schemas/Occupancy'
+          RatePlans:
+            $ref: '#/components/schemas/RatePlans'
+        description: Contains the room price and other details.
+    BedTypeOptions:
+      required:
+        - BedTypes
+      type: object
+      description: Contains bed information retrieved for the room.
+      properties:
+        BedTypes:
+          $ref: '#/components/schemas/BedTypes'
+          description: Lists bed types available in the room. Different bed types are available for each bed configuration. If multiple `BedType` items are returned, it means that either configuration can be booked.
+    BedTypes:
+      minItems: 1
+      type: array
+      description: Lists the configurations of bed types available in the room.
+      items:
+        type: object
+        description: Contains a configuration of bed types.
+        properties:
+          BedType:
+            $ref: '#/components/schemas/BedType'
+    BedType:
+      minItems: 1
+      type: array
+      description: Lists different types of beds available within the configuration.
+      items:
+        type: object
+        description: Contains details of a bed type.
+        properties:
+          Code:
+            minimum: 1
+            type: integer
+            description: The code of the bed type. Mapped to a BED OTA code.
+            example: 1
+          Description:
+            type: string
+            description: The OTA description for the bed type `Code`.
+            example: "King Bed"
+          Count:
+            minimum: 0
+            type: integer
+            description: The number of beds of the corresponding type available in the room.
+            example: 2
+    RoomDescription:
+      type: object
+      description: Contains a description of the room.
+      properties:
+        Name:
+          type: string
+          description: The name of the room.
+          example: 'Suite'
+        Text:
+          minItems: 0
+          type: array
+          description: Lists descriptions of the room.
+          items:
+            type: string
+            description: The text-based description of the room.
+            example: "The room is a cozy two person place with its own kitchen and
+              a shower."
+    AdditionalDetails:
+      required:
+        - AdditionalDetail
+      type: object
+      description: Contains any additional details retrieved from the supplier.
+      properties:
+        AdditionalDetail:
+          $ref: '#/components/schemas/AdditionalDetail'
+          description: Lists all additional details associated with the room.
+    AdditionalDetail:
+      minItems: 1
+      type: array
+      description: Lists all additional details associated with the room.
+      items:
+        type: object
+        description: Contains additional detail information.
+        properties:
+          Code:
+            minimum: 1
+            type: integer
+            description: The OTA code mapped to the ADT table.
+            example: 13
+          Description:
+            type: string
+            description: The OTA description for the `Code`.
+            example: "CancellationPolicy"
+          Amount:
+            type: string
+            description: The total value of the rate associated with the additional detail.
+            example: "23.12"
+          CurrencyCode:
+            pattern: ^[A-Z]{3}$
+            type: string
+            description: The ISO 4217 currency code of the returned rate `Amount`.
+            example: "AUD"
+          Text:
+            minItems: 0
+            type: array
+            description: Lists text descriptions of the additional detail.
+            items:
+              type: string
+              description: A description of the room and any additional details it
+                has.
+              example: 'The room has several additions, such as an extra bathroom and two additional beds.'
+    RoomAmenities:
+      type: object
+      description: Contains room amenities information.
+      properties:
+        Amenity:
+          $ref: '#/components/schemas/RoomAmenity'
+          description: Lists information about the returned room amenities.
+    RoomAmenity:
+      type: array
+      description: Lists information about the returned room amenities.
+      items:
+        type: object
+        description: Contains room amenities retrieved from the supplier.
+        properties:
+          Code:
+            minimum: 1
+            type: integer
+            description: The OTA hotel amenity code mapped to an HAC OTA code.
+            example: 15
+          Description:
+            type: string
+            description: The description of the OTA `Code`.
+            example: 'Car rental desk'
+          ComplimentaryInd:
+            type: boolean
+            description: If `true`, the amenity is free of charge.
+            example: false
+          AccessibleAmenity:
+            type: boolean
+            description: If `true`, the amenity is accessible.
+            example: false
+          value:
+            type: string
+            description: An additional textual description related to the amenity.
+            example: 'Ask at reception for car rental charges'
+    Occupancy:
+      type: object
+      properties:
+        Min:
+          type: integer
+          description: The minimum occupancy of the room.
+          example: 1
+        Max:
+          type: integer
+          description: The maximum occupancy of the room.
+          example: 6
+      description: Contains the minimum and maximum occupancy of the room.
+    RatePlans:
+      required:
+        - RatePlan
+      type: object
+      description: Contains rate plans offered at the property.
+      properties:
+        RatePlan:
+          $ref: '#/components/schemas/RatePlan'
+          description: Lists rate plans retrieved for the room as used in the booking process.
+    RatePlan:
+      minItems: 1
+      type: array
+      description: Lists available rate plans.
+      items:
+        required:
+          - PrepaidIndicator
+          - RateKey
+          - RateSource
+        type: object
+        description: Contains rate plan details.
+        properties:
+          RatePlanName:
+            type: string
+            description: The name of the plan associated with the rate.
+            example: 'Single Bed Room with Breakfast'
+          RatePlanCode:
+            type: string
+            description: The code associated with the rate plan.
+            example: 'LES'
+          RatePlanType:
+            pattern: ^([0-9]{1,2})$
+            type: string
+            description: The type of the rate plan, mapped to an RPT OTA code.
+            example: "10"
+          PrepaidIndicator:
+            type: boolean
+            description: If `true`, the rate can be prepaid in advance. All rates with `RateSource` set to `100` are currently treated as postpaid, and rates with `RateSource` set to `112` are treated as prepaid.
+            example: true
+          AvailableQuantity:
+            type: integer
+            description: The number of rooms available in the `RatePlan`.
+            example: 3
+          LimitedAvailability:
+            type: string
+            description: Specifies whether the rate is of limited availability.
+            example: "true"
+          RateSource:
+            type: string
+            description: The source of the rate. All rates with `RateSource` set to `100` are currently treated as postpaid, and rates with `RateSource` set to `112` are treated as prepaid.
+            example: "100"
+          RateKey:
+            type: string
+            description: The specific key associated with the rate.
+            example: "NFZ6Y/BZlGHH9RhcPEBtCN6zQTOAckUn8C11PGKuz9BaSMsJXduJuKzEeFe7t24KvAItmy9bNxc1kL3b6g31NPQGvihdWaZCsVfLg6f/Qe4KgDhaUpTYQj+xMd/8l49JTQRreXBUK4EqtYhVkY0aqA5WIxCfzOrYgIdZkKNtngnbjkr4IvmCmKu+MVMNFKgpADA3rjwPCaxFM5MY1s5NYEBHdP2LnMHNvmuLxp1kYoBNIUlAPYFdUh9fQZe1RkYSPcCUaPYJMH5RgC9FyW6E2cu+TefaO1YkzIy4zJXrdnNBDuU/imR3O4FA0n8R0Vb+d8hZZL3Q/+vNfbxzRLX3CQ=="
+          ClientId:
+            type: string
+            description: The negotiated or contractual ID associated with the rate plan.
+            example: "AMX"
+          ProductCode:
+            type: string
+            description: The inventory block code of the room. Populated only for GDS products.
+            example: "A1KRAC"
+          LoyaltyId:
+            type: string
+            description: The loyalty ID sent to the supplier to retrieve the rate. Does not indicate that the rate is a loyalty program rate or that booking it grants reward points.
+            example: "HY5342"
+          LoyaltyPoints:
+            type: boolean
+            description: If `true`, booking the rate will result in receiving loyalty points.
+            example: false
+          LoyaltyProgramName:
+            type: string
+            description: The name of the supplier loyalty program that grants points.
+            example: "Choice Privileges"
+          RatePlanDescription:
+            $ref: '#/components/schemas/RatePlanDescription'
+          RatePlanInclusions:
+            $ref: '#/components/schemas/RatePlanInclusions'
+          MealsIncluded:
+            $ref: '#/components/schemas/MealsIncluded'
+          RateInfo:
+            $ref: '#/components/schemas/Room.RateInfo'
+          ConvertedRateInfo:
+            $ref: '#/components/schemas/Room.RateInfo'
+    RatePlanDescription:
+      required:
+        - Text
+      type: object
+      description: Contains the description of the rate plan retrieved from the supplier.
+      properties:
+        Text:
+          minItems: 1
+          type: array
+          description: Lists descriptions of the rate plan.
+          items:
+            type: string
+            description: A description of the rate plan, for example indicating the associated suite type.
+            example: "Junior Suite"
+    RatePlanInclusions:
+      required:
+        - RatePlanInclusion
+      type: object
+      description: Contains rate plan inclusion details.
+      properties:
+        RatePlanInclusion:
+          $ref: '#/components/schemas/RatePlanInclusion'
+          description: Lists the details of charges that are included for the rate plan.
+    RatePlanInclusion:
+      minItems: 1
+      type: array
+      description: Lists rate plan inclusions.
+      items:
+        type: object
+        description: Contains information about a rate plan inclusion.
+        properties:
+          Description:
+            type: string
+            description: The description of the rate plan inclusion.
+            example: "Free Parking"
+          Code:
+            minimum: 1
+            type: integer
+            description: The code associated with the specific rate plan inclusion.
+            example: 12
+          Text:
+            minItems: 0
+            type: array
+            description: Lists the descriptions of the rate plan inclusion retrieved from the supplier.
+            items:
+              type: string
+              description: A text-based description of the rate plan inclusion.
+              example: "Free Parking"
+    MealsIncluded:
+      type: object
+      properties:
+        BreakFast:
+          type: boolean
+          description: If `true`, breakfast is included in the plan.
+          example: true
+        Lunch:
+          type: boolean
+          description: If `true`, lunch is included.
+          example: true
+        Dinner:
+          type: boolean
+          description: If `true`, dinner is included.
+          example: true
+        MealPlanIndicator:
+          type: boolean
+          description: If `true`, a meal plan is included.
+          example: true
+        MealPlanCode:
+          minimum: 1
+          type: integer
+          description: The OTA code of the meal plan, mapped to the MPT OTA table.
+          example: 11
+        MealPlanDescription:
+          type: string
+          description: The OTA description for the `MealPlanCode`.
+          example: "Full Breakfast"
+        GuestCount:
+          minimum: 0
+          type: integer
+          description: The number of guests included in the meal plan.
+          example: 2
+      description: Contains different types of meals included in the rate plan.
+    Room.RateInfo:
+      required:
+        - CancelPenalties
+      type: object
+      description:  Contains detailed information about the rates retrieved for the rate plan.
+      properties:
+        StartDate:
+          type: string
+          description:  The date of the traveler's check-in.
+          format: date
+          example: "2024-01-16"
+        EndDate:
+          type: string
+          description: The date of the traveler's checkout.
+          format: date
+          example: "2024-01-22"
+        AmountBeforeTax:
+          type: string
+          description: The total amount to be paid for the booking before taxes are
+            included.
+          example: "923.12"
+        AmountAfterTax:
+          type: string
+          description: The total amount to be paid for the booking, with taxes included.
+          example: "1023.12"
+        MinSellingRate:
+          type: string
+          description: The minimum selling rate. Returns the rate recommended by the supplier when working with net rates (if retrieved).
+          example: "985.32"
+        AverageNightlyRate:
+          type: string
+          description: The average rate per night for the duration of the stay.
+          example: "953.12"
+        AverageNightlyRateBeforeTax:
+          type: string
+          description: The average rate per night for the duration of the stay, excluding taxes.
+          example: "167.21"
+        CurrencyCode:
+          pattern: ^[A-Z]{3}$
+          type: string
+          description: The ISO 4217 currency code of the returned rates.
+          example: "AUD"
+        AdditionalFeesInclusive:
+          type: boolean
+          description: If `true`, additional fees are included in the rate.
+          example: true
+        TaxInclusive:
+          type: boolean
+          description: If `true`, taxes are included in the rate.
+          example: true
+        LocalFeesInclusive:
+          type: boolean
+          description: If `true`, any local fees are included in the rate.
+          example: true
+        IncidentalsInclusive:
+          type: boolean
+          description: If `true`, incidentals are included in the rate.
+          example: true
+        Rates:
+          $ref: '#/components/schemas/Rates'
+          description: Contains individual rates used to calculate the sum of the total rates returned under `AmountBeforeTax` and `AmountAfterTax`.
+        Taxes:
+          $ref: '#/components/schemas/Taxes'
+          description: Contains tax information.
+        Fees:
+          $ref: '#/components/schemas/Fees'
+          description: Contains fee information.
+        RoomExtras:
+          $ref: '#/components/schemas/RoomExtras'
+          description: Contains details of available room extras.
+        CancelPenalties:
+          $ref: '#/components/schemas/CancelPenalties'
+          description: Contains the cancellation penalties associated with the rate.
+        Guarantee:
+          $ref: '#/components/schemas/Guarantee'
+          description: Contains details of the guarantee related to the retrieved rate.
+        AdditionalDetails:
+          $ref: '#/components/schemas/AdditionalDetails'
+          description: Contains any additional details retrieved from the supplier.
+    Rates:
+      required:
+        - Rate
+      type: object
+      description:  Contains individual rates used to calculate the sum of the total rates returned under `AmountBeforeTax` and `AmountAfterTax`.
+      properties:
+        Rate:
+          $ref: '#/components/schemas/Rate'
+          description: Lists information about individual rates.
+    Rate:
+      minItems: 1
+      type: array
+      description: Lists information about individual rates.
+      items:
+        type: object
+        description: Contains details of a single rate.
+        properties:
+          StartDate:
+            type: string
+            description: The date of the traveler's check-in.
+            format: date
+            example: "2024-02-20"
+          EndDate:
+            type: string
+            description: The date of the traveler's checkout.
+            format: date
+            example: "2024-02-22"
+          AmountBeforeTax:
+            type: string
+            description: The rate amount before taxes are included.
+            example: "1253.12"
+          AmountAfterTax:
+            type: string
+            description: The rate amount with taxes included.
+            example: "1475.23"
+          CurrencyCode:
+            pattern: ^[A-Z]{3}$
+            type: string
+            description: The ISO 4217 currency code of the returned rates.
+            example: "AUD"
+    Taxes:
+      type: object
+      properties:
+        Amount:
+          type: string
+          description: The total amount of tax.
+          example: "22.46"
+        CurrencyCode:
+          pattern: ^[A-Z]{3}$
+          type: string
+          description: The ISO 4217 currency code of the total tax `Amount`.
+          example: "AUD"
+        Tax:
+          $ref: '#/components/schemas/Tax'
+          description: Lists taxes applied to the returned rates.
+        TaxGroups:
+          $ref: '#/components/schemas/TaxGroups'
+          description: Contains a breakdown of the different types of taxes applied to the returned rates.
+      description: Contains tax information.
+    Tax:
+      type: array
+      description: Lists taxes applied to the returned rates.
+      items:
+        required:
+          - Amount
+          - CurrencyCode
+        type: object
+        description: Contains details of a tax.
+        properties:
+          StartDate:
+            type: string
+            description: The date from which the corresponding tax amount is applied.
+            format: date
+            example: "2024-09-20"
+          EndDate:
+            type: string
+            description: The date to which the corresponding tax amount is applied.
+            format: date
+            example: "2024-09-22"
+          Amount:
+            type: string
+            description: The tax amount in the given date range.
+            example: "11.23"
+          CurrencyCode:
+            pattern: ^([A-Z]{3})$
+            type: string
+            description: The ISO 4217 currency code of the tax `Amount`.
+            example: "AUD"
+    TaxGroups:
+      required:
+        - TaxGroup
+      type: object
+      properties:
+        TaxGroup:
+          $ref: '#/components/schemas/TaxGroup'
+          description: Lists the groups of taxes applied to the returned rates.
+      description: Contains a breakdown of the different types of taxes applied to the returned rates.
+    TaxGroup:
+      minItems: 1
+      type: array
+      description: Lists the groups of taxes applied to the returned rates.
+      items:
+        required:
+          - Amount
+          - Code
+          - CurrencyCode
+        type: object
+        description: Contains details of an individual tax group.
+        properties:
+          Code:
+            minimum: 1
+            type: integer
+            description: The code of the tax group, mapped to an FTT OTA code.
+            example: 36
+          Description:
+            type: string
+            description: The OTA description for the tax group `Code`.
+            example: "Service Tax"
+          Amount:
+            type: string
+            description: The amount of the given tax type.
+            example: "22.46"
+          CurrencyCode:
+            pattern: ^([A-Z]{3})$
+            type: string
+            description: The ISO 4217 currency code of the tax `Amount`.
+            example: "AUD"
+          TaxDescription:
+            $ref: '#/components/schemas/TaxDescription'
+    TaxDescription:
+      required:
+        - Text
+      type: object
+      description: Contains the description retrieved for the tax group.
+      properties:
+        Text:
+          minItems: 1
+          type: array
+          description: Lists the descriptions retrieved for the tax group.
+          items:
+            type: string
+            description: A text description of the tax group.
+            example: 'Value Added Tax.'
+    Fees:
+      type: object
+      properties:
+        Amount:
+          type: string
+          description: The total fee amount.
+          example: "22.46"
+        CurrencyCode:
+          pattern: ^[A-Z]{3}$
+          type: string
+          description: The ISO 4217 currency code of the total fee `Amount`.
+          example: "AUD"
+        Fee:
+          $ref: '#/components/schemas/Fee'
+          description: Lists fees applied to the returned rates.
+        FeeGroups:
+          $ref: '#/components/schemas/FeeGroups'
+          description: Contains a breakdown of the different types of fees applied to the returned rates.
+      description: Contains fee information.
+    Fee:
+      minItems: 0
+      type: array
+      description: Lists fees applied to the returned rates.
+      items:
+        required:
+          - Amount
+          - CurrencyCode
+        type: object
+        description: Contains details of an individual fee.
+        properties:
+          StartDate:
+            type: string
+            description: The date from which the corresponding fee amount is applied.
+            format: date
+            example: "2024-09-20"
+          EndDate:
+            type: string
+            description: The date to which the corresponding fee amount is applied.
+            format: date
+            example: "2024-09-22"
+          Amount:
+            type: string
+            description: The fee amount in the given date range.
+            example: "11.23"
+          CurrencyCode:
+            pattern: ^([A-Z]{3})$
+            type: string
+            description: The ISO 4217 currency code of the fee `Amount`.
+            example: 'AUD'
+    FeeGroups:
+      required:
+        - FeeGroup
+      type: object
+      properties:
+        FeeGroup:
+          $ref: '#/components/schemas/FeeGroup'
+          description: Lists the groups of fees applied to the returned rates.
+      description: Contains a breakdown of the different types of fees applied to the returned rates.
+    FeeGroup:
+      minItems: 1
+      type: array
+      description: Lists the groups of fees applied to the returned rates.
+      items:
+        required:
+          - Amount
+          - Code
+          - CurrencyCode
+        type: object
+        description: Contains details of an individual fee group.
+        properties:
+          Code:
+            minimum: 1
+            type: integer
+            description: The code of the fee group, mapped to an FTT OTA code.
+            example: 12
+          Description:
+            type: string
+            description: The OTA description for the fee group `Code`.
+            example: 'Resort fees'
+          Amount:
+            type: string
+            description: The amount of the given fee type.
+            example: "22.46"
+          CurrencyCode:
+            pattern: ^([A-Z]{3})$
+            type: string
+            description: The ISO 4217 currency code of the fee `Amount`.
+            example: 'AUD'
+          FeeDescription:
+            $ref: '#/components/schemas/FeeDescription'
+    FeeDescription:
+      required:
+        - Text
+      type: object
+      description: Contains the description retrieved for the fee group.
+      properties:
+        Text:
+          minItems: 1
+          type: array
+          description: Lists the descriptions retrieved for the fee group.
+          items:
+            type: string
+            description: A text description of the fee group.
+            example: 'Resort Fee'
+    RoomExtras:
+      required:
+        - RoomExtra
+      type: object
+      description: Contains details of available room extras.
+      properties:
+        RoomExtra:
+          $ref: '#/components/schemas/RoomExtra'
+          description: Lists information about retrieved room extras.
+    RoomExtra:
+      minItems: 1
+      type: array
+      description: Lists information about retrieved room extras.
+      items:
+        required:
+          - Text
+        type: object
+        description: Contains details of a room extra.
+        properties:
+          Code:
+            minimum: 1
+            type: integer
+            description: The code of the room extra, mapped to the RMA OTA table.
+            example: 196
+          Description:
+            type: string
+            description: The OTA description for the `Code` of the room extra.
+            example: 'Extra Adult charge'
+          Amount:
+            type: number
+            minimum: 0
+            description: The amount to be paid for the room extra.
+            example: 145.23
+          CurrencyCode:
+            pattern: ^[A-Z]{3}$
+            type: string
+            description: The ISO 4217 currency code of the room extra `Amount`.
+            example: "AUD"
+          Text:
+            type: array
+            description: Lists descriptions of the room extra.
+            items:
+              type: string
+              description: A description of the room extra and what it applies to.
+              example: "Extra Adult charge"
+    CancelPenalties:
+      type: object
+      description: Contains the cancellation penalties associated with the rate.
+      properties:
+        CancelPenalty:
+          $ref: '#/components/schemas/CancelPenalty'
+          description: Lists details of the cancellation penalties.
+    CancelPenalty:
+      minItems: 1
+      type: array
+      description: Lists details of the cancellation penalties.
+      items:
+        required:
+          - Refundable
+        type: object
+        description: Contains a penalty applied when products are cancelled.
+        properties:
+          Refundable:
+            type: boolean
+            description: If `true`, the cancellation penalty is refundable.
+          Deadline:
+            $ref: '#/components/schemas/Deadline'
+          AmountPercent:
+            $ref: '#/components/schemas/AmountPercent'
+          PenaltyDescription:
+            $ref: '#/components/schemas/PenaltyDescription'
+    PenaltyDescription:
+      required:
+        - Text
+      type: object
+      description: Contains the description of the cancellation penalty retrieved from the rate supplier.
+      properties:
+        Text:
+          type: array
+          description: Lists text-based descriptions of the cancellation penalty.
+          items:
+            type: string
+            description: A text-based description of the cancellation penalty.
+            example: 'We understand that sometimes your travel plans change. We do not\
+                        \ charge a change or cancel fee. However, this property (Donnington Valley\
+                        \ Hotel and Spa) imposes the following penalty to its customers that we\
+                        \ are required to pass on: Cancellations or changes made after 11:59 PM\
+                        \ ((GMT+01:00)) on Jul 1, 2018, or no-shows, are subject to a 1 Night\
+                        \ Room & Tax penalty.   \n'
+    Guarantee:
+      required:
+        - GuaranteesAccepted
+      type: object
+      description: Contains details of the guarantee related to the retrieved rate.
+      properties:
+        GuaranteeType:
+          type: string
+          description: The type of the guarantee associated with the rate.
+          example: 'GUAR'
+        GuaranteesAccepted:
+          $ref: '#/components/schemas/GuaranteesAccepted'
+          description: Contains details of guarantees accepted at the hotel property.
+        DepositPolicies:
+          $ref: '#/components/schemas/DepositPolicies'
+          description: Contains deposit policies adopted by at the hotel property.
+        GuaranteeDescription:
+          $ref: '#/components/schemas/GuaranteeDescription'
+          description: Contains the description retrieved for the guarantee.
+    GuaranteesAccepted:
+      required:
+        - GuaranteeAccepted
+      type: object
+      description: Contains details of guarantees accepted at the hotel property.
+      properties:
+        GuaranteeAccepted:
+          minItems: 1
+          type: array
+          description: Lists guarantees accepted at the hotel property.
+          items:
+            type: object
+            description: Contains details of a rate guarantee.
+            properties:
+              GuaranteeTypeCode:
+                minimum: 1
+                type: integer
+                description: The code of the guarantee type, mapped to the OTA PMT table.
+                example: 5
+              GuaranteeTypeDescription:
+                type: string
+                description: The OTA description for the `GuaranteeTypeCode`.
+                example: 'Credit Card'
+              PaymentCards:
+                $ref: '#/components/schemas/PaymentCards'
+    PaymentCards:
+      required:
+        - PaymentCard
+      type: object
+      description: Contains details of cards accepted by the hotel property for the guarantee payment.
+      properties:
+        CVVRequired:
+          type: boolean
+          description: If `true`, the property requires CVV details of the card.
+          example: true
+        PaymentCard:
+          $ref: '#/components/schemas/PaymentCard'
+          description: Lists the payment cards accepted by the hotel property for the guarantee transaction.
+    PaymentCard:
+      minItems: 1
+      type: array
+      description: Lists the payment cards accepted by the hotel property for the guarantee transaction.
+      items:
+        required:
+          - CardCode
+        type: object
+        description: Contains details identifying a payment card type.
+        properties:
+          CardCode:
+            type: string
+            description: The code of the payment card.
+            example: 'AX'
+          value:
+            type: string
+            description: The value associated with the `CardCode`.
+            example: 'American Express'
+    DepositPolicies:
+      required:
+        - DepositPolicy
+      type: object
+      description: Contains deposit policies adopted by at the hotel property.
+      properties:
+        DepositPolicy:
+          $ref: '#/components/schemas/DepositPolicy'
+          description: Lists deposit policies returned for the guarantee.
+    DepositPolicy:
+      minItems: 1
+      type: array
+      description: Lists deposit policies returned for the guarantee.
+      items:
+        type: object
+        description:  Contains a deposit policy.
+        properties:
+          Deadline:
+            $ref: '#/components/schemas/Deadline'
+          AmountPercent:
+            $ref: '#/components/schemas/AmountPercent'
+    Deadline:
+      type: object
+      description: Contains the deadline for the guarantee payment or cancellation penalty payment.
+      properties:
+        AbsoluteDeadline:
+          type: string
+          description: The time and date of the deadline.
+          example: "2024-02-21T16:00:00Z"
+        OffsetTimeUnit:
+          type: string
+          description: The unit of time used for the deadline.
+          example: 'Day'
+        OffsetUnitMultiplier:
+          minimum: 1
+          type: integer
+          description: The multiplier of `OffsetTimeUnit`.
+          example: 2
+        OffsetDropTime:
+          type: string
+          description: Identifies the point in the traveler's journey from when the deadline is implemented.
+          enum:
+            - BeforeArrival
+            - AfterBooking
+            - AfterConfirmation
+            - AfterArrival
+            - AfterDeparture
+    AmountPercent:
+      type: object
+      description: Contains the amount of the guarantee payment or cancellation penalty.
+      properties:
+        TaxInclusive:
+          type: boolean
+          description: If `true`, all taxes are included in the `Amount`.
+          example: true
+        FeesInclusive:
+          type: boolean
+          description: If `true`, all fees are included in the `Amount`.
+          example: true
+        NmbrOfNights:
+          type: integer
+          description: The total amount of nights that will be spent at the property.
+          example: 12
+        BasisType:
+          type: string
+          description: The method used to calculate the `Amount`, for example on the basis of the number
+            of nights spent at the property.
+          example: "Nights"
+        Percent:
+          multipleOf: 0.01
+          type: number
+          description: The percentage of the total booking price used to calculate the `Amount`.
+          example: 12.01
+        Amount:
+          type: string
+          description: The total value of the guarantee or cancellation penalty.
+          example: "84.12"
+        CurrencyCode:
+          pattern: ^[A-Z]{3}$
+          type: string
+          description: The ISO 4217 currency code of the `Amount`.
+          example: 'AUD'
+        ApplyAs:
+          type: string
+          description: The method of how the `Amount` is applied with respect to the stay of the traveler.
+          example: 'Apply As'
+    GuaranteeDescription:
+      required:
+        - Text
+      type: object
+      description: Contains the description retrieved for the guarantee.
+      properties:
+        Text:
+          minItems: 1
+          type: array
+          description: Lists descriptions of the guarantee.
+          items:
+            type: string
+            description: The description of the guarantee used for the stay.
+            example: 'A pre-arrival deposit that is given back to the traveler after
+              a completed stay.'
+  securitySchemes:
+    oauth2_authentication:
+      type: oauth2
+      description: Although the shopping step takes place in the branch location PCC provided in the request, the underlying session or token used to authenticate or call this API remains unchanged. This is different from how AAA branch shopping worked before in the legacy GDS, where the underlying session itself was granted authorized access to the branch location.
+      x-base64-encode-client-credentials: true
+      flows:
+        clientCredentials:
+          tokenUrl: 'https://api.cert.platform.sabre.com/v2/auth/token'
+          scopes: {}
