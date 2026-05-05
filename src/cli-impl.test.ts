@@ -942,6 +942,7 @@ describe('COMMANDS dispatch table', () => {
       'get-ancillaries',
       'get-booking',
       'get-hotel-avail',
+      'get-hotel-rate-info',
       'get-seats',
       'hotel-price-check',
       'hotel-search',

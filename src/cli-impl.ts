@@ -41,6 +41,8 @@ import type {
   GetBookingInput,
   GetHotelAvailInput,
   GetHotelAvailOutput,
+  GetHotelRateInfoInput,
+  GetHotelRateInfoOutput,
   GetSeatsInput,
   Hotel,
   HotelDistanceUnit,
@@ -396,6 +398,36 @@ export function availToTableRows(out: GetHotelAvailOutput): {
   });
   return {
     headers: ['code', 'name', 'chain', 'rate', 'currency', 'rateSource', 'rateKey'],
+    rows,
+  };
+}
+
+/**
+ * Converts a Get Hotel Rate Info v5 output into a one-row-per-rate-entry
+ * summary table. Columns: source, before-tax, after-tax, currency, rateKey
+ * (truncated). Prefers `ConvertedRateInfo` entries (rateKey required by
+ * the spec) and falls back to native `RateInfo` (optional rateKey).
+ * Drilling into per-room rate plans requires `--format json`.
+ */
+export function rateInfoToTableRows(out: GetHotelRateInfoOutput): {
+  headers: readonly string[];
+  rows: readonly string[][];
+} {
+  const converted = out.hotel?.rateInfos?.convertedRateInfo ?? [];
+  const native = out.hotel?.rateInfos?.rateInfo ?? [];
+  const entries = converted.length > 0 ? converted : native;
+  const rows = entries.map((r) => {
+    const keyShort = r.rateKey.length > 32 ? `${r.rateKey.slice(0, 32)}…` : r.rateKey;
+    return [
+      r.rateSource,
+      r.amountBeforeTax ?? '',
+      r.amountAfterTax ?? '',
+      r.currencyCode ?? '',
+      keyShort,
+    ];
+  });
+  return {
+    headers: ['rateSource', 'beforeTax', 'afterTax', 'currency', 'rateKey'],
     rows,
   };
 }
@@ -1165,6 +1197,188 @@ function parseHotelAvailAnchor(
   return { kind: 'geo', geoRef };
 }
 
+/** Flag set for `get-hotel-rate-info`. */
+export interface HotelRateInfoFlagValues {
+  'hotel-code'?: string;
+  'code-context'?: string;
+  'rate-key'?: string;
+  'start-date'?: string;
+  'end-date'?: string;
+  'currency-code'?: string;
+  language?: string;
+  room?: string[];
+  'prepaid-qualifier'?: string;
+  'refundable-only'?: boolean;
+  'converted-only'?: boolean;
+  'exact-match-only'?: boolean;
+  'rate-sources'?: string;
+  'sort-by'?: string;
+  'sort-order'?: string;
+  pcc?: string;
+  'corporate-number'?: string;
+  body?: string;
+}
+
+const RATE_INFO_SORT_BY = new Set([
+  'AverageNightlyRateBeforeTax',
+  'NightlyRate',
+  'RateSource',
+  'CommissionableRates',
+  'Refundability',
+  'CommissionPercentage',
+  'AccessibleRates',
+  'CancellationPenaltyDeadline',
+  'NegotiatedRates',
+  'PrepaidRates',
+  'PostpaidRates',
+] as const);
+
+const RATE_INFO_PREPAID: ReadonlySet<'IncludePrepaid' | 'PrepaidOnly' | 'ExcludePrepaid'> = new Set(
+  ['IncludePrepaid', 'PrepaidOnly', 'ExcludePrepaid'],
+);
+
+/**
+ * Builds the input for `getHotelRateInfoV5.getRateInfo` from the CLI flags.
+ *
+ * Two mutually exclusive flows (matching Sabre's `oneOf`):
+ *   - hotel-ref flow — `--hotel-code` + `--start-date` + `--end-date`
+ *     launches a fresh rate shop with full criteria.
+ *   - rate-key flow — `--rate-key` re-runs a prior search by its opaque
+ *     key, with optional refinements (`--refundable-only`,
+ *     `--converted-only`, `--exact-match-only`, `--rate-sources`, etc.).
+ *
+ * `--body` overrides both and is parsed as JSON verbatim.
+ */
+export function buildHotelRateInfoInput(values: HotelRateInfoFlagValues): GetHotelRateInfoInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as GetHotelRateInfoInput;
+  }
+
+  const hasHotelCode = values['hotel-code'] !== undefined;
+  const hasRateKey = values['rate-key'] !== undefined;
+  if (hasHotelCode && hasRateKey) {
+    throw new CliUsageError(
+      'get-hotel-rate-info: --hotel-code and --rate-key are mutually exclusive.',
+    );
+  }
+  if (!hasHotelCode && !hasRateKey) {
+    throw new CliUsageError(
+      'get-hotel-rate-info requires either --hotel-code (with --start-date/--end-date) or --rate-key. (Or --body.)',
+    );
+  }
+
+  if (hasRateKey) {
+    const out: Extract<GetHotelRateInfoInput, { kind: 'rate-key' }> = {
+      kind: 'rate-key',
+      rateKey: values['rate-key'] as string,
+    };
+    if (values.pcc !== undefined) out.pointOfSale = { pseudoCityCode: values.pcc };
+    if (values['prepaid-qualifier'] !== undefined) {
+      if (!RATE_INFO_PREPAID.has(values['prepaid-qualifier'] as never)) {
+        throw new CliUsageError(
+          `Invalid --prepaid-qualifier value '${values['prepaid-qualifier']}'. Expected IncludePrepaid, PrepaidOnly, or ExcludePrepaid.`,
+        );
+      }
+      out.prepaidQualifier = values['prepaid-qualifier'] as NonNullable<
+        typeof out.prepaidQualifier
+      >;
+    }
+    if (values['refundable-only'] !== undefined) out.refundableOnly = values['refundable-only'];
+    if (values['converted-only'] !== undefined) {
+      out.convertedRateInfoOnly = values['converted-only'];
+    }
+    if (values['exact-match-only'] !== undefined) {
+      out.exactMatchOnly = values['exact-match-only'];
+    }
+    const rateSources = splitCommaList(values['rate-sources']);
+    if (rateSources !== undefined) out.rateSource = rateSources;
+    return out;
+  }
+
+  // hotel-ref flow
+  const missing: string[] = [];
+  if (!values['start-date']) missing.push('--start-date');
+  if (!values['end-date']) missing.push('--end-date');
+  if (missing.length > 0) {
+    throw new CliUsageError(
+      `get-hotel-rate-info (--hotel-code flow) requires: ${missing.join(', ')}.`,
+    );
+  }
+
+  const codeContext = values['code-context'];
+  if (codeContext !== undefined && codeContext !== 'SABRE' && codeContext !== 'GLOBAL') {
+    throw new CliUsageError(
+      `Invalid --code-context value '${codeContext}'. Expected SABRE or GLOBAL.`,
+    );
+  }
+
+  const rooms: Extract<GetHotelRateInfoInput, { kind: 'hotel-ref' }>['rateCriteria']['rooms'] =
+    values.room !== undefined && values.room.length > 0
+      ? values.room.map((spec, i) => parseHotelRoomSpec(spec, i + 1))
+      : [{ index: 1, adults: 1 }];
+
+  const rateCriteria: Extract<GetHotelRateInfoInput, { kind: 'hotel-ref' }>['rateCriteria'] = {
+    stayDateTimeRange: {
+      startDate: values['start-date'] as string,
+      endDate: values['end-date'] as string,
+    },
+    rooms,
+  };
+
+  if (values['currency-code'] !== undefined) rateCriteria.currencyCode = values['currency-code'];
+  if (values.language !== undefined) rateCriteria.languageCode = values.language;
+  if (values['prepaid-qualifier'] !== undefined) {
+    if (!RATE_INFO_PREPAID.has(values['prepaid-qualifier'] as never)) {
+      throw new CliUsageError(
+        `Invalid --prepaid-qualifier value '${values['prepaid-qualifier']}'. Expected IncludePrepaid, PrepaidOnly, or ExcludePrepaid.`,
+      );
+    }
+    rateCriteria.prepaidQualifier = values['prepaid-qualifier'] as NonNullable<
+      typeof rateCriteria.prepaidQualifier
+    >;
+  }
+  if (values['refundable-only'] !== undefined) {
+    rateCriteria.refundableOnly = values['refundable-only'];
+  }
+  if (values['converted-only'] !== undefined) {
+    rateCriteria.convertedRateInfoOnly = values['converted-only'];
+  }
+  const rateSources = splitCommaList(values['rate-sources']);
+  if (rateSources !== undefined) rateCriteria.rateSource = rateSources;
+  if (values['sort-by'] !== undefined) {
+    if (!RATE_INFO_SORT_BY.has(values['sort-by'] as never)) {
+      throw new CliUsageError(
+        `Invalid --sort-by value '${values['sort-by']}'. Expected one of: ${Array.from(
+          RATE_INFO_SORT_BY,
+        ).join(', ')}.`,
+      );
+    }
+    rateCriteria.sortBy = values['sort-by'] as NonNullable<typeof rateCriteria.sortBy>;
+  }
+  if (values['sort-order'] !== undefined) {
+    if (values['sort-order'] !== 'ASC' && values['sort-order'] !== 'DESC') {
+      throw new CliUsageError(
+        `Invalid --sort-order value '${values['sort-order']}'. Expected ASC or DESC.`,
+      );
+    }
+    rateCriteria.sortOrder = values['sort-order'];
+  }
+
+  const input: Extract<GetHotelRateInfoInput, { kind: 'hotel-ref' }> = {
+    kind: 'hotel-ref',
+    hotelRef:
+      codeContext === undefined
+        ? { code: values['hotel-code'] as string }
+        : { code: values['hotel-code'] as string, codeContext },
+    rateCriteria,
+  };
+  if (values.pcc !== undefined) input.pointOfSale = { pseudoCityCode: values.pcc };
+  if (values['corporate-number'] !== undefined) {
+    input.corporateNumber = values['corporate-number'];
+  }
+  return input;
+}
+
 /** Flag set for `hotel-price-check`. */
 export interface HotelPriceCheckFlagValues {
   'rate-key'?: string;
@@ -1741,6 +1955,28 @@ const HOTEL_AVAIL_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const HOTEL_RATE_INFO_OPTIONS = {
+  ...COMMON_OPTIONS,
+  'hotel-code': { type: 'string' },
+  'code-context': { type: 'string' },
+  'rate-key': { type: 'string' },
+  'start-date': { type: 'string' },
+  'end-date': { type: 'string' },
+  'currency-code': { type: 'string' },
+  language: { type: 'string' },
+  room: { type: 'string', multiple: true },
+  'prepaid-qualifier': { type: 'string' },
+  'refundable-only': { type: 'boolean' },
+  'converted-only': { type: 'boolean' },
+  'exact-match-only': { type: 'boolean' },
+  'rate-sources': { type: 'string' },
+  'sort-by': { type: 'string' },
+  'sort-order': { type: 'string' },
+  pcc: { type: 'string' },
+  'corporate-number': { type: 'string' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 const HOTEL_PRICE_CHECK_OPTIONS = {
   ...COMMON_OPTIONS,
   'rate-key': { type: 'string' },
@@ -1879,6 +2115,7 @@ Commands:
   get-ancillaries           Sabre Get Ancillaries v2
   get-booking               Sabre Booking Management v1 — Get Booking
   get-hotel-avail           Sabre Get Hotel Avail v5
+  get-hotel-rate-info       Sabre Get Hotel Rate Info v5
   get-seats                 Sabre Get Seats v2
   hotel-price-check         Sabre Hotel Price Check v5
   hotel-search              Sabre Hotel Search v2
@@ -2064,6 +2301,56 @@ Examples:
     --start-date 2026-06-20 --end-date 2026-06-22 --max-results 5 --format table
   sabre-rest get-hotel-avail --hotels 100072188,100074506 --currency-code USD \\
     --start-date 2026-06-20 --end-date 2026-06-22
+`;
+
+const HOTEL_RATE_INFO_HELP = `Usage: sabre-rest get-hotel-rate-info [flags]
+
+Sabre Get Hotel Rate Info v5. Returns all available rates for a single
+hotel property (the per-property drill-down of get-hotel-avail).
+
+Two mutually exclusive flows (plus --body):
+  1. Fresh shop by hotel code:
+     --hotel-code <code>        Hotel property ID (global or Sabre)
+     --code-context SABRE|GLOBAL
+                                 (default: server applies SABRE)
+     --start-date <YYYY-MM-DD>   Stay check-in (required)
+     --end-date <YYYY-MM-DD>     Stay check-out (required)
+  2. Rerun a prior search by opaque rate key:
+     --rate-key <key>            Rate key from a prior avail / shop response
+
+Rate criteria (hotel-code flow; some also valid on rate-key flow):
+  --currency-code <ISO>        ISO 4217 currency (required with --rate-range)
+  --language <code>            Language for rate text (e.g. EN)
+  --room <spec>                Repeatable; ADULTS[:CHILDREN[:AGES]] (default: 1)
+  --prepaid-qualifier <v>      IncludePrepaid | PrepaidOnly | ExcludePrepaid
+  --refundable-only            Only return refundable rates
+  --converted-only             Only return ConvertedRateInfo entries
+  --exact-match-only           (rate-key flow) Only exact matches for original criteria
+  --rate-sources <list>        Comma-separated source codes (e.g. 100,110,112,113)
+  --sort-by <key>              AverageNightlyRateBeforeTax | NightlyRate | RateSource |
+                               CommissionableRates | Refundability |
+                               CommissionPercentage | AccessibleRates |
+                               CancellationPenaltyDeadline | NegotiatedRates |
+                               PrepaidRates | PostpaidRates
+  --sort-order <order>         ASC or DESC
+
+POS:
+  --pcc <code>                 Optional branch PCC (POS/Source)
+  --corporate-number <n>       Optional corporate number (hotel-code flow)
+
+Other:
+  --body <json>                Override input with raw JSON (ignores other flags)
+  --base-url <url>             Override SABRE_BASE_URL
+  --format json|table          Output format (default: json). Table is one row
+                               per rate entry (source, before-tax, after-tax,
+                               currency, rateKey).
+  --debug-request              Print the outbound HTTP request to stderr
+  -h, --help                   Show this help
+
+Examples:
+  sabre-rest get-hotel-rate-info --hotel-code 100072188 --code-context GLOBAL \\
+    --start-date 2026-06-20 --end-date 2026-06-22 --currency-code USD --format table
+  sabre-rest get-hotel-rate-info --rate-key 'NFZ6Y...==' --refundable-only
 `;
 
 const HOTEL_PRICE_CHECK_HELP = `Usage: sabre-rest hotel-price-check [flags]
@@ -2505,6 +2792,33 @@ async function getHotelAvailCommand(
   });
 }
 
+async function getHotelRateInfoCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: HOTEL_RATE_INFO_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(HOTEL_RATE_INFO_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildHotelRateInfoInput(values);
+  const result = await client.getHotelRateInfoV5.getRateInfo(input);
+  emitResult(result, format, io, () => {
+    const { headers, rows } = rateInfoToTableRows(result);
+    return renderTable(headers, rows);
+  });
+}
+
 async function hotelPriceCheckCommand(
   argv: readonly string[],
   env: CliEnvConfig,
@@ -2861,6 +3175,7 @@ export const COMMANDS: Record<
   'get-ancillaries': getAncillariesCommand,
   'get-booking': getBookingCommand,
   'get-hotel-avail': getHotelAvailCommand,
+  'get-hotel-rate-info': getHotelRateInfoCommand,
   'get-seats': getSeatsCommand,
   'hotel-price-check': hotelPriceCheckCommand,
   'hotel-search': hotelSearchCommand,

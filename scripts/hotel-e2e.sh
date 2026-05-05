@@ -8,14 +8,13 @@
 #
 # This library currently wraps:
 #
-#   * hotel-search       — property discovery (no rates)
-#   * get-hotel-avail    — lead rates, produces rateKeys
-#   * hotel-price-check  — revalidates a rateKey, produces bookingKey
+#   * hotel-search        — property discovery (no rates)
+#   * get-hotel-avail     — lead rates, produces rateKeys
+#   * get-hotel-rate-info — per-property rate drill-down from a rateKey
+#   * hotel-price-check   — revalidates a rateKey, produces bookingKey
 #
 # Missing (not yet wrapped):
 #
-#   * get-hotel-rate-info    — per-property detailed rate detail (may or may
-#                              not be needed depending on scenario)
 #   * hotel create-booking   — consumes the bookingKey from price-check
 #   * hotel get-booking      — unclear whether booking-management v1 handles
 #                              hotel PNRs; verify when create-booking lands
@@ -27,7 +26,8 @@
 #   Step 2: get-hotel-avail   — runs against Sabre CERT, extracts a rateKey
 #                               from the first hotel's ConvertedRateInfo
 #                               (or falls back to RateInfo)
-#   Step 3: get-hotel-rate-info [TODO — not wrapped]
+#   Step 3: get-hotel-rate-info — runs against Sabre CERT using the rateKey
+#                                 from step 2, surfaces the hotel code
 #   Step 4: hotel-price-check — runs against Sabre CERT using the rateKey
 #                               from step 2 (or a --rate-key override)
 #   Step 5-7:                   [TODO — not wrapped; see booking-e2e.sh for
@@ -133,8 +133,9 @@ BASE_URL_FLAG=()
 TMP_ERR=$(mktemp)
 SEARCH_FILE=$(mktemp)
 AVAIL_FILE=$(mktemp)
+RATE_INFO_FILE=$(mktemp)
 PRICE_FILE=$(mktemp)
-trap 'rm -f "$TMP_ERR" "$SEARCH_FILE" "$AVAIL_FILE" "$PRICE_FILE"' EXIT
+trap 'rm -f "$TMP_ERR" "$SEARCH_FILE" "$AVAIL_FILE" "$RATE_INFO_FILE" "$PRICE_FILE"' EXIT
 
 run_cli() {
   : > "$TMP_ERR"
@@ -239,12 +240,29 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 3 — get-hotel-rate-info (TODO)
+# Step 3 — get-hotel-rate-info
 # ---------------------------------------------------------------------------
-skip 3 "get-hotel-rate-info" "service not yet wrapped"
-# TODO: Once get-hotel-rate-info is wrapped, call it here for the selected
-# hotel and drill into detailed rate plans. Not required for the
-# search → avail → price-check chain.
+step 3 "get-hotel-rate-info"
+
+if ! run_cli $CLI get-hotel-rate-info "${BASE_URL_FLAG[@]}" \
+  --rate-key "$RATE_KEY" \
+  --format json >"$RATE_INFO_FILE"; then
+  cat "$TMP_ERR" >&2
+  fail "get-hotel-rate-info"
+fi
+
+RATE_INFO_HOTEL=$(jq -r '.hotel.info.code // empty' "$RATE_INFO_FILE")
+RATE_INFO_COUNT=$(jq -r '
+  ((.hotel.rateInfos.convertedRateInfo // []) + (.hotel.rateInfos.rateInfo // []))
+  | length
+' "$RATE_INFO_FILE")
+if [[ -n "$RATE_INFO_HOTEL" ]]; then
+  echo "rate-info hotel:   $RATE_INFO_HOTEL"
+  echo "rate-info entries: $RATE_INFO_COUNT"
+else
+  echo "no hotel returned (diagnostics-only envelope)"
+  jq '.applicationResults // empty' "$RATE_INFO_FILE"
+fi
 
 # ---------------------------------------------------------------------------
 # Step 4 — hotel-price-check
@@ -297,5 +315,5 @@ skip 7 "cancel-booking" "depends on step 5"
 
 echo ""
 echo "hotel-e2e complete."
-echo "Wrapped steps: 1 (hotel-search), 2 (get-hotel-avail), 4 (hotel-price-check)."
-echo "Missing steps: 3 (get-hotel-rate-info), 5-7 (hotel booking flow)."
+echo "Wrapped steps: 1 (hotel-search), 2 (get-hotel-avail), 3 (get-hotel-rate-info), 4 (hotel-price-check)."
+echo "Missing steps: 5-7 (hotel booking flow)."
