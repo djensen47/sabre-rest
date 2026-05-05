@@ -28,6 +28,10 @@ import {
   type GetSeatsV2Service,
 } from './services/get-seats-v2/service.js';
 import {
+  DefaultHotelPriceCheckV5Service,
+  type HotelPriceCheckV5Service,
+} from './services/hotel-price-check-v5/service.js';
+import {
   DefaultHotelSearchV2Service,
   type HotelSearchV2Service,
 } from './services/hotel-search-v2/service.js';
@@ -101,6 +105,14 @@ export interface SabreClient {
    * offer, order, flight payload, or PNR locator.
    */
   readonly getSeatsV2: GetSeatsV2Service;
+
+  /**
+   * Sabre Hotel Price Check v5.
+   *
+   * Revalidates a shopped hotel rate and returns the booking key,
+   * price-change status, and refreshed rate details.
+   */
+  readonly hotelPriceCheckV5: HotelPriceCheckV5Service;
 
   /**
    * Sabre Hotel Search v2.
@@ -207,6 +219,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
   const bookingManagementV1 = new DefaultBookingManagementV1Service(deps);
   const getAncillariesV2 = new DefaultGetAncillariesV2Service(deps);
   const getSeatsV2 = new DefaultGetSeatsV2Service(deps);
+  const hotelPriceCheckV5 = new DefaultHotelPriceCheckV5Service(deps);
   const hotelSearchV2 = new DefaultHotelSearchV2Service(deps);
   const multiAirportCityLookupV1 = new DefaultMultiAirportCityLookupV1Service(deps);
   const revalidateItineraryV5 = new DefaultRevalidateItineraryV5Service(deps);
@@ -218,6 +231,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
     bookingManagementV1,
     getAncillariesV2,
     getSeatsV2,
+    hotelPriceCheckV5,
     hotelSearchV2,
     multiAirportCityLookupV1,
     revalidateItineraryV5,
@@ -231,6 +245,7 @@ interface SabreClientServices {
   bookingManagementV1: BookingManagementV1Service;
   getAncillariesV2: GetAncillariesV2Service;
   getSeatsV2: GetSeatsV2Service;
+  hotelPriceCheckV5: HotelPriceCheckV5Service;
   hotelSearchV2: HotelSearchV2Service;
   multiAirportCityLookupV1: MultiAirportCityLookupV1Service;
   revalidateItineraryV5: RevalidateItineraryV5Service;
@@ -249,6 +264,7 @@ class DefaultSabreClient implements SabreClient {
   readonly bookingManagementV1: BookingManagementV1Service;
   readonly getAncillariesV2: GetAncillariesV2Service;
   readonly getSeatsV2: GetSeatsV2Service;
+  readonly hotelPriceCheckV5: HotelPriceCheckV5Service;
   readonly hotelSearchV2: HotelSearchV2Service;
   readonly multiAirportCityLookupV1: MultiAirportCityLookupV1Service;
   readonly revalidateItineraryV5: RevalidateItineraryV5Service;
@@ -261,6 +277,7 @@ class DefaultSabreClient implements SabreClient {
     this.bookingManagementV1 = services.bookingManagementV1;
     this.getAncillariesV2 = services.getAncillariesV2;
     this.getSeatsV2 = services.getSeatsV2;
+    this.hotelPriceCheckV5 = services.hotelPriceCheckV5;
     this.hotelSearchV2 = services.hotelSearchV2;
     this.multiAirportCityLookupV1 = services.multiAirportCityLookupV1;
     this.revalidateItineraryV5 = services.revalidateItineraryV5;
