@@ -1,2224 +1,2249 @@
 {
-  "id" : "http://services.sabre.com/hotel/rate/v5_0_0/GetHotelRateInfoRS#",
-  "definitions" : {
+  "id": "http://services.sabre.com/hotel/rate/v5_0_0/GetHotelRateInfoRS#",
+  "definitions": {
     "positiveInteger": {
       "type": "integer",
       "minimum": 0,
       "exclusiveMinimum": true
     },
-    "ApplicationResults" : {
-      "properties" : {
-        "status" : {
-          "$ref" : "#/definitions/CompletionCodes",
-          "title" : "status"
+    "ApplicationResults": {
+      "properties": {
+        "status": {
+          "$ref": "#/definitions/CompletionCodes",
+          "title": "status"
         },
-        "Success" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/ProblemInformation"
+        "Success": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProblemInformation"
           },
-          "maxItems" : 99,
-          "minItems" : 0,
-          "title" : "Success"
+          "maxItems": 99,
+          "minItems": 0,
+          "title": "Success"
         },
-        "Warning" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/ProblemInformation"
+        "Warning": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProblemInformation"
           },
-          "maxItems" : 99,
-          "minItems" : 0,
-          "title" : "Warning"
+          "maxItems": 99,
+          "minItems": 0,
+          "title": "Warning"
         },
-        "Error" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/ProblemInformation"
+        "Error": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProblemInformation"
           },
-          "maxItems" : 99,
-          "minItems" : 0,
-          "title" : "Error"
+          "maxItems": 99,
+          "minItems": 0,
+          "title": "Error"
         }
       },
-      "type" : "object",
-      "title" : "ApplicationResults",
-      "required" : [ "status" ],
-      "additionalProperties" : false
+      "type": "object",
+      "title": "ApplicationResults",
+      "required": ["status"],
+      "additionalProperties": false
     },
-    "CompletionCodes" : {
-      "properties" : { },
-      "$ref" : "#/definitions/token",
-      "enum" : [ "Complete", "Incomplete", "NotProcessed", "Unknown" ],
-      "additionalProperties" : false
+    "CompletionCodes": {
+      "properties": {},
+      "$ref": "#/definitions/token",
+      "enum": ["Complete", "Incomplete", "NotProcessed", "Unknown"],
+      "additionalProperties": false
     },
-    "ErrorType" : {
-      "properties" : { },
-      "$ref" : "#/definitions/NMTOKEN",
-      "enum" : [ "Transport", "Validation", "Application", "BusinessLogic" ],
-      "additionalProperties" : false
+    "ErrorType": {
+      "properties": {},
+      "$ref": "#/definitions/NMTOKEN",
+      "enum": ["Transport", "Validation", "Application", "BusinessLogic"],
+      "additionalProperties": false
     },
-    "ProblemInformation" : {
-      "type" : "object",
-      "title" : "ProblemInformation",
-      "properties" : {
-        "type" : {
-          "$ref" : "#/definitions/ErrorType",
-          "title" : "type"
+    "ProblemInformation": {
+      "type": "object",
+      "title": "ProblemInformation",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/ErrorType",
+          "title": "type"
         },
-        "timeStamp" : {
-          "format" : "date-time",
-          "title" : "timeStamp"
+        "timeStamp": {
+          "format": "date-time",
+          "title": "timeStamp"
         },
-        "SystemSpecificResults" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/SystemSpecificResults"
+        "SystemSpecificResults": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SystemSpecificResults"
           },
-          "maxItems" : 99,
-          "minItems" : 0,
-          "title" : "SystemSpecificResults"
+          "maxItems": 99,
+          "minItems": 0,
+          "title": "SystemSpecificResults"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "SystemSpecificResults" : {
-      "type" : "object",
-      "title" : "SystemSpecificResults",
-      "properties" : {
-        "timeStamp" : {
-          "format" : "date-time",
-          "title" : "timeStamp"
+    "SystemSpecificResults": {
+      "type": "object",
+      "title": "SystemSpecificResults",
+      "properties": {
+        "timeStamp": {
+          "format": "date-time",
+          "title": "timeStamp"
         },
-        "reference" : {
-          "$ref" : "#/definitions/IDREF",
-          "title" : "reference"
+        "reference": {
+          "$ref": "#/definitions/IDREF",
+          "title": "reference"
         },
-        "RecordID" : {
-          "minLength" : 1,
-          "maxLength" : 255,
-          "type" : "string",
-          "title" : "RecordID"
+        "RecordID": {
+          "minLength": 1,
+          "maxLength": 255,
+          "type": "string",
+          "title": "RecordID"
         },
-        "HostCommand" : {
-          "$ref" : "#/definitions/HostCommand",
-          "title" : "HostCommand"
+        "HostCommand": {
+          "$ref": "#/definitions/HostCommand",
+          "title": "HostCommand"
         },
-        "ShortText" : {
-          "minLength" : 1,
-          "maxLength" : 128,
-          "type" : "string",
-          "title" : "ShortText"
+        "ShortText": {
+          "minLength": 1,
+          "maxLength": 128,
+          "type": "string",
+          "title": "ShortText"
         },
-        "DocURL" : {
-          "$ref" : "#/definitions/anyURI",
-          "title" : "DocURL"
+        "DocURL": {
+          "$ref": "#/definitions/anyURI",
+          "title": "DocURL"
         },
-        "Message" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/ResultMessage"
+        "Message": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResultMessage"
           },
-          "maxItems" : 99,
-          "minItems" : 0,
-          "title" : "Message"
+          "maxItems": 99,
+          "minItems": 0,
+          "title": "Message"
         },
-        "Element" : {
-          "minLength" : 0,
-          "maxLength" : 4096,
-          "type" : "string",
-          "title" : "Element"
+        "Element": {
+          "minLength": 0,
+          "maxLength": 4096,
+          "type": "string",
+          "title": "Element"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "NMTOKEN" : {
-      "anyOf" : [ {
-        "type" : "string"
-      }, {
-        "type" : "null"
-      } ],
-      "description" : "http://www.w3.org/TR/xmlschema-2/#NMTOKEN"
-    },
-    "token" : {
-      "anyOf" : [ {
-        "type" : "string"
-      }, {
-        "type" : "null"
-      } ],
-      "description" : "http://www.w3.org/TR/xmlschema-2/#normalizedString"
-    },
-    "IDREF" : {
-      "anyOf" : [ {
-        "type" : "string"
-      }, {
-        "type" : "null"
-      } ],
-      "description" : "http://www.w3.org/TR/xmlschema-2/#IDREF"
-    },
-    "HostCommand" : {
-      "type" : "object",
-      "title" : "HostCommand",
-      "properties" : {
-        "value" : {
-          "title" : "value",
-          "minLength" : 0,
-          "maxLength" : 4096,
-          "type" : "string"
+    "NMTOKEN": {
+      "anyOf": [
+        {
+          "type": "string"
         },
-        "LNIATA" : {
-          "type" : "string",
-          "title" : "LNIATA"
+        {
+          "type": "null"
+        }
+      ],
+      "description": "http://www.w3.org/TR/xmlschema-2/#NMTOKEN"
+    },
+    "token": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "http://www.w3.org/TR/xmlschema-2/#normalizedString"
+    },
+    "IDREF": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "http://www.w3.org/TR/xmlschema-2/#IDREF"
+    },
+    "HostCommand": {
+      "type": "object",
+      "title": "HostCommand",
+      "properties": {
+        "value": {
+          "title": "value",
+          "minLength": 0,
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "LNIATA": {
+          "type": "string",
+          "title": "LNIATA"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "anyURI" : {
-      "anyOf" : [ {
-        "type" : "string",
-        "format" : "uri"
-      }, {
-        "type" : "null"
-      } ],
-      "description" : "http://www.w3.org/TR/xmlschema-2/#anyURI"
-    },
-    "ResultMessage" : {
-      "type" : "object",
-      "title" : "ResultMessage",
-      "properties" : {
-        "value" : {
-          "title" : "value",
-          "minLength" : 0,
-          "maxLength" : 4096,
-          "type" : "string"
+    "anyURI": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uri"
         },
-        "code" : {
-          "type" : "string",
-          "title" : "code"
+        {
+          "type": "null"
+        }
+      ],
+      "description": "http://www.w3.org/TR/xmlschema-2/#anyURI"
+    },
+    "ResultMessage": {
+      "type": "object",
+      "title": "ResultMessage",
+      "properties": {
+        "value": {
+          "title": "value",
+          "minLength": 0,
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "code": {
+          "type": "string",
+          "title": "code"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "unsignedByte" : {
-      "anyOf" : [ {
-        "type" : "integer",
-        "minimum" : 0,
-        "exclusiveMinimum" : false,
-        "maximum" : 255,
-        "exclusiveMaximum" : false
-      }, {
-        "type" : "null"
-      } ],
-      "description" : "http://www.w3.org/TR/xmlschema-2/#unsignedByte"
-    },
-    "MealsIncluded" : {
-      "type" : "object",
-      "title" : "MealsIncluded",
-      "properties" : {
-        "Lunch" : {
-          "type" : "boolean",
-          "title" : "Lunch"
-        },
-        "MealPlanIndicator" : {
-          "type" : "boolean",
-          "title" : "MealPlanIndicator"
-        },
-        "MealPlanCode" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : 1,
-          "exclusiveMinimum" : false,
-          "title" : "MealPlanCode"
-        },
-        "Breakfast" : {
-          "type" : "boolean",
-          "title" : "Breakfast"
-        },
-        "Dinner" : {
-          "type" : "boolean",
-          "title" : "Dinner"
-        },
-        "GuestCount" : {
-          "type" : "integer",
-          "minimum" : 0,
-          "exclusiveMinimum" : false,
-          "title" : "GuestCount"
-        },
-        "MealPlanDescription" : {
-          "type" : "string",
-          "title" : "MealPlanDescription"
-        }
-      },
-      "additionalProperties" : false
-    },
-    "RoomExtrasType" : {
-      "type" : "object",
-      "title" : "RoomExtrasType",
-      "properties" : {
-        "RoomExtra" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RoomExtrasType.RoomExtra"
-          },
-          "minItems" : 1,
-          "title" : "RoomExtra"
-        }
-      },
-      "required" : [ "RoomExtra" ],
-      "additionalProperties" : false
-    },
-    "CancelPenaltiesType.CancelPenalty.PenaltyDescription" : {
-      "type" : "object",
-      "title" : "CancelPenaltiesType.CancelPenalty.PenaltyDescription",
-      "properties" : {
-        "Text" : {
-          "type" : "array",
-          "items" : {
-            "type" : "string"
-          },
-          "minItems" : 1,
-          "title" : "Text"
-        }
-      },
-      "required" : [ "Text" ],
-      "additionalProperties" : false
-    },
-    "GuaranteeType" : {
-      "type" : "object",
-      "title" : "GuaranteeType",
-      "properties" : {
-        "GuaranteeType" : {
-          "type" : "string",
-          "title" : "GuaranteeType"
-        },
-        "GuaranteesAccepted" : {
-          "$ref" : "#/definitions/GuaranteeType.GuaranteesAccepted",
-          "title" : "GuaranteesAccepted"
-        },
-        "DepositPolicies" : {
-          "$ref" : "#/definitions/GuaranteeType.DepositPolicies",
-          "title" : "DepositPolicies"
-        },
-        "GuaranteeDescription" : {
-          "$ref" : "#/definitions/GuaranteeType.GuaranteeDescription",
-          "title" : "GuaranteeDescription"
-        }
-      },
-      "required" : [ "GuaranteesAccepted" ],
-      "additionalProperties" : false
-    },
-    "GuaranteeType.DepositPolicies.DepositPolicy.AmountPercent" : {
-      "type" : "object",
-      "title" : "GuaranteeType.DepositPolicies.DepositPolicy.AmountPercent",
-      "properties" : {
-        "TaxInclusive" : {
-          "type" : "boolean",
-          "title" : "TaxInclusive"
-        },
-        "BasisType" : {
-          "type" : "string",
-          "title" : "BasisType"
-        },
-        "Amount" : {
-          "type" : "string",
-          "format": "number",
-          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "Amount"
-        },
-        "NmbrOfNights" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : -2147483648,
-          "exclusiveMinimum" : false,
-          "title" : "NmbrOfNights"
-        },
-        "ApplyAs" : {
-          "type" : "string",
-          "title" : "ApplyAs"
-        },
-        "FeesInclusive" : {
-          "type" : "boolean",
-          "title" : "FeesInclusive"
-        },
-        "Percent" : {
-          "type" : "number",
-          "multipleOf": 0.01,
-          "title" : "Percent"
-        },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "type" : "string",
-          "title" : "CurrencyCode"
-        }
-      },
-      "additionalProperties" : false
-    },
-    "GuaranteeType.DepositPolicies" : {
-      "type" : "object",
-      "title" : "GuaranteeType.DepositPolicies",
-      "properties" : {
-        "DepositPolicy" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/GuaranteeType.DepositPolicies.DepositPolicy"
-          },
-          "minItems" : 1,
-          "title" : "DepositPolicy"
-        }
-      },
-      "required" : [ "DepositPolicy" ],
-      "additionalProperties" : false
-    },
-    "GuaranteeType.DepositPolicies.DepositPolicy" : {
-      "type" : "object",
-      "title" : "GuaranteeType.DepositPolicies.DepositPolicy",
-      "properties" : {
-        "AmountPercent" : {
-          "$ref" : "#/definitions/GuaranteeType.DepositPolicies.DepositPolicy.AmountPercent",
-          "title" : "AmountPercent"
-        },
-        "Deadline" : {
-          "$ref" : "#/definitions/GuaranteeType.DepositPolicies.DepositPolicy.Deadline",
-          "title" : "Deadline"
-        }
-      },
-      "additionalProperties" : false
-    },
-    "GuaranteeType.GuaranteesAccepted" : {
-      "type" : "object",
-      "title" : "GuaranteeType.GuaranteesAccepted",
-      "properties" : {
-        "GuaranteeAccepted" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/GuaranteeType.GuaranteesAccepted.GuaranteeAccepted"
-          },
-          "minItems" : 1,
-          "title" : "GuaranteeAccepted"
-        }
-      },
-      "required" : [ "GuaranteeAccepted" ],
-      "additionalProperties" : false
-    },
-    "GuaranteeType.GuaranteesAccepted.GuaranteeAccepted" : {
-      "type" : "object",
-      "title" : "GuaranteeType.GuaranteesAccepted.GuaranteeAccepted",
-      "properties" : {
-        "PaymentCards" : {
-          "$ref" : "#/definitions/GuaranteeType.GuaranteesAccepted.GuaranteeAccepted.PaymentCards",
-          "title" : "PaymentCards"
-        },
-        "GuaranteeTypeCode" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : 1,
-          "exclusiveMinimum" : false,
-          "title" : "GuaranteeTypeCode"
-        },
-        "GuaranteeTypeDescription" : {
-          "type" : "string",
-          "title" : "GuaranteeTypeDescription"
-        }
-      },
-      "additionalProperties" : false
-    },
-    "GuaranteeType.GuaranteesAccepted.GuaranteeAccepted.PaymentCards" : {
-      "type" : "object",
-      "title" : "GuaranteeType.GuaranteesAccepted.GuaranteeAccepted.PaymentCards",
-      "properties" : {
-        "PaymentCard" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/GuaranteeType.GuaranteesAccepted.GuaranteeAccepted.PaymentCards.PaymentCard"
-          },
-          "minItems" : 1,
-          "title" : "PaymentCard"
-        },
-        "CVVRequired" : {
-          "type" : "boolean",
-          "title" : "CVVRequired"
-        }
-      },
-      "required" : [ "PaymentCard" ],
-      "additionalProperties" : false
-    },
-    "GuaranteeType.GuaranteesAccepted.GuaranteeAccepted.PaymentCards.PaymentCard" : {
-      "type" : "object",
-      "title" : "GuaranteeType.GuaranteesAccepted.GuaranteeAccepted.PaymentCards.PaymentCard",
-      "properties" : {
-        "value" : {
-          "title" : "value",
-          "type" : "string"
-        },
-        "CardCode" : {
-          "type" : "string",
-          "title" : "CardCode"
-        }
-      },
-      "required" : [ "CardCode" ],
-      "additionalProperties" : false
-    },
-    "GuaranteeType.DepositPolicies.DepositPolicy.Deadline" : {
-      "type" : "object",
-      "title" : "GuaranteeType.DepositPolicies.DepositPolicy.Deadline",
-      "properties" : {
-        "OffsetTimeUnit" : {
-          "type" : "string",
-          "title" : "OffsetTimeUnit"
-        },
-        "OffsetUnitMultiplier" : {
-          "type" : "integer",
-          "minimum" : 0,
-          "exclusiveMinimum" : true,
-          "title" : "OffsetUnitMultiplier"
-        },
-        "AbsoluteDeadline" : {
-          "type" : "string",
-          "title" : "AbsoluteDeadline"
-        },
-        "OffsetDropTime" : {
-          "$ref" : "#/definitions/OffsetDropTimeType",
-          "title" : "OffsetDropTime"
-        }
-      },
-      "additionalProperties" : false
-    },
-    "GuaranteeType.GuaranteeDescription" : {
-      "type" : "object",
-      "title" : "GuaranteeType.GuaranteeDescription",
-      "properties" : {
-        "Text" : {
-          "type" : "array",
-          "items" : {
-            "type" : "string"
-          },
-          "minItems" : 1,
-          "title" : "Text"
-        }
-      },
-      "required" : [ "Text" ],
-      "additionalProperties" : false
-    },
-    "RateInfoTypeForRoom" : {
-      "type" : "object",
-      "title" : "RateInfoTypeForRoom",
-      "properties" : {
-        "AmountBeforeTax" : {
-          "type" : "string",
-          "format": "number",
-          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "AmountBeforeTax"
-        },
-        "Fees" : {
-          "$ref" : "#/definitions/RateFeesType",
-          "title" : "Fees"
-        },
-        "AverageNightlyRate" : {
-          "type" : "string",
-          "format": "number",
-          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "AverageNightlyRate"
-        },
-        "AverageNightlyRateBeforeTax" : {
-          "type" : "string",
-          "format": "number",
-          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "AverageNightlyRateBeforeTax"
-        },
-        "CancelPenalties" : {
-          "$ref" : "#/definitions/CancelPenaltiesType",
-          "title" : "CancelPenalties"
-        },
-        "RoomExtras" : {
-          "$ref" : "#/definitions/RoomExtrasType",
-          "title" : "RoomExtras"
-        },
-        "EndDate" : {
-          "format" : "date",
-          "title" : "EndDate"
-        },
-        "AdditionalFeesInclusive" : {
-          "type" : "boolean",
-          "title" : "AdditionalFeesInclusive"
-        },
-        "LocalFeesInclusive" : {
-          "type" : "boolean",
-          "title" : "LocalFeesInclusive"
-        },
-        "Rates" : {
-          "$ref" : "#/definitions/RateInfoTypeForRoom.Rates",
-          "title" : "Rates"
-        },
-        "AmountAfterTax" : {
-          "type" : "string",
-          "format": "number",
-          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "AmountAfterTax"
-        },
-        "MinSellingRate" : {
-          "type" : "string",
-          "format": "number",
-          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "MinSellingRate"
-        },
-        "Taxes" : {
-          "$ref" : "#/definitions/RateTaxesType",
-          "title" : "Taxes"
-        },
-        "Guarantee" : {
-          "$ref" : "#/definitions/GuaranteeType",
-          "title" : "Guarantee"
-        },
-        "AdditionalDetails" : {
-          "$ref" : "#/definitions/AdditionalDetails",
-          "title" : "AdditionalDetails"
-        },
-        "ApproxTotalPrice" : {
-          "type" : "string",
-          "format": "number",
-          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "ApproxTotalPrice"
-        },
-        "TaxInclusive" : {
-          "type" : "boolean",
-          "title" : "TaxInclusive"
-        },
-        "IncidentalsInclusive" : {
-          "type" : "boolean",
-          "title" : "IncidentalsInclusive"
-        },
-        "HighestNightlyRate" : {
-          "type" : "string",
-          "format": "number",
-          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "HighestNightlyRate"
-        },
-        "RateMismatchInd" : {
-          "type" : "boolean",
-          "title" : "RateMismatchInd"
-        },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "type" : "string",
-          "title" : "CurrencyCode"
-        },
-        "StartDate" : {
-          "format" : "date",
-          "title" : "StartDate"
-        }
-      },
-      "required" : [ "CancelPenalties" ],
-      "additionalProperties" : false
-    },
-    "RoomType" : {
-      "type" : "object",
-      "title" : "RoomType",
-      "properties" : {
-        "Amenities" : {
-          "$ref" : "#/definitions/Amenities",
-          "title" : "Amenities"
-        },
-        "AccessibleAmenities" : {
-          "$ref" : "#/definitions/Amenities",
-          "title" : "AccessibleAmenities"
-        },
-        "RoomTypeCode" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : 1,
-          "exclusiveMinimum" : false,
-          "title" : "RoomTypeCode"
-        },
-        "RoomCategory" : {
-          "type" : "string",
-          "title" : "RoomCategory"
-        },
-        "Occupancy" : {
-          "$ref" : "#/definitions/Occupancy",
-          "title" : "Occupancy"
-        },
-        "AdditionalDetails" : {
-          "$ref" : "#/definitions/AdditionalDetails",
-          "title" : "AdditionalDetails"
-        },
-        "BedTypeOptions" : {
-          "$ref" : "#/definitions/BedTypeOptions",
-          "title" : "BedTypeOptions"
-        },
-        "Adults" : {
-          "$ref" : "#/definitions/positiveInteger",
-          "title" : "Adults"
-        },
-        "Children" : {
-          "$ref" : "#/definitions/positiveInteger",
-          "title" : "Children"
-        },
-        "RoomID" : {
-          "type" : "string",
-          "title" : "RoomID"
-        },
-        "SharedRoomInd" : {
-          "type" : "boolean",
-          "title" : "SharedRoomInd"
-        },
-        "NonSmoking" : {
-          "type" : "boolean",
-          "title" : "NonSmoking"
-        },
-        "RoomDescription" : {
-          "$ref" : "#/definitions/RoomType.RoomDescription",
-          "title" : "RoomDescription"
-        },
-        "RoomViewCode" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : 1,
-          "exclusiveMinimum" : false,
-          "title" : "RoomViewCode"
-        },
-        "RoomViewDescription" : {
-          "type" : "string",
-          "title" : "RoomViewDescription"
-        },
-        "RatePlans" : {
-          "$ref" : "#/definitions/RatePlansRef",
-          "title" : "RatePlans"
-        },
-        "Floor" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : -2147483648,
-          "exclusiveMinimum" : false,
-          "title" : "Floor"
-        },
-        "RoomType" : {
-          "type" : "string",
-          "title" : "RoomType"
-        },
-        "RoomIndex" : {
-          "type" : "integer",
-          "minimum" : 0,
-          "exclusiveMinimum" : true,
-          "title" : "RoomIndex"
-        },
-        "AccessibleRoom" : {
-          "type" : "boolean",
-          "title" : "AccessibleRoom"
-        },
-        "RoomSize" : {
-          "type" : "string",
-          "title" : "RoomSize"
-        },
-        "NumberOfBedRooms" : {
-          "type" : "integer",
-          "title" : "NumberOfBedRooms"
-        }
-      },
-      "required" : [ "RatePlans", "RoomIndex" ],
-      "additionalProperties" : false
-    },
-    "Occupancy" : {
-      "type" : "object",
-      "title" : "Occupancy",
-      "properties" : {
-        "Min" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : -2147483648,
-          "exclusiveMinimum" : false,
-          "title" : "Min"
-        },
-        "Max" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : -2147483648,
-          "exclusiveMinimum" : false,
-          "title" : "Max"
-        }
-      },
-      "additionalProperties" : false
-    },
-    "RatePlanInclusionsType" : {
-      "type" : "object",
-      "title" : "RatePlanInclusionsType",
-      "properties" : {
-        "RatePlanInclusion" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RatePlanInclusionType"
-          },
-          "minItems" : 1,
-          "title" : "RatePlanInclusion"
-        }
-      },
-      "required" : [ "RatePlanInclusion" ],
-      "additionalProperties" : false
-    },
-    "Amenity" : {
-      "type" : "object",
-      "title" : "Amenity",
-      "properties" : {
-        "value" : {
-          "title" : "value",
-          "type" : "string"
-        },
-        "Code" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : 1,
-          "exclusiveMinimum" : false,
-          "title" : "Code"
-        },
-        "Description" : {
-          "type" : "string",
-          "title" : "Description"
-        },
-        "ComplimentaryInd" : {
-          "type" : "boolean",
-          "title" : "ComplimentaryInd"
-        }
-      },
-      "additionalProperties" : false
-    },
-    "RoomExtrasType.RoomExtra" : {
-      "type" : "object",
-      "title" : "RoomExtrasType.RoomExtra",
-      "properties" : {
-        "Amount" : {
-          "minimum" : 0,
-          "exclusiveMinimum" : false,
-          "type" : "number",
-          "title" : "Amount"
-        },
-        "Code" : {
+    "unsignedByte": {
+      "anyOf": [
+        {
           "type": "integer",
-          "minimum" : 1,
-          "title" : "Code"
+          "minimum": 0,
+          "exclusiveMinimum": false,
+          "maximum": 255,
+          "exclusiveMaximum": false
         },
-        "Description" : {
-          "type" : "string",
-          "title" : "Description"
+        {
+          "type": "null"
+        }
+      ],
+      "description": "http://www.w3.org/TR/xmlschema-2/#unsignedByte"
+    },
+    "MealsIncluded": {
+      "type": "object",
+      "title": "MealsIncluded",
+      "properties": {
+        "Lunch": {
+          "type": "boolean",
+          "title": "Lunch"
         },
-        "Text" : {
-          "type" : "array",
-          "items" : {
-            "type" : "string"
+        "MealPlanIndicator": {
+          "type": "boolean",
+          "title": "MealPlanIndicator"
+        },
+        "MealPlanCode": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": 1,
+          "exclusiveMinimum": false,
+          "title": "MealPlanCode"
+        },
+        "Breakfast": {
+          "type": "boolean",
+          "title": "Breakfast"
+        },
+        "Dinner": {
+          "type": "boolean",
+          "title": "Dinner"
+        },
+        "GuestCount": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMinimum": false,
+          "title": "GuestCount"
+        },
+        "MealPlanDescription": {
+          "type": "string",
+          "title": "MealPlanDescription"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RoomExtrasType": {
+      "type": "object",
+      "title": "RoomExtrasType",
+      "properties": {
+        "RoomExtra": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RoomExtrasType.RoomExtra"
           },
-          "minItems" : 1,
-          "title" : "Text"
-        },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "TRANSLATOR_FIX_ME" : "Pattern constraint has been copied from XSD. Please check if it is correct",
-          "type" : "string",
-          "title" : "CurrencyCode"
+          "minItems": 1,
+          "title": "RoomExtra"
         }
       },
-      "required" : [ "Text" ],
-      "additionalProperties" : false
+      "required": ["RoomExtra"],
+      "additionalProperties": false
     },
-    "CancelPenaltiesType.CancelPenalty.Deadline" : {
-      "type" : "object",
-      "title" : "CancelPenaltiesType.CancelPenalty.Deadline",
-      "properties" : {
-        "OffsetTimeUnit" : {
-          "type" : "string",
-          "title" : "OffsetTimeUnit"
-        },
-        "OffsetUnitMultiplier" : {
-          "type" : "integer",
-          "minimum" : 0,
-          "exclusiveMinimum" : true,
-          "title" : "OffsetUnitMultiplier"
-        },
-        "AbsoluteDeadline" : {
-          "type" : "string",
-          "title" : "AbsoluteDeadline"
-        },
-        "OffsetDropTime" : {
-          "$ref" : "#/definitions/OffsetDropTimeType",
-          "title" : "OffsetDropTime"
-        }
-      },
-      "additionalProperties" : false
-    },
-    "AlternateHotelInfos" : {
-      "type" : "object",
-      "title" : "AlternateHotelInfos",
-      "properties" : {
-        "AlternateHotelInfo" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/AlternateHotelInfo"
+    "CancelPenaltiesType.CancelPenalty.PenaltyDescription": {
+      "type": "object",
+      "title": "CancelPenaltiesType.CancelPenalty.PenaltyDescription",
+      "properties": {
+        "Text": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "minItems" : 1,
-          "title" : "AlternateHotelInfo"
+          "minItems": 1,
+          "title": "Text"
         }
       },
-      "required" : [ "AlternateHotelInfo" ],
-      "additionalProperties" : false
+      "required": ["Text"],
+      "additionalProperties": false
     },
-    "AlternateHotelInfo" : {
-      "type" : "object",
-      "title" : "AlternateHotelInfo",
-      "properties" : {
-        "HotelInfo" : {
-          "$ref" : "#/definitions/AlternateHotelInfo.HotelInfo",
-          "title" : "HotelInfo"
+    "GuaranteeType": {
+      "type": "object",
+      "title": "GuaranteeType",
+      "properties": {
+        "GuaranteeType": {
+          "type": "string",
+          "title": "GuaranteeType"
         },
-        "HotelRateInfo" : {
-          "$ref" : "#/definitions/HotelRateInfoType",
-          "title" : "HotelRateInfo"
+        "GuaranteesAccepted": {
+          "$ref": "#/definitions/GuaranteeType.GuaranteesAccepted",
+          "title": "GuaranteesAccepted"
+        },
+        "DepositPolicies": {
+          "$ref": "#/definitions/GuaranteeType.DepositPolicies",
+          "title": "DepositPolicies"
+        },
+        "GuaranteeDescription": {
+          "$ref": "#/definitions/GuaranteeType.GuaranteeDescription",
+          "title": "GuaranteeDescription"
         }
       },
-      "required" : [ "HotelInfo" ],
-      "additionalProperties" : false
+      "required": ["GuaranteesAccepted"],
+      "additionalProperties": false
     },
-    "HotelRateInfoType" : {
-      "type" : "object",
-      "title" : "HotelRateInfoType",
-      "properties" : {
-        "Rooms" : {
-          "$ref" : "#/definitions/Rooms",
-          "title" : "Rooms"
+    "GuaranteeType.DepositPolicies.DepositPolicy.AmountPercent": {
+      "type": "object",
+      "title": "GuaranteeType.DepositPolicies.DepositPolicy.AmountPercent",
+      "properties": {
+        "TaxInclusive": {
+          "type": "boolean",
+          "title": "TaxInclusive"
         },
-        "RateInfos" : {
-          "$ref" : "#/definitions/RateInfos",
-          "title" : "RateInfos"
-        }
-      },
-      "additionalProperties" : false
-    },
-    "AlternateHotelInfo.HotelInfo" : {
-      "type" : "object",
-      "title" : "AlternateHotelInfo.HotelInfo",
-      "properties" : {
-        "UOM" : {
-          "$ref" : "#/definitions/UnitOfMeasureType",
-          "title" : "UOM"
+        "BasisType": {
+          "type": "string",
+          "title": "BasisType"
         },
-        "SabreHotelCode" : {
-          "minLength" : 1,
-          "maxLength" : 20,
-          "type" : "string",
-          "title" : "SabreHotelCode"
-        },
-        "Distance" : {
-          "type" : "number",
-          "title" : "Distance"
-        },
-        "ChainCode" : {
-          "pattern" : "^([a-zA-Z]{1,2})$",
-          "TRANSLATOR_FIX_ME" : "Pattern constraint has been copied from XSD. Please check if it is correct",
-          "type" : "string",
-          "title" : "ChainCode"
-        },
-        "CodeContext" : {
-          "$ref" : "#/definitions/CodeContextType",
-          "title" : "CodeContext"
-        },
-        "HotelCode" : {
-          "minLength" : 1,
-          "maxLength" : 20,
-          "type" : "string",
-          "title" : "HotelCode"
-        },
-        "Direction" : {
-          "type" : "string",
-          "title" : "Direction"
-        }
-      },
-      "additionalProperties" : false
-    },
-    "HotelInfo" : {
-      "type" : "object",
-      "title" : "HotelInfo",
-      "properties" : {
-        "SabreHotelCode" : {
-          "minLength" : 1,
-          "maxLength" : 20,
-          "type" : "string",
-          "title" : "SabreHotelCode"
-        },
-        "CodeContext" : {
-          "$ref" : "#/definitions/CodeContextType",
-          "title" : "CodeContext"
-        },
-        "HotelCode" : {
-          "minLength" : 1,
-          "maxLength" : 20,
-          "type" : "string",
-          "title" : "HotelCode"
-        },
-        "ChainCode" : {
-          "minLength" : 1,
-          "maxLength" : 2,
-          "type" : "string",
-          "title" : "ChainCode"
-        }
-      },
-      "required" : [ "HotelCode", "CodeContext" ],
-      "additionalProperties" : false
-    },
-    "CancelPenaltiesType.CancelPenalty" : {
-      "type" : "object",
-      "title" : "CancelPenaltiesType.CancelPenalty",
-      "properties" : {
-        "AmountPercent" : {
-          "$ref" : "#/definitions/CancelPenaltiesType.CancelPenalty.AmountPercent",
-          "title" : "AmountPercent"
-        },
-        "Refundable" : {
-          "type" : "boolean",
-          "title" : "Refundable"
-        },
-        "Deadline" : {
-          "$ref" : "#/definitions/CancelPenaltiesType.CancelPenalty.Deadline",
-          "title" : "Deadline"
-        },
-        "PenaltyDescription" : {
-          "$ref" : "#/definitions/CancelPenaltiesType.CancelPenalty.PenaltyDescription",
-          "title" : "PenaltyDescription"
-        }
-      },
-      "required" : [ "Refundable" ],
-      "additionalProperties" : false
-    },
-    "RateInfos" : {
-      "type" : "object",
-      "title" : "RateInfos",
-      "properties" : {
-        "ConvertedRateInfo" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RateInfoType"
-          },
-          "minItems" : 0,
-          "title" : "ConvertedRateInfo"
-        },
-        "RateInfo" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RateInfoType"
-          },
-          "minItems" : 0,
-          "title" : "RateInfo"
-        },
-        "ShopKey" : {
-          "type" : "string",
-          "title" : "ShopKey"
-        }
-      },
-      "additionalProperties" : false
-    },
-    "BedTypeOptions" : {
-      "type" : "object",
-      "title" : "BedTypeOptions",
-      "properties" : {
-        "BedTypes" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/BedTypes"
-          },
-          "minItems" : 1,
-          "title" : "BedTypes"
-        }
-      },
-      "required" : [ "BedTypes" ],
-      "additionalProperties" : false
-    },
-    "BedTypes" : {
-      "type" : "object",
-      "title" : "BedTypes",
-      "properties" : {
-        "BedType" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/BedType"
-          },
-          "minItems" : 1,
-          "title" : "BedType"
-        }
-      },
-      "required" : [ "BedType" ],
-      "additionalProperties" : false
-    },
-    "BedType" : {
-      "type" : "object",
-      "title" : "BedType",
-      "properties" : {
-        "Code" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : 1,
-          "exclusiveMinimum" : false,
-          "title" : "Code"
-        },
-        "Description" : {
-          "type" : "string",
-          "title" : "Description"
-        },
-        "Count" : {
-          "type" : "integer",
-          "minimum" : 0,
-          "exclusiveMinimum" : false,
-          "title" : "Count"
-        }
-      },
-      "additionalProperties" : false
-    },
-    "CommissionType" : {
-      "type" : "object",
-      "title" : "CommissionType",
-      "properties" : {
-        "Amount" : {
-          "type" : "string",
+        "Amount": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "Amount"
+          "title": "Amount"
         },
-        "CommissionDescription" : {
-          "$ref" : "#/definitions/CommissionType.CommissionDescription",
-          "title" : "CommissionDescription"
+        "NmbrOfNights": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": -2147483648,
+          "exclusiveMinimum": false,
+          "title": "NmbrOfNights"
         },
-        "Type" : {
-          "type" : "string",
-          "title" : "Type"
+        "ApplyAs": {
+          "type": "string",
+          "title": "ApplyAs"
         },
-        "Percent" : {
-          "type" : "number",
+        "FeesInclusive": {
+          "type": "boolean",
+          "title": "FeesInclusive"
+        },
+        "Percent": {
+          "type": "number",
           "multipleOf": 0.01,
-          "title" : "Percent"
+          "title": "Percent"
         },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "type" : "string",
-          "title" : "CurrencyCode"
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "type": "string",
+          "title": "CurrencyCode"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "RateInfoTypeForRoom.Rates.Rate" : {
-      "type" : "object",
-      "title" : "RateInfoTypeForRoom.Rates.Rate",
-      "properties" : {
-        "AmountBeforeTax" : {
-          "type" : "string",
-          "format": "number",
-          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "AmountBeforeTax"
-        },
-        "EndDate" : {
-          "format" : "date",
-          "title" : "EndDate"
-        },
-        "AmountAfterTax" : {
-          "type" : "string",
-          "format": "number",
-          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "AmountAfterTax"
-        },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "type" : "string",
-          "title" : "CurrencyCode"
-        },
-        "StartDate" : {
-          "format" : "date",
-          "title" : "StartDate"
-        }
-      },
-      "additionalProperties" : false
-    },
-    "RateInfoTypeForRoom.Rates" : {
-      "type" : "object",
-      "title" : "RateInfoTypeForRoom.Rates",
-      "properties" : {
-        "Rate" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RateInfoTypeForRoom.Rates.Rate"
+    "GuaranteeType.DepositPolicies": {
+      "type": "object",
+      "title": "GuaranteeType.DepositPolicies",
+      "properties": {
+        "DepositPolicy": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GuaranteeType.DepositPolicies.DepositPolicy"
           },
-          "minItems" : 1,
-          "title" : "Rate"
+          "minItems": 1,
+          "title": "DepositPolicy"
         }
       },
-      "required" : [ "Rate" ],
-      "additionalProperties" : false
+      "required": ["DepositPolicy"],
+      "additionalProperties": false
     },
-    "GetHotelRateInfoRS" : {
-      "type" : "object",
-      "title" : "GetHotelRateInfoRS",
-      "properties" : {
-        "version" : {
-          "type" : "string",
-          "minLength" : 1,
-          "maxLength" : 255
+    "GuaranteeType.DepositPolicies.DepositPolicy": {
+      "type": "object",
+      "title": "GuaranteeType.DepositPolicies.DepositPolicy",
+      "properties": {
+        "AmountPercent": {
+          "$ref": "#/definitions/GuaranteeType.DepositPolicies.DepositPolicy.AmountPercent",
+          "title": "AmountPercent"
         },
-        "ApplicationResults" : {
-          "$ref" : "#/definitions/ApplicationResults"
-        },
-        "HotelRateInfos" : {
-          "$ref" : "#/definitions/HotelRateInfos",
-          "title" : "HotelRateInfos"
+        "Deadline": {
+          "$ref": "#/definitions/GuaranteeType.DepositPolicies.DepositPolicy.Deadline",
+          "title": "Deadline"
         }
       },
-      "additionalProperties" : true
+      "additionalProperties": false
+    },
+    "GuaranteeType.GuaranteesAccepted": {
+      "type": "object",
+      "title": "GuaranteeType.GuaranteesAccepted",
+      "properties": {
+        "GuaranteeAccepted": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GuaranteeType.GuaranteesAccepted.GuaranteeAccepted"
+          },
+          "minItems": 1,
+          "title": "GuaranteeAccepted"
+        }
+      },
+      "required": ["GuaranteeAccepted"],
+      "additionalProperties": false
+    },
+    "GuaranteeType.GuaranteesAccepted.GuaranteeAccepted": {
+      "type": "object",
+      "title": "GuaranteeType.GuaranteesAccepted.GuaranteeAccepted",
+      "properties": {
+        "PaymentCards": {
+          "$ref": "#/definitions/GuaranteeType.GuaranteesAccepted.GuaranteeAccepted.PaymentCards",
+          "title": "PaymentCards"
+        },
+        "GuaranteeTypeCode": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": 1,
+          "exclusiveMinimum": false,
+          "title": "GuaranteeTypeCode"
+        },
+        "GuaranteeTypeDescription": {
+          "type": "string",
+          "title": "GuaranteeTypeDescription"
+        }
+      },
+      "additionalProperties": false
+    },
+    "GuaranteeType.GuaranteesAccepted.GuaranteeAccepted.PaymentCards": {
+      "type": "object",
+      "title": "GuaranteeType.GuaranteesAccepted.GuaranteeAccepted.PaymentCards",
+      "properties": {
+        "PaymentCard": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GuaranteeType.GuaranteesAccepted.GuaranteeAccepted.PaymentCards.PaymentCard"
+          },
+          "minItems": 1,
+          "title": "PaymentCard"
+        },
+        "CVVRequired": {
+          "type": "boolean",
+          "title": "CVVRequired"
+        }
+      },
+      "required": ["PaymentCard"],
+      "additionalProperties": false
+    },
+    "GuaranteeType.GuaranteesAccepted.GuaranteeAccepted.PaymentCards.PaymentCard": {
+      "type": "object",
+      "title": "GuaranteeType.GuaranteesAccepted.GuaranteeAccepted.PaymentCards.PaymentCard",
+      "properties": {
+        "value": {
+          "title": "value",
+          "type": "string"
+        },
+        "CardCode": {
+          "type": "string",
+          "title": "CardCode"
+        }
+      },
+      "required": ["CardCode"],
+      "additionalProperties": false
+    },
+    "GuaranteeType.DepositPolicies.DepositPolicy.Deadline": {
+      "type": "object",
+      "title": "GuaranteeType.DepositPolicies.DepositPolicy.Deadline",
+      "properties": {
+        "OffsetTimeUnit": {
+          "type": "string",
+          "title": "OffsetTimeUnit"
+        },
+        "OffsetUnitMultiplier": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMinimum": true,
+          "title": "OffsetUnitMultiplier"
+        },
+        "AbsoluteDeadline": {
+          "type": "string",
+          "title": "AbsoluteDeadline"
+        },
+        "OffsetDropTime": {
+          "$ref": "#/definitions/OffsetDropTimeType",
+          "title": "OffsetDropTime"
+        }
+      },
+      "additionalProperties": false
+    },
+    "GuaranteeType.GuaranteeDescription": {
+      "type": "object",
+      "title": "GuaranteeType.GuaranteeDescription",
+      "properties": {
+        "Text": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Text"
+        }
+      },
+      "required": ["Text"],
+      "additionalProperties": false
+    },
+    "RateInfoTypeForRoom": {
+      "type": "object",
+      "title": "RateInfoTypeForRoom",
+      "properties": {
+        "AmountBeforeTax": {
+          "type": "string",
+          "format": "number",
+          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
+          "title": "AmountBeforeTax"
+        },
+        "Fees": {
+          "$ref": "#/definitions/RateFeesType",
+          "title": "Fees"
+        },
+        "AverageNightlyRate": {
+          "type": "string",
+          "format": "number",
+          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
+          "title": "AverageNightlyRate"
+        },
+        "AverageNightlyRateBeforeTax": {
+          "type": "string",
+          "format": "number",
+          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
+          "title": "AverageNightlyRateBeforeTax"
+        },
+        "CancelPenalties": {
+          "$ref": "#/definitions/CancelPenaltiesType",
+          "title": "CancelPenalties"
+        },
+        "RoomExtras": {
+          "$ref": "#/definitions/RoomExtrasType",
+          "title": "RoomExtras"
+        },
+        "EndDate": {
+          "format": "date",
+          "title": "EndDate"
+        },
+        "AdditionalFeesInclusive": {
+          "type": "boolean",
+          "title": "AdditionalFeesInclusive"
+        },
+        "LocalFeesInclusive": {
+          "type": "boolean",
+          "title": "LocalFeesInclusive"
+        },
+        "Rates": {
+          "$ref": "#/definitions/RateInfoTypeForRoom.Rates",
+          "title": "Rates"
+        },
+        "AmountAfterTax": {
+          "type": "string",
+          "format": "number",
+          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
+          "title": "AmountAfterTax"
+        },
+        "MinSellingRate": {
+          "type": "string",
+          "format": "number",
+          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
+          "title": "MinSellingRate"
+        },
+        "Taxes": {
+          "$ref": "#/definitions/RateTaxesType",
+          "title": "Taxes"
+        },
+        "Guarantee": {
+          "$ref": "#/definitions/GuaranteeType",
+          "title": "Guarantee"
+        },
+        "AdditionalDetails": {
+          "$ref": "#/definitions/AdditionalDetails",
+          "title": "AdditionalDetails"
+        },
+        "ApproxTotalPrice": {
+          "type": "string",
+          "format": "number",
+          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
+          "title": "ApproxTotalPrice"
+        },
+        "TaxInclusive": {
+          "type": "boolean",
+          "title": "TaxInclusive"
+        },
+        "IncidentalsInclusive": {
+          "type": "boolean",
+          "title": "IncidentalsInclusive"
+        },
+        "HighestNightlyRate": {
+          "type": "string",
+          "format": "number",
+          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
+          "title": "HighestNightlyRate"
+        },
+        "RateMismatchInd": {
+          "type": "boolean",
+          "title": "RateMismatchInd"
+        },
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "type": "string",
+          "title": "CurrencyCode"
+        },
+        "StartDate": {
+          "format": "date",
+          "title": "StartDate"
+        }
+      },
+      "required": ["CancelPenalties"],
+      "additionalProperties": false
+    },
+    "RoomType": {
+      "type": "object",
+      "title": "RoomType",
+      "properties": {
+        "Amenities": {
+          "$ref": "#/definitions/Amenities",
+          "title": "Amenities"
+        },
+        "AccessibleAmenities": {
+          "$ref": "#/definitions/Amenities",
+          "title": "AccessibleAmenities"
+        },
+        "RoomTypeCode": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": 1,
+          "exclusiveMinimum": false,
+          "title": "RoomTypeCode"
+        },
+        "RoomCategory": {
+          "type": "string",
+          "title": "RoomCategory"
+        },
+        "Occupancy": {
+          "$ref": "#/definitions/Occupancy",
+          "title": "Occupancy"
+        },
+        "AdditionalDetails": {
+          "$ref": "#/definitions/AdditionalDetails",
+          "title": "AdditionalDetails"
+        },
+        "BedTypeOptions": {
+          "$ref": "#/definitions/BedTypeOptions",
+          "title": "BedTypeOptions"
+        },
+        "Adults": {
+          "$ref": "#/definitions/positiveInteger",
+          "title": "Adults"
+        },
+        "Children": {
+          "$ref": "#/definitions/positiveInteger",
+          "title": "Children"
+        },
+        "RoomID": {
+          "type": "string",
+          "title": "RoomID"
+        },
+        "SharedRoomInd": {
+          "type": "boolean",
+          "title": "SharedRoomInd"
+        },
+        "NonSmoking": {
+          "type": "boolean",
+          "title": "NonSmoking"
+        },
+        "RoomDescription": {
+          "$ref": "#/definitions/RoomType.RoomDescription",
+          "title": "RoomDescription"
+        },
+        "RoomViewCode": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": 1,
+          "exclusiveMinimum": false,
+          "title": "RoomViewCode"
+        },
+        "RoomViewDescription": {
+          "type": "string",
+          "title": "RoomViewDescription"
+        },
+        "RatePlans": {
+          "$ref": "#/definitions/RatePlansRef",
+          "title": "RatePlans"
+        },
+        "Floor": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": -2147483648,
+          "exclusiveMinimum": false,
+          "title": "Floor"
+        },
+        "RoomType": {
+          "type": "string",
+          "title": "RoomType"
+        },
+        "RoomIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMinimum": true,
+          "title": "RoomIndex"
+        },
+        "AccessibleRoom": {
+          "type": "boolean",
+          "title": "AccessibleRoom"
+        },
+        "RoomSize": {
+          "type": "string",
+          "title": "RoomSize"
+        },
+        "NumberOfBedRooms": {
+          "type": "integer",
+          "title": "NumberOfBedRooms"
+        }
+      },
+      "required": ["RatePlans", "RoomIndex"],
+      "additionalProperties": false
+    },
+    "Occupancy": {
+      "type": "object",
+      "title": "Occupancy",
+      "properties": {
+        "Min": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": -2147483648,
+          "exclusiveMinimum": false,
+          "title": "Min"
+        },
+        "Max": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": -2147483648,
+          "exclusiveMinimum": false,
+          "title": "Max"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RatePlanInclusionsType": {
+      "type": "object",
+      "title": "RatePlanInclusionsType",
+      "properties": {
+        "RatePlanInclusion": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RatePlanInclusionType"
+          },
+          "minItems": 1,
+          "title": "RatePlanInclusion"
+        }
+      },
+      "required": ["RatePlanInclusion"],
+      "additionalProperties": false
+    },
+    "Amenity": {
+      "type": "object",
+      "title": "Amenity",
+      "properties": {
+        "value": {
+          "title": "value",
+          "type": "string"
+        },
+        "Code": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": 1,
+          "exclusiveMinimum": false,
+          "title": "Code"
+        },
+        "Description": {
+          "type": "string",
+          "title": "Description"
+        },
+        "ComplimentaryInd": {
+          "type": "boolean",
+          "title": "ComplimentaryInd"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RoomExtrasType.RoomExtra": {
+      "type": "object",
+      "title": "RoomExtrasType.RoomExtra",
+      "properties": {
+        "Amount": {
+          "minimum": 0,
+          "exclusiveMinimum": false,
+          "type": "number",
+          "title": "Amount"
+        },
+        "Code": {
+          "type": "integer",
+          "minimum": 1,
+          "title": "Code"
+        },
+        "Description": {
+          "type": "string",
+          "title": "Description"
+        },
+        "Text": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Text"
+        },
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "TRANSLATOR_FIX_ME": "Pattern constraint has been copied from XSD. Please check if it is correct",
+          "type": "string",
+          "title": "CurrencyCode"
+        }
+      },
+      "required": ["Text"],
+      "additionalProperties": false
+    },
+    "CancelPenaltiesType.CancelPenalty.Deadline": {
+      "type": "object",
+      "title": "CancelPenaltiesType.CancelPenalty.Deadline",
+      "properties": {
+        "OffsetTimeUnit": {
+          "type": "string",
+          "title": "OffsetTimeUnit"
+        },
+        "OffsetUnitMultiplier": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMinimum": true,
+          "title": "OffsetUnitMultiplier"
+        },
+        "AbsoluteDeadline": {
+          "type": "string",
+          "title": "AbsoluteDeadline"
+        },
+        "OffsetDropTime": {
+          "$ref": "#/definitions/OffsetDropTimeType",
+          "title": "OffsetDropTime"
+        }
+      },
+      "additionalProperties": false
+    },
+    "AlternateHotelInfos": {
+      "type": "object",
+      "title": "AlternateHotelInfos",
+      "properties": {
+        "AlternateHotelInfo": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AlternateHotelInfo"
+          },
+          "minItems": 1,
+          "title": "AlternateHotelInfo"
+        }
+      },
+      "required": ["AlternateHotelInfo"],
+      "additionalProperties": false
+    },
+    "AlternateHotelInfo": {
+      "type": "object",
+      "title": "AlternateHotelInfo",
+      "properties": {
+        "HotelInfo": {
+          "$ref": "#/definitions/AlternateHotelInfo.HotelInfo",
+          "title": "HotelInfo"
+        },
+        "HotelRateInfo": {
+          "$ref": "#/definitions/HotelRateInfoType",
+          "title": "HotelRateInfo"
+        }
+      },
+      "required": ["HotelInfo"],
+      "additionalProperties": false
+    },
+    "HotelRateInfoType": {
+      "type": "object",
+      "title": "HotelRateInfoType",
+      "properties": {
+        "Rooms": {
+          "$ref": "#/definitions/Rooms",
+          "title": "Rooms"
+        },
+        "RateInfos": {
+          "$ref": "#/definitions/RateInfos",
+          "title": "RateInfos"
+        }
+      },
+      "additionalProperties": false
+    },
+    "AlternateHotelInfo.HotelInfo": {
+      "type": "object",
+      "title": "AlternateHotelInfo.HotelInfo",
+      "properties": {
+        "UOM": {
+          "$ref": "#/definitions/UnitOfMeasureType",
+          "title": "UOM"
+        },
+        "SabreHotelCode": {
+          "minLength": 1,
+          "maxLength": 20,
+          "type": "string",
+          "title": "SabreHotelCode"
+        },
+        "Distance": {
+          "type": "number",
+          "title": "Distance"
+        },
+        "ChainCode": {
+          "pattern": "^([a-zA-Z]{1,2})$",
+          "TRANSLATOR_FIX_ME": "Pattern constraint has been copied from XSD. Please check if it is correct",
+          "type": "string",
+          "title": "ChainCode"
+        },
+        "CodeContext": {
+          "$ref": "#/definitions/CodeContextType",
+          "title": "CodeContext"
+        },
+        "HotelCode": {
+          "minLength": 1,
+          "maxLength": 20,
+          "type": "string",
+          "title": "HotelCode"
+        },
+        "Direction": {
+          "type": "string",
+          "title": "Direction"
+        }
+      },
+      "additionalProperties": false
+    },
+    "HotelInfo": {
+      "type": "object",
+      "title": "HotelInfo",
+      "properties": {
+        "SabreHotelCode": {
+          "minLength": 1,
+          "maxLength": 20,
+          "type": "string",
+          "title": "SabreHotelCode"
+        },
+        "CodeContext": {
+          "$ref": "#/definitions/CodeContextType",
+          "title": "CodeContext"
+        },
+        "HotelCode": {
+          "minLength": 1,
+          "maxLength": 20,
+          "type": "string",
+          "title": "HotelCode"
+        },
+        "ChainCode": {
+          "minLength": 1,
+          "maxLength": 2,
+          "type": "string",
+          "title": "ChainCode"
+        }
+      },
+      "required": ["HotelCode", "CodeContext"],
+      "additionalProperties": false
+    },
+    "CancelPenaltiesType.CancelPenalty": {
+      "type": "object",
+      "title": "CancelPenaltiesType.CancelPenalty",
+      "properties": {
+        "AmountPercent": {
+          "$ref": "#/definitions/CancelPenaltiesType.CancelPenalty.AmountPercent",
+          "title": "AmountPercent"
+        },
+        "Refundable": {
+          "type": "boolean",
+          "title": "Refundable"
+        },
+        "Deadline": {
+          "$ref": "#/definitions/CancelPenaltiesType.CancelPenalty.Deadline",
+          "title": "Deadline"
+        },
+        "PenaltyDescription": {
+          "$ref": "#/definitions/CancelPenaltiesType.CancelPenalty.PenaltyDescription",
+          "title": "PenaltyDescription"
+        }
+      },
+      "required": ["Refundable"],
+      "additionalProperties": false
+    },
+    "RateInfos": {
+      "type": "object",
+      "title": "RateInfos",
+      "properties": {
+        "ConvertedRateInfo": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RateInfoType"
+          },
+          "minItems": 0,
+          "title": "ConvertedRateInfo"
+        },
+        "RateInfo": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RateInfoType"
+          },
+          "minItems": 0,
+          "title": "RateInfo"
+        },
+        "ShopKey": {
+          "type": "string",
+          "title": "ShopKey"
+        }
+      },
+      "additionalProperties": false
+    },
+    "BedTypeOptions": {
+      "type": "object",
+      "title": "BedTypeOptions",
+      "properties": {
+        "BedTypes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BedTypes"
+          },
+          "minItems": 1,
+          "title": "BedTypes"
+        }
+      },
+      "required": ["BedTypes"],
+      "additionalProperties": false
+    },
+    "BedTypes": {
+      "type": "object",
+      "title": "BedTypes",
+      "properties": {
+        "BedType": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BedType"
+          },
+          "minItems": 1,
+          "title": "BedType"
+        }
+      },
+      "required": ["BedType"],
+      "additionalProperties": false
+    },
+    "BedType": {
+      "type": "object",
+      "title": "BedType",
+      "properties": {
+        "Code": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": 1,
+          "exclusiveMinimum": false,
+          "title": "Code"
+        },
+        "Description": {
+          "type": "string",
+          "title": "Description"
+        },
+        "Count": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMinimum": false,
+          "title": "Count"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CommissionType": {
+      "type": "object",
+      "title": "CommissionType",
+      "properties": {
+        "Amount": {
+          "type": "string",
+          "format": "number",
+          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
+          "title": "Amount"
+        },
+        "CommissionDescription": {
+          "$ref": "#/definitions/CommissionType.CommissionDescription",
+          "title": "CommissionDescription"
+        },
+        "Type": {
+          "type": "string",
+          "title": "Type"
+        },
+        "Percent": {
+          "type": "number",
+          "multipleOf": 0.01,
+          "title": "Percent"
+        },
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "type": "string",
+          "title": "CurrencyCode"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RateInfoTypeForRoom.Rates.Rate": {
+      "type": "object",
+      "title": "RateInfoTypeForRoom.Rates.Rate",
+      "properties": {
+        "AmountBeforeTax": {
+          "type": "string",
+          "format": "number",
+          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
+          "title": "AmountBeforeTax"
+        },
+        "EndDate": {
+          "format": "date",
+          "title": "EndDate"
+        },
+        "AmountAfterTax": {
+          "type": "string",
+          "format": "number",
+          "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
+          "title": "AmountAfterTax"
+        },
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "type": "string",
+          "title": "CurrencyCode"
+        },
+        "StartDate": {
+          "format": "date",
+          "title": "StartDate"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RateInfoTypeForRoom.Rates": {
+      "type": "object",
+      "title": "RateInfoTypeForRoom.Rates",
+      "properties": {
+        "Rate": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RateInfoTypeForRoom.Rates.Rate"
+          },
+          "minItems": 1,
+          "title": "Rate"
+        }
+      },
+      "required": ["Rate"],
+      "additionalProperties": false
+    },
+    "GetHotelRateInfoRS": {
+      "type": "object",
+      "title": "GetHotelRateInfoRS",
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "ApplicationResults": {
+          "$ref": "#/definitions/ApplicationResults"
+        },
+        "HotelRateInfos": {
+          "$ref": "#/definitions/HotelRateInfos",
+          "title": "HotelRateInfos"
+        }
+      },
+      "additionalProperties": true
     },
 
-    "RateTaxesType" : {
-      "type" : "object",
-      "title" : "RateTaxesType",
-      "properties" : {
-        "Amount" : {
-          "type" : "string",
+    "RateTaxesType": {
+      "type": "object",
+      "title": "RateTaxesType",
+      "properties": {
+        "Amount": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "Amount"
+          "title": "Amount"
         },
-        "Tax" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RateTaxesType.Tax"
+        "Tax": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RateTaxesType.Tax"
           },
-          "minItems" : 0,
-          "title" : "Tax"
+          "minItems": 0,
+          "title": "Tax"
         },
-        "TaxGroups" : {
-          "$ref" : "#/definitions/TaxGroupsType",
-          "title" : "TaxGroups"
+        "TaxGroups": {
+          "$ref": "#/definitions/TaxGroupsType",
+          "title": "TaxGroups"
         },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "type" : "string",
-          "title" : "CurrencyCode"
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "type": "string",
+          "title": "CurrencyCode"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "RateTaxesType.Tax" : {
-      "type" : "object",
-      "title" : "RateTaxesType.Tax",
-      "properties" : {
-        "Amount" : {
-          "type" : "string",
+    "RateTaxesType.Tax": {
+      "type": "object",
+      "title": "RateTaxesType.Tax",
+      "properties": {
+        "Amount": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "Amount"
+          "title": "Amount"
         },
-        "EndDate" : {
-          "format" : "date",
-          "title" : "EndDate"
+        "EndDate": {
+          "format": "date",
+          "title": "EndDate"
         },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "type" : "string",
-          "title" : "CurrencyCode"
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "type": "string",
+          "title": "CurrencyCode"
         },
-        "StartDate" : {
-          "format" : "date",
-          "title" : "StartDate"
+        "StartDate": {
+          "format": "date",
+          "title": "StartDate"
         }
       },
-      "required" : [ "Amount", "CurrencyCode" ],
-      "additionalProperties" : false
+      "required": ["Amount", "CurrencyCode"],
+      "additionalProperties": false
     },
-    "TaxGroupsType" : {
-      "type" : "object",
-      "title" : "TaxGroupsType",
-      "properties" : {
-        "TaxGroup" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/TaxGroupsType.TaxGroup"
+    "TaxGroupsType": {
+      "type": "object",
+      "title": "TaxGroupsType",
+      "properties": {
+        "TaxGroup": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TaxGroupsType.TaxGroup"
           },
-          "minItems" : 1,
-          "title" : "TaxGroup"
+          "minItems": 1,
+          "title": "TaxGroup"
         }
       },
-      "required" : [ "TaxGroup" ],
-      "additionalProperties" : false
+      "required": ["TaxGroup"],
+      "additionalProperties": false
     },
-    "TaxGroupsType.TaxGroup" : {
-      "type" : "object",
-      "title" : "TaxGroupsType.TaxGroup",
-      "properties" : {
-        "Amount" : {
-          "type" : "string",
+    "TaxGroupsType.TaxGroup": {
+      "type": "object",
+      "title": "TaxGroupsType.TaxGroup",
+      "properties": {
+        "Amount": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "Amount"
+          "title": "Amount"
         },
-        "Code" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : 1,
-          "exclusiveMinimum" : false,
-          "title" : "Code"
+        "Code": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": 1,
+          "exclusiveMinimum": false,
+          "title": "Code"
         },
-        "Description" : {
-          "type" : "string",
-          "title" : "Description"
+        "Description": {
+          "type": "string",
+          "title": "Description"
         },
-        "TaxDescription" : {
-          "$ref" : "#/definitions/TaxGroupsType.TaxGroup.TaxDescription",
-          "title" : "TaxDescription"
+        "TaxDescription": {
+          "$ref": "#/definitions/TaxGroupsType.TaxGroup.TaxDescription",
+          "title": "TaxDescription"
         },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "type" : "string",
-          "title" : "CurrencyCode"
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "type": "string",
+          "title": "CurrencyCode"
         }
       },
-      "required" : [ "Code", "Amount", "CurrencyCode" ],
-      "additionalProperties" : false
+      "required": ["Code", "Amount", "CurrencyCode"],
+      "additionalProperties": false
     },
-    "TaxGroupsType.TaxGroup.TaxDescription" : {
-      "type" : "object",
-      "title" : "TaxGroupsType.TaxGroup.TaxDescription",
-      "properties" : {
-        "Text" : {
-          "type" : "array",
-          "items" : {
-            "type" : "string"
+    "TaxGroupsType.TaxGroup.TaxDescription": {
+      "type": "object",
+      "title": "TaxGroupsType.TaxGroup.TaxDescription",
+      "properties": {
+        "Text": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "minItems" : 1,
-          "title" : "Text"
+          "minItems": 1,
+          "title": "Text"
         }
       },
-      "required" : [ "Text" ],
-      "additionalProperties" : false
+      "required": ["Text"],
+      "additionalProperties": false
     },
-    "HotelRateInfos" : {
-      "type" : "object",
-      "title" : "HotelRateInfos",
-      "properties" : {
-        "HotelRateInfo" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/HotelRateInfo"
+    "HotelRateInfos": {
+      "type": "object",
+      "title": "HotelRateInfos",
+      "properties": {
+        "HotelRateInfo": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HotelRateInfo"
           },
-          "minItems" : 1,
-          "title" : "HotelRateInfo"
+          "minItems": 1,
+          "title": "HotelRateInfo"
         },
-        "TranslatedHotelRateInfo" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/TranslatedHotelRateInfo"
+        "TranslatedHotelRateInfo": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TranslatedHotelRateInfo"
           },
-          "minItems" : 0,
-          "title" : "TranslatedHotelRateInfo"
+          "minItems": 0,
+          "title": "TranslatedHotelRateInfo"
         }
       },
-      "required" : [ "HotelRateInfo" ],
-      "additionalProperties" : false
+      "required": ["HotelRateInfo"],
+      "additionalProperties": false
     },
-    "CommissionType.CommissionDescription" : {
-      "type" : "object",
-      "title" : "CommissionType.CommissionDescription",
-      "properties" : {
-        "Text" : {
-          "type" : "array",
-          "items" : {
-            "type" : "string"
+    "CommissionType.CommissionDescription": {
+      "type": "object",
+      "title": "CommissionType.CommissionDescription",
+      "properties": {
+        "Text": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "minItems" : 1,
-          "title" : "Text"
+          "minItems": 1,
+          "title": "Text"
         }
       },
-      "required" : [ "Text" ],
-      "additionalProperties" : false
+      "required": ["Text"],
+      "additionalProperties": false
     },
-    "Rooms" : {
-      "type" : "object",
-      "title" : "Rooms",
-      "properties" : {
-        "Room" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RoomType"
+    "Rooms": {
+      "type": "object",
+      "title": "Rooms",
+      "properties": {
+        "Room": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RoomType"
           },
-          "minItems" : 1,
-          "title" : "Room"
+          "minItems": 1,
+          "title": "Room"
         }
       },
-      "required" : [ "Room" ],
-      "additionalProperties" : false
+      "required": ["Room"],
+      "additionalProperties": false
     },
-    "CancelPenaltiesType.CancelPenalty.AmountPercent" : {
-      "type" : "object",
-      "title" : "CancelPenaltiesType.CancelPenalty.AmountPercent",
-      "properties" : {
-        "TaxInclusive" : {
-          "type" : "boolean",
-          "title" : "TaxInclusive"
+    "CancelPenaltiesType.CancelPenalty.AmountPercent": {
+      "type": "object",
+      "title": "CancelPenaltiesType.CancelPenalty.AmountPercent",
+      "properties": {
+        "TaxInclusive": {
+          "type": "boolean",
+          "title": "TaxInclusive"
         },
-        "BasisType" : {
-          "type" : "string",
-          "title" : "BasisType"
+        "BasisType": {
+          "type": "string",
+          "title": "BasisType"
         },
-        "Amount" : {
-          "type" : "string",
+        "Amount": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "Amount"
+          "title": "Amount"
         },
-        "NmbrOfNights" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : -2147483648,
-          "exclusiveMinimum" : false,
-          "title" : "NmbrOfNights"
+        "NmbrOfNights": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": -2147483648,
+          "exclusiveMinimum": false,
+          "title": "NmbrOfNights"
         },
-        "ApplyAs" : {
-          "type" : "string",
-          "title" : "ApplyAs"
+        "ApplyAs": {
+          "type": "string",
+          "title": "ApplyAs"
         },
-        "FeesInclusive" : {
-          "type" : "boolean",
-          "title" : "FeesInclusive"
+        "FeesInclusive": {
+          "type": "boolean",
+          "title": "FeesInclusive"
         },
-        "Percent" : {
-          "type" : "number",
+        "Percent": {
+          "type": "number",
           "multipleOf": 0.01,
-          "title" : "Percent"
+          "title": "Percent"
         },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "type" : "string",
-          "title" : "CurrencyCode"
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "type": "string",
+          "title": "CurrencyCode"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "AdditionalDetail" : {
-      "type" : "object",
-      "title" : "AdditionalDetail",
-      "properties" : {
-        "Amount" : {
-          "type" : "string",
+    "AdditionalDetail": {
+      "type": "object",
+      "title": "AdditionalDetail",
+      "properties": {
+        "Amount": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "Amount"
+          "title": "Amount"
         },
-        "Code" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : 1,
-          "exclusiveMinimum" : false,
-          "title" : "Code"
+        "Code": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": 1,
+          "exclusiveMinimum": false,
+          "title": "Code"
         },
-        "Description" : {
-          "type" : "string",
-          "title" : "Description"
+        "Description": {
+          "type": "string",
+          "title": "Description"
         },
-        "Text" : {
-          "type" : "array",
-          "items" : {
-            "type" : "string"
+        "Text": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "minItems" : 0,
-          "title" : "Text"
+          "minItems": 0,
+          "title": "Text"
         },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "type" : "string",
-          "title" : "CurrencyCode"
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "type": "string",
+          "title": "CurrencyCode"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "RatePlanRef" : {
-      "type" : "object",
-      "title" : "RatePlanRef",
-      "properties" : {
-        "LimitedAvailability" : {
-          "type" : "string",
-          "title" : "LimitedAvailability"
+    "RatePlanRef": {
+      "type": "object",
+      "title": "RatePlanRef",
+      "properties": {
+        "LimitedAvailability": {
+          "type": "string",
+          "title": "LimitedAvailability"
         },
-        "AvailableQuantity" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : -2147483648,
-          "exclusiveMinimum" : false,
-          "title" : "AvailableQuantity"
+        "AvailableQuantity": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": -2147483648,
+          "exclusiveMinimum": false,
+          "title": "AvailableQuantity"
         },
-        "RateKey" : {
-          "type" : "string",
-          "title" : "RateKey"
+        "RateKey": {
+          "type": "string",
+          "title": "RateKey"
         },
-        "RatePlanInclusions" : {
-          "$ref" : "#/definitions/RatePlanInclusionsType",
-          "title" : "RatePlanInclusions"
+        "RatePlanInclusions": {
+          "$ref": "#/definitions/RatePlanInclusionsType",
+          "title": "RatePlanInclusions"
         },
-        "ClientId" : {
-          "type" : "string",
-          "title" : "ClientId"
+        "ClientId": {
+          "type": "string",
+          "title": "ClientId"
         },
-        "RatePlanType" : {
-          "pattern" : "^([1-9][0-9]?)$",
-          "TRANSLATOR_FIX_ME" : "Pattern constraint has been copied from XSD. Please check if it is correct",
-          "type" : "string",
-          "title" : "RatePlanType"
+        "RatePlanType": {
+          "pattern": "^([1-9][0-9]?)$",
+          "TRANSLATOR_FIX_ME": "Pattern constraint has been copied from XSD. Please check if it is correct",
+          "type": "string",
+          "title": "RatePlanType"
         },
-        "RatePlanTypeDescription" : {
-          "type" : "string",
-          "title" : "RatePlanTypeDescription"
+        "RatePlanTypeDescription": {
+          "type": "string",
+          "title": "RatePlanTypeDescription"
         },
-        "RateInfo" : {
-          "$ref" : "#/definitions/RateInfoTypeForRoom",
-          "title" : "RateInfo"
+        "RateInfo": {
+          "$ref": "#/definitions/RateInfoTypeForRoom",
+          "title": "RateInfo"
         },
-        "PrepaidIndicator" : {
-          "type" : "boolean",
-          "title" : "PrepaidIndicator"
+        "PrepaidIndicator": {
+          "type": "boolean",
+          "title": "PrepaidIndicator"
         },
-        "RateLabels" : {
-          "$ref" : "#/definitions/RateLabelsType",
-          "title" : "RateLabels"
+        "RateLabels": {
+          "$ref": "#/definitions/RateLabelsType",
+          "title": "RateLabels"
         },
-        "RatePlanCode" : {
-          "type" : "string",
-          "title" : "RatePlanCode"
+        "RatePlanCode": {
+          "type": "string",
+          "title": "RatePlanCode"
         },
-        "CommissionPrograms" : {
-          "$ref" : "#/definitions/CommissionPrograms",
-          "title" : "CommissionPrograms"
+        "CommissionPrograms": {
+          "$ref": "#/definitions/CommissionPrograms",
+          "title": "CommissionPrograms"
         },
-        "ProductCode" : {
-          "type" : "string",
-          "title" : "ProductCode"
+        "ProductCode": {
+          "type": "string",
+          "title": "ProductCode"
         },
-        "RateSource" : {
-          "type" : "string",
-          "title" : "RateSource"
+        "RateSource": {
+          "type": "string",
+          "title": "RateSource"
         },
-        "MealsIncluded" : {
-          "$ref" : "#/definitions/MealsIncluded",
-          "title" : "MealsIncluded"
+        "MealsIncluded": {
+          "$ref": "#/definitions/MealsIncluded",
+          "title": "MealsIncluded"
         },
-        "RatePlanDescription" : {
-          "$ref" : "#/definitions/RatePlanDescriptionType",
-          "title" : "RatePlanDescription"
+        "RatePlanDescription": {
+          "$ref": "#/definitions/RatePlanDescriptionType",
+          "title": "RatePlanDescription"
         },
-        "ConvertedRateInfo" : {
-          "$ref" : "#/definitions/RateInfoTypeForRoom",
-          "title" : "ConvertedRateInfo"
+        "ConvertedRateInfo": {
+          "$ref": "#/definitions/RateInfoTypeForRoom",
+          "title": "ConvertedRateInfo"
         },
-        "RatePlanName" : {
-          "type" : "string",
-          "title" : "RatePlanName"
+        "RatePlanName": {
+          "type": "string",
+          "title": "RatePlanName"
         },
-        "LoyaltyMemberRate" : {
-          "type" : "boolean",
-          "title" : "LoyaltyMemberRate"
+        "LoyaltyMemberRate": {
+          "type": "boolean",
+          "title": "LoyaltyMemberRate"
         },
-        "LoyaltyId" : {
-          "type" : "string",
-          "title" : "LoyaltyId"
+        "LoyaltyId": {
+          "type": "string",
+          "title": "LoyaltyId"
         },
-        "LoyaltyPoints" : {
-          "type" : "boolean",
-          "title" : "LoyaltyPoints"
+        "LoyaltyPoints": {
+          "type": "boolean",
+          "title": "LoyaltyPoints"
         },
-        "LoyaltyProgramName" : {
-          "type" : "string",
-          "title" : "LoyaltyProgramName"
+        "LoyaltyProgramName": {
+          "type": "string",
+          "title": "LoyaltyProgramName"
         },
-        "Ordinal" : {
-          "type" : "string",
-          "title" : "Ordinal"
+        "Ordinal": {
+          "type": "string",
+          "title": "Ordinal"
         },
-        "Refundability" : {
-          "type" : "string",
-          "title" : "Refundability"
+        "Refundability": {
+          "type": "string",
+          "title": "Refundability"
         }
       },
-      "required" : [ "PrepaidIndicator", "RateSource", "RateKey" ],
-      "additionalProperties" : false
+      "required": ["PrepaidIndicator", "RateSource", "RateKey"],
+      "additionalProperties": false
     },
-    "RateLabelsType" : {
-      "type" : "object",
-      "title" : "RateLabelsType",
-      "properties" : {
-        "RateLabel" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RateLabelType"
+    "RateLabelsType": {
+      "type": "object",
+      "title": "RateLabelsType",
+      "properties": {
+        "RateLabel": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RateLabelType"
           },
-          "minItems" : 1,
-          "title" : "RateLabel"
+          "minItems": 1,
+          "title": "RateLabel"
         }
       },
-      "required" : [ "RateLabel" ],
-      "additionalProperties" : false
+      "required": ["RateLabel"],
+      "additionalProperties": false
     },
-    "RateLabelType" : {
-      "type" : "object",
-      "title" : "RateLabelType",
-      "properties" : {
-        "Type" : {
-          "type" : "string",
-          "title" : "Type"
+    "RateLabelType": {
+      "type": "object",
+      "title": "RateLabelType",
+      "properties": {
+        "Type": {
+          "type": "string",
+          "title": "Type"
         },
-        "Value" : {
-          "type" : "string",
-          "title" : "Value"
+        "Value": {
+          "type": "string",
+          "title": "Value"
         },
-        "ProgramId" : {
-          "type" : "string",
-          "title" : "ProgramId"
+        "ProgramId": {
+          "type": "string",
+          "title": "ProgramId"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "CommissionPrograms" : {
-      "type" : "object",
-      "title" : "CommissionPrograms",
-      "properties" : {
-        "CommissionProgram" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/CommissionProgram"
+    "CommissionPrograms": {
+      "type": "object",
+      "title": "CommissionPrograms",
+      "properties": {
+        "CommissionProgram": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CommissionProgram"
           },
-          "minItems" : 1,
-          "title" : "CommissionProgram"
+          "minItems": 1,
+          "title": "CommissionProgram"
         }
       },
-      "required" : [ "CommissionProgram" ],
-      "additionalProperties" : false
+      "required": ["CommissionProgram"],
+      "additionalProperties": false
     },
-    "CommissionProgram" : {
-      "type" : "object",
-      "title" : "CommissionProgram",
-      "properties" : {
-        "Name" : {
-          "type" : "string",
-          "title" : "Name"
+    "CommissionProgram": {
+      "type": "object",
+      "title": "CommissionProgram",
+      "properties": {
+        "Name": {
+          "type": "string",
+          "title": "Name"
         },
-        "Id" : {
-          "type" : "string",
-          "title" : "Id"
+        "Id": {
+          "type": "string",
+          "title": "Id"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "RatePlanDescriptionType" : {
-      "type" : "object",
-      "title" : "RatePlanDescriptionType",
-      "properties" : {
-        "Text" : {
-          "type" : "array",
-          "items" : {
-            "type" : "string"
+    "RatePlanDescriptionType": {
+      "type": "object",
+      "title": "RatePlanDescriptionType",
+      "properties": {
+        "Text": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "minItems" : 0,
-          "title" : "Text"
+          "minItems": 0,
+          "title": "Text"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "CancelPenaltiesType" : {
-      "type" : "object",
-      "title" : "CancelPenaltiesType",
-      "properties" : {
-        "CancelPenalty" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/CancelPenaltiesType.CancelPenalty"
+    "CancelPenaltiesType": {
+      "type": "object",
+      "title": "CancelPenaltiesType",
+      "properties": {
+        "CancelPenalty": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CancelPenaltiesType.CancelPenalty"
           },
-          "minItems" : 1,
-          "title" : "CancelPenalty"
+          "minItems": 1,
+          "title": "CancelPenalty"
         }
       },
-      "required" : [ "CancelPenalty" ],
-      "additionalProperties" : false
+      "required": ["CancelPenalty"],
+      "additionalProperties": false
     },
-    "RatePlansRef" : {
-      "type" : "object",
-      "title" : "RatePlansRef",
-      "properties" : {
-        "RatePlan" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RatePlanRef"
+    "RatePlansRef": {
+      "type": "object",
+      "title": "RatePlansRef",
+      "properties": {
+        "RatePlan": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RatePlanRef"
           },
-          "minItems" : 1,
-          "title" : "RatePlan"
+          "minItems": 1,
+          "title": "RatePlan"
         }
       },
-      "required" : [ "RatePlan" ],
-      "additionalProperties" : false
+      "required": ["RatePlan"],
+      "additionalProperties": false
     },
-    "Amenities" : {
-      "type" : "object",
-      "title" : "Amenities",
-      "properties" : {
-        "Amenity" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/Amenity"
+    "Amenities": {
+      "type": "object",
+      "title": "Amenities",
+      "properties": {
+        "Amenity": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Amenity"
           },
-          "minItems" : 1,
-          "title" : "Amenity"
+          "minItems": 1,
+          "title": "Amenity"
         }
       },
-      "required" : [ "Amenity" ],
-      "additionalProperties" : false
+      "required": ["Amenity"],
+      "additionalProperties": false
     },
-    "HotelRateInfo" : {
-      "type" : "object",
-      "title" : "HotelRateInfo",
-      "oneOf" : [ {
-        "properties" : {
-          "HotelInfo" : {
-            "$ref" : "#/definitions/HotelInfo",
-            "title" : "HotelInfo"
+    "HotelRateInfo": {
+      "type": "object",
+      "title": "HotelRateInfo",
+      "oneOf": [
+        {
+          "properties": {
+            "HotelInfo": {
+              "$ref": "#/definitions/HotelInfo",
+              "title": "HotelInfo"
+            },
+            "AlternateHotelInfos": {
+              "$ref": "#/definitions/AlternateHotelInfos",
+              "title": "AlternateHotelInfos"
+            },
+            "RateInfos": {
+              "$ref": "#/definitions/RateInfos",
+              "title": "RateInfos"
+            },
+            "RoomSets": {
+              "$ref": "#/definitions/RoomSetsType",
+              "title": "RoomSets"
+            },
+            "RateUnavailability": {
+              "$ref": "#/definitions/RateUnavailabilityType",
+              "title": "RateUnavailability"
+            }
           },
-          "AlternateHotelInfos" : {
-            "$ref" : "#/definitions/AlternateHotelInfos",
-            "title" : "AlternateHotelInfos"
-          },
-          "RateInfos" : {
-            "$ref" : "#/definitions/RateInfos",
-            "title" : "RateInfos"
-          },
-          "RoomSets" : {
-            "$ref" : "#/definitions/RoomSetsType",
-            "title" : "RoomSets"
-          },
-          "RateUnavailability" : {
-            "$ref" : "#/definitions/RateUnavailabilityType",
-            "title" : "RateUnavailability"
-          }
+          "additionalProperties": false
         },
-        "additionalProperties" : false
-      }, {
-        "properties" : {
-          "HotelInfo" : {
-            "$ref" : "#/definitions/HotelInfo",
-            "title" : "HotelInfo"
+        {
+          "properties": {
+            "HotelInfo": {
+              "$ref": "#/definitions/HotelInfo",
+              "title": "HotelInfo"
+            },
+            "AlternateHotelInfos": {
+              "$ref": "#/definitions/AlternateHotelInfos",
+              "title": "AlternateHotelInfos"
+            },
+            "RateInfos": {
+              "$ref": "#/definitions/RateInfos",
+              "title": "RateInfos"
+            },
+            "Rooms": {
+              "$ref": "#/definitions/Rooms",
+              "title": "Rooms"
+            },
+            "RateUnavailability": {
+              "$ref": "#/definitions/RateUnavailabilityType",
+              "title": "RateUnavailability"
+            }
           },
-          "AlternateHotelInfos" : {
-            "$ref" : "#/definitions/AlternateHotelInfos",
-            "title" : "AlternateHotelInfos"
-          },
-          "RateInfos" : {
-            "$ref" : "#/definitions/RateInfos",
-            "title" : "RateInfos"
-          },
-          "Rooms" : {
-            "$ref" : "#/definitions/Rooms",
-            "title" : "Rooms"
-          },
-          "RateUnavailability" : {
-            "$ref" : "#/definitions/RateUnavailabilityType",
-            "title" : "RateUnavailability"
-          }
-        },
-        "additionalProperties" : false
-      }
+          "additionalProperties": false
+        }
       ]
     },
-    "TranslatedHotelRateInfo" : {
-      "type" : "object",
-      "title" : "TranslatedHotelRateInfo",
-      "oneOf" : [ {
-        "properties" : {
-          "HotelInfo" : {
-            "$ref" : "#/definitions/HotelInfo",
-            "title" : "HotelInfo"
+    "TranslatedHotelRateInfo": {
+      "type": "object",
+      "title": "TranslatedHotelRateInfo",
+      "oneOf": [
+        {
+          "properties": {
+            "HotelInfo": {
+              "$ref": "#/definitions/HotelInfo",
+              "title": "HotelInfo"
+            },
+            "AlternateHotelInfos": {
+              "$ref": "#/definitions/AlternateHotelInfos",
+              "title": "AlternateHotelInfos"
+            },
+            "RateInfos": {
+              "$ref": "#/definitions/RateInfos",
+              "title": "RateInfos"
+            },
+            "RoomSets": {
+              "$ref": "#/definitions/RoomSetsType",
+              "title": "RoomSets"
+            },
+            "RateUnavailability": {
+              "$ref": "#/definitions/RateUnavailabilityType",
+              "title": "RateUnavailability"
+            },
+            "LanguageCode": {
+              "type": "string",
+              "title": "LanguageCode"
+            }
           },
-          "AlternateHotelInfos" : {
-            "$ref" : "#/definitions/AlternateHotelInfos",
-            "title" : "AlternateHotelInfos"
-          },
-          "RateInfos" : {
-            "$ref" : "#/definitions/RateInfos",
-            "title" : "RateInfos"
-          },
-          "RoomSets" : {
-            "$ref" : "#/definitions/RoomSetsType",
-            "title" : "RoomSets"
-          },
-          "RateUnavailability" : {
-            "$ref" : "#/definitions/RateUnavailabilityType",
-            "title" : "RateUnavailability"
-          },
-          "LanguageCode" : {
-            "type" : "string",
-            "title" : "LanguageCode"
-          }
+          "additionalProperties": false
         },
-        "additionalProperties" : false
-      }, {
-        "properties" : {
-          "HotelInfo" : {
-            "$ref" : "#/definitions/HotelInfo",
-            "title" : "HotelInfo"
+        {
+          "properties": {
+            "HotelInfo": {
+              "$ref": "#/definitions/HotelInfo",
+              "title": "HotelInfo"
+            },
+            "AlternateHotelInfos": {
+              "$ref": "#/definitions/AlternateHotelInfos",
+              "title": "AlternateHotelInfos"
+            },
+            "RateInfos": {
+              "$ref": "#/definitions/RateInfos",
+              "title": "RateInfos"
+            },
+            "Rooms": {
+              "$ref": "#/definitions/Rooms",
+              "title": "Rooms"
+            },
+            "RateUnavailability": {
+              "$ref": "#/definitions/RateUnavailabilityType",
+              "title": "RateUnavailability"
+            },
+            "LanguageCode": {
+              "type": "string",
+              "title": "LanguageCode"
+            }
           },
-          "AlternateHotelInfos" : {
-            "$ref" : "#/definitions/AlternateHotelInfos",
-            "title" : "AlternateHotelInfos"
-          },
-          "RateInfos" : {
-            "$ref" : "#/definitions/RateInfos",
-            "title" : "RateInfos"
-          },
-          "Rooms" : {
-            "$ref" : "#/definitions/Rooms",
-            "title" : "Rooms"
-          },
-          "RateUnavailability" : {
-            "$ref" : "#/definitions/RateUnavailabilityType",
-            "title" : "RateUnavailability"
-          },
-          "LanguageCode" : {
-            "type" : "string",
-            "title" : "LanguageCode"
-          }
-        },
-        "additionalProperties" : false
-      }
+          "additionalProperties": false
+        }
       ]
     },
-    "RateUnavailabilityType" : {
-      "type" : "object",
-      "title" : "RateUnavailabilityType",
-      "properties" : {
-        "RateSource" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RateSourceType"
+    "RateUnavailabilityType": {
+      "type": "object",
+      "title": "RateUnavailabilityType",
+      "properties": {
+        "RateSource": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RateSourceType"
           },
-          "minItems" : 1,
-          "title" : "RateSource"
+          "minItems": 1,
+          "title": "RateSource"
         }
       },
-      "required" : [ "RateSource" ],
-      "additionalProperties" : false
+      "required": ["RateSource"],
+      "additionalProperties": false
     },
-    "RateSourceType" : {
-      "type" : "object",
-      "title" : "RateSourceType",
-      "properties" : {
-        "Reason" : {
-          "type" : "string",
-          "title" : "Reason"
+    "RateSourceType": {
+      "type": "object",
+      "title": "RateSourceType",
+      "properties": {
+        "Reason": {
+          "type": "string",
+          "title": "Reason"
         },
-        "DisplayMessage" : {
-          "type" : "string",
-          "title" : "DisplayMessage"
+        "DisplayMessage": {
+          "type": "string",
+          "title": "DisplayMessage"
         },
-        "Source" : {
-          "type" : "string",
-          "title" : "Source"
+        "Source": {
+          "type": "string",
+          "title": "Source"
         }
       },
-      "required" : [ "Source", "Reason" ],
-      "additionalProperties" : false
+      "required": ["Source", "Reason"],
+      "additionalProperties": false
     },
-    "RoomSet" : {
-      "type" : "object",
-      "title" : "RoomSet",
-      "properties" : {
-        "RoomSetAttributes" : {
-          "$ref" : "#/definitions/RoomSetAttributes",
-          "title" : "RoomSetAttributes"
+    "RoomSet": {
+      "type": "object",
+      "title": "RoomSet",
+      "properties": {
+        "RoomSetAttributes": {
+          "$ref": "#/definitions/RoomSetAttributes",
+          "title": "RoomSetAttributes"
         },
-        "Room" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RoomType"
+        "Room": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RoomType"
           },
-          "minItems" : 1,
-          "title" : "Room"
+          "minItems": 1,
+          "title": "Room"
         }
       },
-      "required" : [ "Room" ],
-      "additionalProperties" : false
+      "required": ["Room"],
+      "additionalProperties": false
     },
-    "RoomSetAttributes" : {
-      "type" : "object",
-      "title" : "RoomSetAttributes",
-      "properties" : {
-        "RoomSetAttribute" : {
-          "type" : "array",
-          "title" : "RoomSetAttribute",
-          "items" : {
-            "$ref" : "#/definitions/RoomSetAttribute"
+    "RoomSetAttributes": {
+      "type": "object",
+      "title": "RoomSetAttributes",
+      "properties": {
+        "RoomSetAttribute": {
+          "type": "array",
+          "title": "RoomSetAttribute",
+          "items": {
+            "$ref": "#/definitions/RoomSetAttribute"
           },
-          "minItems" : 1
+          "minItems": 1
         }
       },
-      "required" : [ "RoomSetAttribute" ],
-      "additionalProperties" : false
+      "required": ["RoomSetAttribute"],
+      "additionalProperties": false
     },
-    "RoomSetAttribute" : {
-      "type" : "object",
-      "title" : "RoomSetAttribute",
-      "properties" : {
-        "Type" : {
-          "type" : "string",
-          "title" : "Type"
+    "RoomSetAttribute": {
+      "type": "object",
+      "title": "RoomSetAttribute",
+      "properties": {
+        "Type": {
+          "type": "string",
+          "title": "Type"
         },
-        "Code" : {
-          "type" : "integer",
-          "title" : "Code",
-          "minimum" : 1,
-          "maximum" : 2147483647,
-          "exclusiveMinimum" : false,
-          "exclusiveMaximum" : false
+        "Code": {
+          "type": "integer",
+          "title": "Code",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "exclusiveMinimum": false,
+          "exclusiveMaximum": false
         },
-        "Value" : {
-          "type" : "string",
-          "title" : "Value"
+        "Value": {
+          "type": "string",
+          "title": "Value"
         }
       },
-      "required" : ["Type"],
-      "additionalProperties" : false
+      "required": ["Type"],
+      "additionalProperties": false
     },
-    "RoomSetsType" : {
-      "type" : "object",
-      "title" : "RoomSetsType",
-      "properties" : {
-        "RoomSet" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RoomSet"
+    "RoomSetsType": {
+      "type": "object",
+      "title": "RoomSetsType",
+      "properties": {
+        "RoomSet": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RoomSet"
           },
-          "minItems" : 1,
-          "title" : "RoomSet"
+          "minItems": 1,
+          "title": "RoomSet"
         }
       },
-      "required" : [ "RoomSet" ],
-      "additionalProperties" : false
+      "required": ["RoomSet"],
+      "additionalProperties": false
     },
-    "RoomType.RoomDescription" : {
-      "type" : "object",
-      "title" : "RoomType.RoomDescription",
-      "properties" : {
-        "Name" : {
-          "type" : "string",
-          "title" : "Name"
+    "RoomType.RoomDescription": {
+      "type": "object",
+      "title": "RoomType.RoomDescription",
+      "properties": {
+        "Name": {
+          "type": "string",
+          "title": "Name"
         },
-        "Text" : {
-          "type" : "array",
-          "items" : {
-            "type" : "string"
+        "Text": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "minItems" : 0,
-          "title" : "Text"
+          "minItems": 0,
+          "title": "Text"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "RateInfoType" : {
-      "type" : "object",
-      "title" : "RateInfoType",
-      "properties" : {
-        "AmountBeforeTax" : {
-          "type" : "string",
+    "RateInfoType": {
+      "type": "object",
+      "title": "RateInfoType",
+      "properties": {
+        "AmountBeforeTax": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "AmountBeforeTax"
+          "title": "AmountBeforeTax"
         },
-        "RateKey" : {
-          "type" : "string",
-          "title" : "RateKey"
+        "RateKey": {
+          "type": "string",
+          "title": "RateKey"
         },
-        "AverageNightlyRate" : {
-          "type" : "string",
+        "AverageNightlyRate": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "AverageNightlyRate"
+          "title": "AverageNightlyRate"
         },
-        "AverageNightlyRateBeforeTax" : {
-          "type" : "string",
+        "AverageNightlyRateBeforeTax": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "AverageNightlyRateBeforeTax"
+          "title": "AverageNightlyRateBeforeTax"
         },
-        "EndDate" : {
-          "format" : "date",
-          "title" : "EndDate"
+        "EndDate": {
+          "format": "date",
+          "title": "EndDate"
         },
-        "AdditionalFeesInclusive" : {
-          "type" : "boolean",
-          "title" : "AdditionalFeesInclusive"
+        "AdditionalFeesInclusive": {
+          "type": "boolean",
+          "title": "AdditionalFeesInclusive"
         },
-        "LocalFeesInclusive" : {
-          "type" : "boolean",
-          "title" : "LocalFeesInclusive"
+        "LocalFeesInclusive": {
+          "type": "boolean",
+          "title": "LocalFeesInclusive"
         },
-        "AmountAfterTax" : {
-          "type" : "string",
+        "AmountAfterTax": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "AmountAfterTax"
+          "title": "AmountAfterTax"
         },
-        "MinSellingRate" : {
-          "type" : "string",
+        "MinSellingRate": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "MinSellingRate"
+          "title": "MinSellingRate"
         },
-        "ApproxTotalPrice" : {
-          "type" : "string",
+        "ApproxTotalPrice": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "ApproxTotalPrice"
+          "title": "ApproxTotalPrice"
         },
-        "RateSource" : {
-          "type" : "string",
-          "title" : "RateSource"
+        "RateSource": {
+          "type": "string",
+          "title": "RateSource"
         },
-        "RateMarkupDetails" : {
-          "$ref" : "#/definitions/RateMarkupDetails",
-          "title" : "RateMarkupDetails"
+        "RateMarkupDetails": {
+          "$ref": "#/definitions/RateMarkupDetails",
+          "title": "RateMarkupDetails"
         },
-        "TaxInclusive" : {
-          "type" : "boolean",
-          "title" : "TaxInclusive"
+        "TaxInclusive": {
+          "type": "boolean",
+          "title": "TaxInclusive"
         },
-        "Commission" : {
-          "$ref" : "#/definitions/CommissionType",
-          "title" : "Commission"
+        "Commission": {
+          "$ref": "#/definitions/CommissionType",
+          "title": "Commission"
         },
-        "IncidentalsInclusive" : {
-          "type" : "boolean",
-          "title" : "IncidentalsInclusive"
+        "IncidentalsInclusive": {
+          "type": "boolean",
+          "title": "IncidentalsInclusive"
         },
-        "HighestNightlyRate" : {
-          "type" : "string",
+        "HighestNightlyRate": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "HighestNightlyRate"
+          "title": "HighestNightlyRate"
         },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "type" : "string",
-          "title" : "CurrencyCode"
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "type": "string",
+          "title": "CurrencyCode"
         },
-        "StartDate" : {
-          "format" : "date",
-          "title" : "StartDate"
+        "StartDate": {
+          "format": "date",
+          "title": "StartDate"
         }
       },
-      "required" : [ "RateSource", "RateKey" ],
-      "additionalProperties" : false
+      "required": ["RateSource", "RateKey"],
+      "additionalProperties": false
     },
-    "RateMarkupDetails" : {
-      "type" : "object",
-      "title" : "RateMarkupDetails",
+    "RateMarkupDetails": {
+      "type": "object",
+      "title": "RateMarkupDetails",
 
-      "additionalProperties" : true
+      "additionalProperties": true
     },
-    "RatePlanInclusionType" : {
-      "type" : "object",
-      "title" : "RatePlanInclusionType",
-      "properties" : {
-        "Code" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : 1,
-          "exclusiveMinimum" : false,
-          "title" : "Code"
+    "RatePlanInclusionType": {
+      "type": "object",
+      "title": "RatePlanInclusionType",
+      "properties": {
+        "Code": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": 1,
+          "exclusiveMinimum": false,
+          "title": "Code"
         },
-        "Description" : {
-          "type" : "string",
-          "title" : "Description"
+        "Description": {
+          "type": "string",
+          "title": "Description"
         },
-        "Text" : {
-          "type" : "array",
-          "items" : {
-            "type" : "string"
+        "Text": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "minItems" : 0,
-          "title" : "Text"
+          "minItems": 0,
+          "title": "Text"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "RateFeesType" : {
-      "type" : "object",
-      "title" : "RateFeesType",
-      "properties" : {
-        "Amount" : {
-          "type" : "string",
+    "RateFeesType": {
+      "type": "object",
+      "title": "RateFeesType",
+      "properties": {
+        "Amount": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "Amount"
+          "title": "Amount"
         },
-        "Fee" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RateFeesType.Fee"
+        "Fee": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RateFeesType.Fee"
           },
-          "minItems" : 0,
-          "title" : "Fee"
+          "minItems": 0,
+          "title": "Fee"
         },
-        "FeeGroups" : {
-          "$ref" : "#/definitions/FeeGroupsType",
-          "title" : "FeeGroups"
+        "FeeGroups": {
+          "$ref": "#/definitions/FeeGroupsType",
+          "title": "FeeGroups"
         },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "type" : "string",
-          "title" : "CurrencyCode"
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "type": "string",
+          "title": "CurrencyCode"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "RateFeesType.Fee" : {
-      "type" : "object",
-      "title" : "RateFeesType.Fee",
-      "properties" : {
-        "Amount" : {
-          "type" : "string",
+    "RateFeesType.Fee": {
+      "type": "object",
+      "title": "RateFeesType.Fee",
+      "properties": {
+        "Amount": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "Amount"
+          "title": "Amount"
         },
-        "EndDate" : {
-          "format" : "date",
-          "title" : "EndDate"
+        "EndDate": {
+          "format": "date",
+          "title": "EndDate"
         },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "type" : "string",
-          "title" : "CurrencyCode"
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "type": "string",
+          "title": "CurrencyCode"
         },
-        "StartDate" : {
-          "format" : "date",
-          "title" : "StartDate"
+        "StartDate": {
+          "format": "date",
+          "title": "StartDate"
         }
       },
-      "required" : [ "Amount", "CurrencyCode" ],
-      "additionalProperties" : false
+      "required": ["Amount", "CurrencyCode"],
+      "additionalProperties": false
     },
-    "FeeGroupsType" : {
-      "type" : "object",
-      "title" : "FeeGroupsType",
-      "properties" : {
-        "FeeGroup" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/FeeGroupsType.FeeGroup"
+    "FeeGroupsType": {
+      "type": "object",
+      "title": "FeeGroupsType",
+      "properties": {
+        "FeeGroup": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FeeGroupsType.FeeGroup"
           },
-          "minItems" : 1,
-          "title" : "FeeGroup"
+          "minItems": 1,
+          "title": "FeeGroup"
         }
       },
-      "required" : [ "FeeGroup" ],
-      "additionalProperties" : false
+      "required": ["FeeGroup"],
+      "additionalProperties": false
     },
-    "FeeGroupsType.FeeGroup" : {
-      "type" : "object",
-      "title" : "FeeGroupsType.FeeGroup",
-      "properties" : {
-        "Amount" : {
-          "type" : "string",
+    "FeeGroupsType.FeeGroup": {
+      "type": "object",
+      "title": "FeeGroupsType.FeeGroup",
+      "properties": {
+        "Amount": {
+          "type": "string",
           "format": "number",
           "pattern": "^-?(([1-9][0-9]+)|([0-9]))(\\.[0-9]{1,3})?$",
-          "title" : "Amount"
+          "title": "Amount"
         },
-        "FeeDescription" : {
-          "$ref" : "#/definitions/FeeGroupsType.FeeGroup.FeeDescription",
-          "title" : "FeeDescription"
+        "FeeDescription": {
+          "$ref": "#/definitions/FeeGroupsType.FeeGroup.FeeDescription",
+          "title": "FeeDescription"
         },
-        "Code" : {
-          "type" : "integer",
-          "maximum" : 2147483647,
-          "exclusiveMaximum" : false,
-          "minimum" : 1,
-          "exclusiveMinimum" : false,
-          "title" : "Code"
+        "Code": {
+          "type": "integer",
+          "maximum": 2147483647,
+          "exclusiveMaximum": false,
+          "minimum": 1,
+          "exclusiveMinimum": false,
+          "title": "Code"
         },
-        "Description" : {
-          "type" : "string",
-          "title" : "Description"
+        "Description": {
+          "type": "string",
+          "title": "Description"
         },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "type" : "string",
-          "title" : "CurrencyCode"
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "type": "string",
+          "title": "CurrencyCode"
         }
       },
-      "required" : [ "Code", "Amount", "CurrencyCode" ],
-      "additionalProperties" : false
+      "required": ["Code", "Amount", "CurrencyCode"],
+      "additionalProperties": false
     },
-    "FeeGroupsType.FeeGroup.FeeDescription" : {
-      "type" : "object",
-      "title" : "FeeGroupsType.FeeGroup.FeeDescription",
-      "properties" : {
-        "Text" : {
-          "type" : "array",
-          "items" : {
-            "type" : "string"
+    "FeeGroupsType.FeeGroup.FeeDescription": {
+      "type": "object",
+      "title": "FeeGroupsType.FeeGroup.FeeDescription",
+      "properties": {
+        "Text": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "minItems" : 1,
-          "title" : "Text"
+          "minItems": 1,
+          "title": "Text"
         }
       },
-      "required" : [ "Text" ],
-      "additionalProperties" : false
+      "required": ["Text"],
+      "additionalProperties": false
     },
-    "AdditionalDetails" : {
-      "type" : "object",
-      "title" : "AdditionalDetails",
-      "properties" : {
-        "AdditionalDetail" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/AdditionalDetail"
+    "AdditionalDetails": {
+      "type": "object",
+      "title": "AdditionalDetails",
+      "properties": {
+        "AdditionalDetail": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AdditionalDetail"
           },
-          "minItems" : 1,
-          "title" : "AdditionalDetail"
+          "minItems": 1,
+          "title": "AdditionalDetail"
         }
       },
-      "required" : [ "AdditionalDetail" ],
-      "additionalProperties" : false
+      "required": ["AdditionalDetail"],
+      "additionalProperties": false
     },
-    "OffsetDropTimeType" : {
-      "properties" : { },
-      "enum" : [ "BeforeArrival", "AfterBooking", "AfterConfirmation", "AfterArrival", "AfterDeparture" ],
-      "type" : "string",
-      "additionalProperties" : false
+    "OffsetDropTimeType": {
+      "properties": {},
+      "enum": [
+        "BeforeArrival",
+        "AfterBooking",
+        "AfterConfirmation",
+        "AfterArrival",
+        "AfterDeparture"
+      ],
+      "type": "string",
+      "additionalProperties": false
     },
-    "CodeContextType" : {
-      "properties" : { },
-      "enum" : [ "GLOBAL", "SABRE" ],
-      "type" : "string",
-      "additionalProperties" : false
+    "CodeContextType": {
+      "properties": {},
+      "enum": ["GLOBAL", "SABRE"],
+      "type": "string",
+      "additionalProperties": false
     },
-    "UnitOfMeasureType" : {
-      "properties" : { },
-      "enum" : [ "MI", "KM" ],
-      "type" : "string",
-      "additionalProperties" : false
+    "UnitOfMeasureType": {
+      "properties": {},
+      "enum": ["MI", "KM"],
+      "type": "string",
+      "additionalProperties": false
     }
   },
-  "type" : "object",
-  "properties" : {
-    "GetHotelRateInfoRS" : {
-      "$ref" : "#/definitions/GetHotelRateInfoRS"
+  "type": "object",
+  "properties": {
+    "GetHotelRateInfoRS": {
+      "$ref": "#/definitions/GetHotelRateInfoRS"
     }
   },
-  "required" : [ "GetHotelRateInfoRS" ],
-  "additionalProperties" : false
+  "required": ["GetHotelRateInfoRS"],
+  "additionalProperties": false
 }

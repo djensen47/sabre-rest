@@ -11,9 +11,14 @@ Source: [Get Hotel Rate Info v5 — Resources ZIP](https://developer.sabre.com/r
 
 - `schema/GetHotelRateInfoRQ.json` — request JSON Schema.
 - `schema/GetHotelRateInfoRS.json` — response JSON Schema.
-- `sample-payload.json` — canonical working request and response pair. The
-  file is formatted as `REQ-\n{...}\nRES-\n{...}` (not valid JSON as a whole —
-  split on the `REQ-` / `RES-` markers).
+- `sample-request.json` — canonical working request body.
+- `sample-response.json` — canonical working response body (populated
+  `HotelRateInfos.HotelRateInfo[]` with `RateKey`s, cancel penalties, and
+  guarantee policies).
+
+The original Sabre ZIP ships these two payloads concatenated into a single
+`REQ-\n{...}\nRES-\n{...}` file; they are split here so each side is valid
+JSON on its own.
 
 ## Why these live here
 

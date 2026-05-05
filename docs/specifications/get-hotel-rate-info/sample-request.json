@@ -1,0 +1,41 @@
+{
+  "GetHotelRateInfoRQ": {
+    "POS": {
+      "Source": {
+        "PseudoCityCode": "tm61"
+      }
+    },
+    "HotelRefs": {
+      "HotelRef": {
+        "HotelCode": "1212",
+        "CodeContext": "SABRE"
+      }
+    },
+    "RateInfoRef": {
+      "StayDateTimeRange": {
+        "StartDate": "2024-05-15",
+        "EndDate": "2024-05-20"
+      },
+      "RateRange": {
+        "Min": 0.1,
+        "Max": 5000
+      },
+      "Rooms": {
+        "Room": [
+          {
+            "ChildAges": "1",
+            "Index": 1,
+            "Adults": 2,
+            "Children": 1
+          }
+        ]
+      },
+      "RateSource": "100,113,112,110,130",
+      "CurrencyCode": "AUD",
+      "PrepaidQualifier": "IncludePrepaid",
+      "ConvertedRateInfoOnly": false,
+      "TravellerCountry": "IN"
+    },
+    "version": "5.0.0"
+  }
+}

@@ -1,34 +1,34 @@
 {
-  "id" : "http://services.sabre.com/hotel/rate/v5_0_0/GetHotelRateInfoRQ#",
-  "definitions" : {
-    "GetHotelRateInfoRQ" : {
-      "type" : "object",
-      "title" : "GetHotelRateInfoRQ",
+  "id": "http://services.sabre.com/hotel/rate/v5_0_0/GetHotelRateInfoRQ#",
+  "definitions": {
+    "GetHotelRateInfoRQ": {
+      "type": "object",
+      "title": "GetHotelRateInfoRQ",
       "oneOf": [
         {
           "properties": {
-            "version" : {
-              "type" : "string",
-              "minLength" : 1,
-              "maxLength" : 255
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             },
-            "CorporateNumber" : {
+            "CorporateNumber": {
               "type": "string",
               "minLength": 1,
               "title": "CorporateNumber",
               "pattern": "^([^\\s,|]*)$"
             },
-            "POS" : {
-              "$ref" : "#/definitions/POS",
-              "title" : "POS"
+            "POS": {
+              "$ref": "#/definitions/POS",
+              "title": "POS"
             },
-            "Profiles" : {
-              "$ref" : "#/definitions/Profiles",
-              "title" : "Profiles"
+            "Profiles": {
+              "$ref": "#/definitions/Profiles",
+              "title": "Profiles"
             },
-            "TravelerUniqueID" : {
-              "type" : "string",
-              "title" : "TravelerUniqueID"
+            "TravelerUniqueID": {
+              "type": "string",
+              "title": "TravelerUniqueID"
             },
             "HotelRefs": {
               "$ref": "#/definitions/HotelRefs",
@@ -44,26 +44,26 @@
         },
         {
           "properties": {
-            "version" : {
-              "type" : "string",
-              "minLength" : 1,
-              "maxLength" : 255
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
             },
-            "CorporateNumber" : {
-              "type" : "string",
-              "title" : "CorporateNumber"
+            "CorporateNumber": {
+              "type": "string",
+              "title": "CorporateNumber"
             },
-            "POS" : {
-              "$ref" : "#/definitions/POS",
-              "title" : "POS"
+            "POS": {
+              "$ref": "#/definitions/POS",
+              "title": "POS"
             },
-            "Profiles" : {
-              "$ref" : "#/definitions/Profiles",
-              "title" : "Profiles"
+            "Profiles": {
+              "$ref": "#/definitions/Profiles",
+              "title": "Profiles"
             },
-            "TravelerUniqueID" : {
-              "type" : "string",
-              "title" : "TravelerUniqueID"
+            "TravelerUniqueID": {
+              "type": "string",
+              "title": "TravelerUniqueID"
             },
             "RateKeyRef": {
               "$ref": "#/definitions/RateKeyRef",
@@ -76,529 +76,529 @@
       ]
     },
 
-    "Profiles" : {
-      "type" : "object",
-      "title" : "Profiles",
-      "properties" : {
-        "Profile" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/ProfileType"
+    "Profiles": {
+      "type": "object",
+      "title": "Profiles",
+      "properties": {
+        "Profile": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProfileType"
           },
-          "minItems" : 1,
-          "title" : "Profile"
+          "minItems": 1,
+          "title": "Profile"
         }
       },
-      "required" : [ "Profile" ],
-      "additionalProperties" : false
+      "required": ["Profile"],
+      "additionalProperties": false
     },
-    "ProfileType" : {
-      "type" : "object",
-      "title" : "ProfileType",
-      "properties" : {
-        "Identity" : {
-          "$ref" : "#/definitions/ProfileType.Identity",
-          "title" : "Identity"
+    "ProfileType": {
+      "type": "object",
+      "title": "ProfileType",
+      "properties": {
+        "Identity": {
+          "$ref": "#/definitions/ProfileType.Identity",
+          "title": "Identity"
         },
-        "Type" : {
-          "type" : "string",
-          "title" : "Type"
+        "Type": {
+          "type": "string",
+          "title": "Type"
         }
       },
-      "required" : [ "Identity" ],
-      "additionalProperties" : false
+      "required": ["Identity"],
+      "additionalProperties": false
     },
-    "ProfileType.Identity" : {
-      "type" : "object",
-      "title" : "ProfileType.Identity",
-      "properties" : {
-        "otherAttributes" : {
-          "title" : "otherAttributes",
-          "type" : "object",
-          "additionalProperties" : {
-            "type" : "string"
+    "ProfileType.Identity": {
+      "type": "object",
+      "title": "ProfileType.Identity",
+      "properties": {
+        "otherAttributes": {
+          "title": "otherAttributes",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
           }
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "POS" : {
-      "type" : "object",
-      "title" : "POS",
-      "properties" : {
-        "Source" : {
-          "$ref" : "#/definitions/POS.Source",
-          "title" : "Source"
+    "POS": {
+      "type": "object",
+      "title": "POS",
+      "properties": {
+        "Source": {
+          "$ref": "#/definitions/POS.Source",
+          "title": "Source"
         }
       },
-      "required" : [ "Source" ],
-      "additionalProperties" : false
+      "required": ["Source"],
+      "additionalProperties": false
     },
-    "POS.Source" : {
-      "type" : "object",
-      "title" : "POS.Source",
-      "properties" : {
-        "PseudoCityCode" : {
-          "pattern" : "^([a-zA-Z0-9]{4})$",
-          "type" : "string",
-          "title" : "PseudoCityCode"
+    "POS.Source": {
+      "type": "object",
+      "title": "POS.Source",
+      "properties": {
+        "PseudoCityCode": {
+          "pattern": "^([a-zA-Z0-9]{4})$",
+          "type": "string",
+          "title": "PseudoCityCode"
         }
       },
-      "required" : [ "PseudoCityCode" ],
-      "additionalProperties" : false
+      "required": ["PseudoCityCode"],
+      "additionalProperties": false
     },
-    "HotelRefs" : {
-      "type" : "object",
-      "title" : "HotelRefs",
-      "properties" : {
-        "HotelRef" : {
-          "$ref" : "#/definitions/HotelRefs.HotelRef",
-          "title" : "HotelRef"
+    "HotelRefs": {
+      "type": "object",
+      "title": "HotelRefs",
+      "properties": {
+        "HotelRef": {
+          "$ref": "#/definitions/HotelRefs.HotelRef",
+          "title": "HotelRef"
         }
       },
-      "required" : [ "HotelRef" ],
-      "additionalProperties" : false
+      "required": ["HotelRef"],
+      "additionalProperties": false
     },
-    "HotelRefs.HotelRef" : {
-      "type" : "object",
-      "title" : "HotelRefs.HotelRef",
-      "properties" : {
-        "CodeContext" : {
-          "$ref" : "#/definitions/CodeContextType",
-          "title" : "CodeContext",
-          "default" : "SABRE"
+    "HotelRefs.HotelRef": {
+      "type": "object",
+      "title": "HotelRefs.HotelRef",
+      "properties": {
+        "CodeContext": {
+          "$ref": "#/definitions/CodeContextType",
+          "title": "CodeContext",
+          "default": "SABRE"
         },
-        "HotelCode" : {
-          "minLength" : 1,
-          "maxLength" : 20,
-          "type" : "string",
-          "title" : "HotelCode"
+        "HotelCode": {
+          "minLength": 1,
+          "maxLength": 20,
+          "type": "string",
+          "title": "HotelCode"
         }
       },
-      "required" : [ "HotelCode" ],
-      "additionalProperties" : false
+      "required": ["HotelCode"],
+      "additionalProperties": false
     },
-    "CodeContextType" : {
-      "properties" : { },
-      "enum" : [ "GLOBAL", "SABRE" ],
-      "type" : "string",
-      "additionalProperties" : false
+    "CodeContextType": {
+      "properties": {},
+      "enum": ["GLOBAL", "SABRE"],
+      "type": "string",
+      "additionalProperties": false
     },
-    "RateInfoRef" : {
-      "type" : "object",
-      "title" : "RateInfoRef",
-      "properties" : {
-        "StayDateTimeRange" : {
-          "$ref" : "#/definitions/DateRangeTypeRef",
-          "title" : "StayDateTimeRange"
+    "RateInfoRef": {
+      "type": "object",
+      "title": "RateInfoRef",
+      "properties": {
+        "StayDateTimeRange": {
+          "$ref": "#/definitions/DateRangeTypeRef",
+          "title": "StayDateTimeRange"
         },
-        "Rooms" : {
-          "$ref" : "#/definitions/RateInfoRef.Rooms",
-          "title" : "Rooms"
+        "Rooms": {
+          "$ref": "#/definitions/RateInfoRef.Rooms",
+          "title": "Rooms"
         },
-        "RatePlanCandidates" : {
-          "$ref" : "#/definitions/RatePlanCandidates",
-          "title" : "RatePlanCandidates"
+        "RatePlanCandidates": {
+          "$ref": "#/definitions/RatePlanCandidates",
+          "title": "RatePlanCandidates"
         },
-        "ConvertedRateInfoOnly" : {
-          "type" : "boolean",
-          "title" : "ConvertedRateInfoOnly",
-          "default" : true
+        "ConvertedRateInfoOnly": {
+          "type": "boolean",
+          "title": "ConvertedRateInfoOnly",
+          "default": true
         },
-        "ApplyGovernmentPerDiem" : {
-          "type" : "boolean",
-          "title" : "ApplyGovernmentPerDiem"
+        "ApplyGovernmentPerDiem": {
+          "type": "boolean",
+          "title": "ApplyGovernmentPerDiem"
         },
-        "LoyaltyIds" : {
-          "$ref" : "#/definitions/LoyaltyIds",
-          "title" : "LoyaltyIds"
+        "LoyaltyIds": {
+          "$ref": "#/definitions/LoyaltyIds",
+          "title": "LoyaltyIds"
         },
-        "LanguageCode" : {
-          "type" : "string",
-          "title" : "LanguageCode"
+        "LanguageCode": {
+          "type": "string",
+          "title": "LanguageCode"
         },
-        "PrepaidQualifier" : {
-          "$ref" : "#/definitions/PrepaidQualifierType",
-          "title" : "PrepaidQualifier",
-          "default" : "#/definitions/PrepaidQualifierType.IncludePrepaid"
+        "PrepaidQualifier": {
+          "$ref": "#/definitions/PrepaidQualifierType",
+          "title": "PrepaidQualifier",
+          "default": "#/definitions/PrepaidQualifierType.IncludePrepaid"
         },
-        "RateSource" : {
-          "type" : "string",
-          "title" : "RateSource"
+        "RateSource": {
+          "type": "string",
+          "title": "RateSource"
         },
-        "CorpDiscount" : {
-          "pattern" : "^([0-9a-zA-Z]{1,20})$",
-          "type" : "string",
-          "title" : "CorpDiscount"
+        "CorpDiscount": {
+          "pattern": "^([0-9a-zA-Z]{1,20})$",
+          "type": "string",
+          "title": "CorpDiscount"
         },
-        "RateRange" : {
-          "$ref" : "#/definitions/RateRange",
-          "title" : "RateRange"
+        "RateRange": {
+          "$ref": "#/definitions/RateRange",
+          "title": "RateRange"
         },
-        "RateFilters" : {
-          "$ref" : "#/definitions/RateFilters",
-          "title" : "RateFilters"
+        "RateFilters": {
+          "$ref": "#/definitions/RateFilters",
+          "title": "RateFilters"
         },
-        "FrequentFlyerNumber" : {
-          "type" : "string",
-          "title" : "FrequentFlyerNumber"
+        "FrequentFlyerNumber": {
+          "type": "string",
+          "title": "FrequentFlyerNumber"
         },
-        "SortOrder" : {
-          "$ref" : "#/definitions/SortOrderType",
-          "title" : "SortOrder"
+        "SortOrder": {
+          "$ref": "#/definitions/SortOrderType",
+          "title": "SortOrder"
         },
-        "SortBy" : {
-          "type" : "string",
-          "title" : "SortBy",
-          "default" : "NegotiatedRates"
+        "SortBy": {
+          "type": "string",
+          "title": "SortBy",
+          "default": "NegotiatedRates"
         },
-        "SplitDescriptions" : {
-          "type" : "boolean",
-          "title" : "SplitDescriptions",
-          "default" : false
+        "SplitDescriptions": {
+          "type": "boolean",
+          "title": "SplitDescriptions",
+          "default": false
         },
-        "CurrencyCode" : {
-          "pattern" : "^([A-Z]{3})$",
-          "type" : "string",
-          "title" : "CurrencyCode"
+        "CurrencyCode": {
+          "pattern": "^([A-Z]{3})$",
+          "type": "string",
+          "title": "CurrencyCode"
         },
-        "ShopKey" : {
-          "type" : "string",
-          "title" : "ShopKey"
+        "ShopKey": {
+          "type": "string",
+          "title": "ShopKey"
         },
-        "RefundableOnly" : {
-          "type" : "boolean",
-          "title" : "RefundableOnly",
-          "default" : false
+        "RefundableOnly": {
+          "type": "boolean",
+          "title": "RefundableOnly",
+          "default": false
         },
-        "TravellerCountry" : {
-          "pattern" : "^([a-zA-Z]{2})$",
-          "type" : "string",
-          "title" : "TravellerCountry"
+        "TravellerCountry": {
+          "pattern": "^([a-zA-Z]{2})$",
+          "type": "string",
+          "title": "TravellerCountry"
         },
-        "TranslatedInfoOnly" : {
-          "type" : "boolean",
-          "title" : "TranslatedInfoOnly"
+        "TranslatedInfoOnly": {
+          "type": "boolean",
+          "title": "TranslatedInfoOnly"
         }
       },
-      "required" : [ "StayDateTimeRange", "Rooms" ],
-      "additionalProperties" : false
+      "required": ["StayDateTimeRange", "Rooms"],
+      "additionalProperties": false
     },
-    "RateFilters" : {
-      "type" : "object",
-      "title" : "RateFilters",
-      "properties" : {
-        "RateFilter" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RateFilter"
+    "RateFilters": {
+      "type": "object",
+      "title": "RateFilters",
+      "properties": {
+        "RateFilter": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RateFilter"
           },
-          "minItems" : 1,
-          "title" : "RateFilter"
+          "minItems": 1,
+          "title": "RateFilter"
         }
       },
-      "required" : [ "RateFilter" ],
-      "additionalProperties" : false
+      "required": ["RateFilter"],
+      "additionalProperties": false
     },
-    "RateFilter" : {
-      "type" : "object",
-      "title" : "RateFilter",
-      "properties" : {
-        "Action" : {
-          "$ref" : "#/definitions/Action",
-          "title" : "Action"
+    "RateFilter": {
+      "type": "object",
+      "title": "RateFilter",
+      "properties": {
+        "Action": {
+          "$ref": "#/definitions/Action",
+          "title": "Action"
         },
-        "Type" : {
-          "type" : "string",
-          "title" : "Type"
+        "Type": {
+          "type": "string",
+          "title": "Type"
         },
-        "Value" : {
-          "type" : "string",
-          "title" : "Value"
+        "Value": {
+          "type": "string",
+          "title": "Value"
         }
       },
-      "required" : [ "Type", "Value", "Action" ],
-      "additionalProperties" : false
+      "required": ["Type", "Value", "Action"],
+      "additionalProperties": false
     },
-    "Action" : {
-      "properties" : { },
-      "enum" : [ "Exclude", "Include" ],
-      "type" : "string",
-      "additionalProperties" : false
+    "Action": {
+      "properties": {},
+      "enum": ["Exclude", "Include"],
+      "type": "string",
+      "additionalProperties": false
     },
-    "RateKeyRef" : {
-      "type" : "object",
-      "title" : "RateKeyRef",
-      "properties" : {
-        "RateRange" : {
-          "$ref" : "#/definitions/RateRange",
-          "title" : "RateRange"
+    "RateKeyRef": {
+      "type": "object",
+      "title": "RateKeyRef",
+      "properties": {
+        "RateRange": {
+          "$ref": "#/definitions/RateRange",
+          "title": "RateRange"
         },
-        "RateFilters" : {
-          "$ref" : "#/definitions/RateFilters",
-          "title" : "RateFilters"
+        "RateFilters": {
+          "$ref": "#/definitions/RateFilters",
+          "title": "RateFilters"
         },
-        "RoomSetTypes" : {
-          "$ref" : "#/definitions/RoomSetTypes",
-          "title" : "RoomSetTypes"
+        "RoomSetTypes": {
+          "$ref": "#/definitions/RoomSetTypes",
+          "title": "RoomSetTypes"
         },
-        "RateKey" : {
-          "type" : "string",
-          "title" : "RateKey"
+        "RateKey": {
+          "type": "string",
+          "title": "RateKey"
         },
-        "PrepaidQualifier" : {
-          "$ref" : "#/definitions/PrepaidQualifierType",
-          "title" : "PrepaidQualifier",
-          "default" : "#/definitions/PrepaidQualifierType.IncludePrepaid"
+        "PrepaidQualifier": {
+          "$ref": "#/definitions/PrepaidQualifierType",
+          "title": "PrepaidQualifier",
+          "default": "#/definitions/PrepaidQualifierType.IncludePrepaid"
         },
-        "RefundableOnly" : {
-          "type" : "boolean",
-          "title" : "RefundableOnly",
-          "default" : false
+        "RefundableOnly": {
+          "type": "boolean",
+          "title": "RefundableOnly",
+          "default": false
         },
-        "ConvertedRateInfoOnly" : {
-          "type" : "boolean",
-          "title" : "ConvertedRateInfoOnly",
-          "default" : true
+        "ConvertedRateInfoOnly": {
+          "type": "boolean",
+          "title": "ConvertedRateInfoOnly",
+          "default": true
         },
-        "ExactMatchOnly" : {
-          "type" : "boolean",
-          "title" : "ExactMatchOnly",
-          "default" : false
+        "ExactMatchOnly": {
+          "type": "boolean",
+          "title": "ExactMatchOnly",
+          "default": false
         },
-        "TravellerCountry" : {
-          "pattern" : "^([a-zA-Z]{2})$",
-          "type" : "string",
-          "title" : "TravellerCountry"
+        "TravellerCountry": {
+          "pattern": "^([a-zA-Z]{2})$",
+          "type": "string",
+          "title": "TravellerCountry"
         },
-        "RateSource" : {
-          "type" : "string",
-          "title" : "RateSource"
+        "RateSource": {
+          "type": "string",
+          "title": "RateSource"
         },
-        "SortOrder" : {
-          "$ref" : "#/definitions/SortOrderType",
-          "title" : "SortOrder"
+        "SortOrder": {
+          "$ref": "#/definitions/SortOrderType",
+          "title": "SortOrder"
         },
-        "SortBy" : {
-          "type" : "string",
-          "title" : "SortBy",
-          "default" : "NegotiatedRates"
+        "SortBy": {
+          "type": "string",
+          "title": "SortBy",
+          "default": "NegotiatedRates"
         },
-        "ShopKey" : {
-          "type" : "string",
-          "title" : "ShopKey"
+        "ShopKey": {
+          "type": "string",
+          "title": "ShopKey"
         }
       },
-      "required" : [ "RateKey" ],
-      "additionalProperties" : false
+      "required": ["RateKey"],
+      "additionalProperties": false
     },
-    "SortOrderType" : {
-      "properties" : { },
-      "enum" : [ "ASC", "DESC" ],
-      "additionalProperties" : false
+    "SortOrderType": {
+      "properties": {},
+      "enum": ["ASC", "DESC"],
+      "additionalProperties": false
     },
-    "DateRangeTypeRef" : {
-      "type" : "object",
-      "title" : "DateRangeTypeRef",
-      "properties" : {
-        "EndDate" : {
-          "format" : "date",
-          "title" : "EndDate"
+    "DateRangeTypeRef": {
+      "type": "object",
+      "title": "DateRangeTypeRef",
+      "properties": {
+        "EndDate": {
+          "format": "date",
+          "title": "EndDate"
         },
-        "StartDate" : {
-          "format" : "date",
-          "title" : "StartDate"
+        "StartDate": {
+          "format": "date",
+          "title": "StartDate"
         },
-        "CheckInTime" : {
-          "type" : "string",
-          "title" : "CheckInTime"
+        "CheckInTime": {
+          "type": "string",
+          "title": "CheckInTime"
         },
-        "CheckOutTime" : {
-          "type" : "string",
-          "title" : "CheckOutTime"
+        "CheckOutTime": {
+          "type": "string",
+          "title": "CheckOutTime"
         },
-        "DurationInHours" : {
-          "type" : "integer",
-          "minimum" : 0,
-          "exclusiveMinimum" : true,
-          "title" : "DurationInHours"
+        "DurationInHours": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMinimum": true,
+          "title": "DurationInHours"
         }
       },
-      "required" : [ "StartDate", "EndDate" ],
-      "additionalProperties" : false
+      "required": ["StartDate", "EndDate"],
+      "additionalProperties": false
     },
-    "RateInfoRef.Rooms" : {
-      "type" : "object",
-      "title" : "RateInfoRef.Rooms",
-      "properties" : {
-        "RoomSetTypes" : {
-          "$ref" : "#/definitions/RoomSetTypes",
-          "title" : "RoomSetTypes"
+    "RateInfoRef.Rooms": {
+      "type": "object",
+      "title": "RateInfoRef.Rooms",
+      "properties": {
+        "RoomSetTypes": {
+          "$ref": "#/definitions/RoomSetTypes",
+          "title": "RoomSetTypes"
         },
-        "Room" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/Room"
+        "Room": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Room"
           },
-          "minItems" : 1,
-          "title" : "Room"
+          "minItems": 1,
+          "title": "Room"
         }
       },
-      "required" : [ "Room" ],
-      "additionalProperties" : false
+      "required": ["Room"],
+      "additionalProperties": false
     },
-    "RoomSetTypes" : {
-      "type" : "object",
-      "title" : "RoomSetTypes",
-      "properties" : {
-        "RoomSet" : {
-          "type" : "array",
-          "title" : "RoomSet",
-          "items" : {
-            "$ref" : "#/definitions/RoomSet"
+    "RoomSetTypes": {
+      "type": "object",
+      "title": "RoomSetTypes",
+      "properties": {
+        "RoomSet": {
+          "type": "array",
+          "title": "RoomSet",
+          "items": {
+            "$ref": "#/definitions/RoomSet"
           },
-          "maxItems" : 10,
-          "minItems" : 1
+          "maxItems": 10,
+          "minItems": 1
         }
       },
-      "required" : [ "RoomSet" ],
-      "additionalProperties" : false
+      "required": ["RoomSet"],
+      "additionalProperties": false
     },
-    "RoomSet" : {
-      "type" : "object",
-      "title" : "RoomSet",
-      "properties" : {
-        "Type" : {
-          "type" : "string",
-          "title" : "Type"
+    "RoomSet": {
+      "type": "object",
+      "title": "RoomSet",
+      "properties": {
+        "Type": {
+          "type": "string",
+          "title": "Type"
         }
       },
-      "required" : [ "Type" ],
-      "additionalProperties" : false
+      "required": ["Type"],
+      "additionalProperties": false
     },
-    "Room" : {
-      "type" : "object",
-      "title" : "Room",
-      "properties" : {
-        "Children" : {
-          "type" : "integer",
-          "minimum" : 0,
-          "exclusiveMinimum" : false,
-          "title" : "Children"
+    "Room": {
+      "type": "object",
+      "title": "Room",
+      "properties": {
+        "Children": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMinimum": false,
+          "title": "Children"
         },
-        "Adults" : {
-          "type" : "integer",
-          "minimum" : 0,
-          "exclusiveMinimum" : true,
-          "title" : "Adults"
+        "Adults": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMinimum": true,
+          "title": "Adults"
         },
-        "Index" : {
-          "type" : "integer",
-          "minimum" : 0,
-          "exclusiveMinimum" : true,
-          "title" : "Index"
+        "Index": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMinimum": true,
+          "title": "Index"
         },
-        "ChildAges" : {
-          "type" : "string",
-          "title" : "ChildAges"
+        "ChildAges": {
+          "type": "string",
+          "title": "ChildAges"
         }
       },
-      "required" : [ "Index", "Adults" ],
-      "additionalProperties" : false
+      "required": ["Index", "Adults"],
+      "additionalProperties": false
     },
-    "RatePlanCandidates" : {
-      "type" : "object",
-      "title" : "RatePlanCandidates",
-      "properties" : {
-        "RatePlanCandidate" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/definitions/RatePlanCandidates.RatePlanCandidate"
+    "RatePlanCandidates": {
+      "type": "object",
+      "title": "RatePlanCandidates",
+      "properties": {
+        "RatePlanCandidate": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RatePlanCandidates.RatePlanCandidate"
           },
-          "maxItems" : 11,
-          "minItems" : 1,
-          "title" : "RatePlanCandidate"
+          "maxItems": 11,
+          "minItems": 1,
+          "title": "RatePlanCandidate"
         },
-        "ExactMatchOnly" : {
-          "type" : "boolean",
-          "title" : "ExactMatchOnly",
-          "default" : false
+        "ExactMatchOnly": {
+          "type": "boolean",
+          "title": "ExactMatchOnly",
+          "default": false
         }
       },
-      "required" : [ "RatePlanCandidate" ],
-      "additionalProperties" : false
+      "required": ["RatePlanCandidate"],
+      "additionalProperties": false
     },
-    "RatePlanCandidates.RatePlanCandidate" : {
-      "type" : "object",
-      "title" : "RatePlanCandidates.RatePlanCandidate",
-      "properties" : {
-        "RatePlanType" : {
-          "pattern" : "^([1-9][0-9]?)$",
-          "type" : "string",
-          "title" : "RatePlanType"
+    "RatePlanCandidates.RatePlanCandidate": {
+      "type": "object",
+      "title": "RatePlanCandidates.RatePlanCandidate",
+      "properties": {
+        "RatePlanType": {
+          "pattern": "^([1-9][0-9]?)$",
+          "type": "string",
+          "title": "RatePlanType"
         },
-        "RatePlanCode" : {
-          "type" : "string",
-          "title" : "RatePlanCode"
+        "RatePlanCode": {
+          "type": "string",
+          "title": "RatePlanCode"
         },
-        "InvBlockCode" : {
-          "type" : "string",
-          "title" : "InvBlockCode"
+        "InvBlockCode": {
+          "type": "string",
+          "title": "InvBlockCode"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     },
-    "LoyaltyIds" : {
-      "type" : "object",
-      "title" : "LoyaltyIds",
-      "properties" : {
-        "LoyaltyId" : {
-          "type" : "array",
-          "items" : {
-            "type" : "string"
+    "LoyaltyIds": {
+      "type": "object",
+      "title": "LoyaltyIds",
+      "properties": {
+        "LoyaltyId": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "maxItems" : 10,
-          "minItems" : 1,
-          "title" : "LoyaltyId"
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "LoyaltyId"
         }
       },
-      "required" : [ "LoyaltyId" ],
-      "additionalProperties" : false
+      "required": ["LoyaltyId"],
+      "additionalProperties": false
     },
-    "PrepaidQualifierType" : {
-      "properties" : { },
-      "enum" : [ "IncludePrepaid", "PrepaidOnly", "ExcludePrepaid" ],
-      "type" : "string",
-      "additionalProperties" : false
+    "PrepaidQualifierType": {
+      "properties": {},
+      "enum": ["IncludePrepaid", "PrepaidOnly", "ExcludePrepaid"],
+      "type": "string",
+      "additionalProperties": false
     },
-    "RateRange" : {
-      "type" : "object",
-      "title" : "RateRange",
-      "properties" : {
-        "Min" : {
-          "minimum" : 0,
-          "exclusiveMinimum" : false,
-          "type" : "number",
+    "RateRange": {
+      "type": "object",
+      "title": "RateRange",
+      "properties": {
+        "Min": {
+          "minimum": 0,
+          "exclusiveMinimum": false,
+          "type": "number",
           "multipleOf": 0.001,
-          "title" : "Min"
+          "title": "Min"
         },
-        "Max" : {
-          "minimum" : 0,
-          "exclusiveMinimum" : false,
-          "type" : "number",
+        "Max": {
+          "minimum": 0,
+          "exclusiveMinimum": false,
+          "type": "number",
           "multipleOf": 0.001,
-          "title" : "Max"
+          "title": "Max"
         }
       },
-      "additionalProperties" : false
+      "additionalProperties": false
     }
   },
-  "type" : "object",
-  "properties" : {
-    "GetHotelRateInfoRQ" : {
-      "$ref" : "#/definitions/GetHotelRateInfoRQ"
+  "type": "object",
+  "properties": {
+    "GetHotelRateInfoRQ": {
+      "$ref": "#/definitions/GetHotelRateInfoRQ"
     }
   },
-  "required" : [ "GetHotelRateInfoRQ" ],
-  "additionalProperties" : false
+  "required": ["GetHotelRateInfoRQ"],
+  "additionalProperties": false
 }
