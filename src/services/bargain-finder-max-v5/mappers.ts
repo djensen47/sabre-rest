@@ -116,6 +116,18 @@ export function toSearchRequest(baseUrl: string, input: SearchBargainFinderMaxIn
     // as the hardcoded `RequestorID.Type: '1'` and `RequestorID.ID: '1'`
     // above. The library is allowed to pick sensible protocol defaults;
     // it is not allowed to invent user-data requirements.
+    //
+    // NDC is intentionally not requested. `NDCIndicators` and
+    // `PreferNDCSourceOnTie` are opt-ins — omitting them keeps the
+    // response restricted to ATPCO (and occasionally API) content, which
+    // is what the rest of the library is built around. Revalidate
+    // Itinerary does not support NDC, create-booking here takes flat
+    // flight/pax fields rather than an `offerId` quote-back, and
+    // get-ancillaries / get-seats offerId entry points are not chained
+    // out of BFM. Surfacing NDC here would produce itineraries the rest
+    // of the flow can't carry forward. Adding NDC support means
+    // introducing an `ndcIndicators` input field and threading an offer
+    // handoff through create-booking and the seats/ancillaries services.
     TPA_Extensions: {
       IntelliSellTransaction: { RequestType: { Name: '50ITINS' } },
     },
