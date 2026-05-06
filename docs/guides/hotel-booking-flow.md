@@ -59,8 +59,9 @@ These are supporting APIs, not steps you insert into the flow above:
   - `PaymentInformation.FormOfPayment.PaymentCard` — card + billing address
   - `POS.Source` — `RequestorID` (IATA), `AgencyAddress`, `AgencyName`,
     `ISOCountryCode`, `PseudoCityCode`
-- Sample body shapes for GDS, EAN, BCOM, and HBD suppliers live in the CSL
-  Postman collection linked from [CSL API Support](https://developer.sabre.com/product-collection/content-services-for-lodging-csl/v1/help-documentation/csl-api-support.html).
+- Working request bodies for GDS, EAN, BCOM, and HBD suppliers are
+  committed under [`docs/specifications/create-pnr/`](../specifications/create-pnr/README.md),
+  extracted from Sabre's published CSL Postman collection.
 
 ### Enhanced Hotel Book (SOAP only)
 
@@ -76,12 +77,41 @@ consumers should use Create PNR instead.
 - `Application-ID` header is recommended but not mandatory. Request one from
   your Sabre account manager before going to production.
 
-## CERT test properties
+## CERT test data
 
 An XLSX of active CERT properties is available from the CSL API Support page
 ("these properties" link under Global ID to Sabre ID Property Mapping List).
 Prefer those property IDs when smoke-testing — Production IDs are not
 guaranteed to have availability in CERT.
+
+### Sabre ID vs Global ID — avoid `WARN.0424` / `ERR.0392`
+
+The same property shows up in the CSL content services under two numeric
+identities. They are **not interchangeable** across endpoints:
+
+- **Sabre Property ID** — 4–7 digit number (e.g. `35393`). Required by
+  `get-hotel-avail --hotels` and by `get-hotel-details`/`get-hotel-rate-info`
+  when `--code-context SABRE` (the server default).
+- **Global Property ID** — 9-digit number (e.g. `100067438`). Required
+  when `--code-context GLOBAL`. Also the identity Avail and Details echo
+  back in `hotel.info.code`.
+
+Passing a Global ID to `get-hotel-avail --hotels` produces
+`WARN.0424 No hotels found which match this input`; passing a Global ID
+to `get-hotel-details --code-context SABRE` produces
+`ERR.0392 Invalid hotel code`. Both errors mean "wrong ID type," not
+"property doesn't exist."
+
+Additional behavior worth knowing:
+
+- `get-hotel-avail --hotels` occasionally returns `WARN.0424` for a
+  single ID but returns rates if the same ID is submitted in a batch of
+  2–3. The batch trick is documented here so smoke tests don't chase
+  a ghost. When in doubt, batch 2–3 Sabre IDs and pick whichever code
+  Sabre returns in `hotel.info.code`.
+- Source-100 "supplier timeout" (`WARN.0724` with
+  `WarningDetails: 100-Supplier timeout`) on Avail is upstream vendor
+  flakiness, retry-safe.
 
 ## Common error codes
 
