@@ -41,6 +41,8 @@ import type {
   GetBookingInput,
   GetHotelAvailInput,
   GetHotelAvailOutput,
+  GetHotelDetailsInput,
+  GetHotelDetailsOutput,
   GetHotelRateInfoInput,
   GetHotelRateInfoOutput,
   GetSeatsInput,
@@ -428,6 +430,38 @@ export function rateInfoToTableRows(out: GetHotelRateInfoOutput): {
   });
   return {
     headers: ['rateSource', 'beforeTax', 'afterTax', 'currency', 'rateKey'],
+    rows,
+  };
+}
+
+/**
+ * Converts a Get Hotel Details v5 output into a one-row-per-rate-plan
+ * summary table. Columns: room, rateSource, beforeTax, afterTax, currency,
+ * rateKey (truncated). Flattens the room → rate-plan tree to make the
+ * rate grid visible at the CLI; drilling into taxes, fees, or cancel
+ * penalties requires `--format json`.
+ */
+export function detailsToTableRows(out: GetHotelDetailsOutput): {
+  headers: readonly string[];
+  rows: readonly string[][];
+} {
+  const rooms = out.hotel?.rooms ?? [];
+  const rows = rooms.flatMap((room) =>
+    room.ratePlans.map((rp) => {
+      const keyShort = rp.rateKey.length > 32 ? `${rp.rateKey.slice(0, 32)}…` : rp.rateKey;
+      const rate = rp.convertedRateInfo ?? rp.rateInfo;
+      return [
+        room.roomDescription?.name ?? room.roomType ?? String(room.roomIndex),
+        rp.rateSource,
+        rate?.amountBeforeTax ?? '',
+        rate?.amountAfterTax ?? '',
+        rate?.currencyCode ?? '',
+        keyShort,
+      ];
+    }),
+  );
+  return {
+    headers: ['room', 'rateSource', 'beforeTax', 'afterTax', 'currency', 'rateKey'],
     rows,
   };
 }
@@ -1379,6 +1413,263 @@ export function buildHotelRateInfoInput(values: HotelRateInfoFlagValues): GetHot
   return input;
 }
 
+/** Flag set for `get-hotel-details`. */
+export interface HotelDetailsFlagValues {
+  'hotel-code'?: string;
+  'code-context'?: string;
+  'rate-key'?: string;
+  'start-date'?: string;
+  'end-date'?: string;
+  'currency-code'?: string;
+  room?: string[];
+  'prepaid-qualifier'?: string;
+  'refundable-only'?: boolean;
+  'converted-only'?: boolean;
+  'exact-match-only'?: boolean;
+  'rate-sources'?: string;
+  'sort-by'?: string;
+  'sort-order'?: string;
+  pcc?: string;
+  'corporate-number'?: string;
+  'shop-key'?: string;
+  'with-property-info'?: boolean;
+  'with-location'?: boolean;
+  'with-amenities'?: boolean;
+  'with-security'?: boolean;
+  'with-sustainability'?: boolean;
+  'with-descriptions'?: string;
+  'with-media'?: boolean;
+  'media-images'?: string;
+  'media-max'?: string;
+  body?: string;
+}
+
+const DETAILS_DESCRIPTION_TYPES = new Set([
+  'ShortDescription',
+  'Dining',
+  'Facilities',
+  'Recreation',
+  'Services',
+  'Attractions',
+  'CancellationPolicy',
+  'DepositPolicy',
+  'Directions',
+  'Policies',
+  'SafetyInfo',
+  'TransportationInfo',
+  'GuaranteePolicy',
+] as const);
+
+const DETAILS_IMAGE_SIZES = new Set(['ORIGINAL', 'THUMBNAIL', 'SMALL', 'MEDIUM', 'LARGE'] as const);
+
+/**
+ * Builds the input for `getHotelDetailsV5.getDetails` from the CLI flags.
+ *
+ * Two mutually exclusive flows (matching Sabre's `oneOf`):
+ *   - hotel-ref flow — `--hotel-code` + `--start-date` + `--end-date`
+ *     launches a fresh rate shop with full criteria.
+ *   - rate-key flow — `--rate-key` re-runs a prior search by its opaque
+ *     key, with optional refinements.
+ *
+ * Both flows accept the `--with-*` flags to opt into descriptive and
+ * media content in the response. `--body` overrides everything.
+ */
+export function buildHotelDetailsInput(values: HotelDetailsFlagValues): GetHotelDetailsInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as GetHotelDetailsInput;
+  }
+
+  const hasHotelCode = values['hotel-code'] !== undefined;
+  const hasRateKey = values['rate-key'] !== undefined;
+  if (hasHotelCode && hasRateKey) {
+    throw new CliUsageError(
+      'get-hotel-details: --hotel-code and --rate-key are mutually exclusive.',
+    );
+  }
+  if (!hasHotelCode && !hasRateKey) {
+    throw new CliUsageError(
+      'get-hotel-details requires either --hotel-code (with --start-date/--end-date) or --rate-key. (Or --body.)',
+    );
+  }
+
+  const contentRef = buildDetailsContentRef(values);
+
+  if (hasRateKey) {
+    const out: Extract<GetHotelDetailsInput, { kind: 'rate-key' }> = {
+      kind: 'rate-key',
+      rateKey: values['rate-key'] as string,
+    };
+    if (values.pcc !== undefined) out.pointOfSale = { pseudoCityCode: values.pcc };
+    if (values['corporate-number'] !== undefined) {
+      out.corporateNumber = values['corporate-number'];
+    }
+    if (values['prepaid-qualifier'] !== undefined) {
+      if (!RATE_INFO_PREPAID.has(values['prepaid-qualifier'] as never)) {
+        throw new CliUsageError(
+          `Invalid --prepaid-qualifier value '${values['prepaid-qualifier']}'. Expected IncludePrepaid, PrepaidOnly, or ExcludePrepaid.`,
+        );
+      }
+      out.prepaidQualifier = values['prepaid-qualifier'] as NonNullable<
+        typeof out.prepaidQualifier
+      >;
+    }
+    if (values['refundable-only'] !== undefined) out.refundableOnly = values['refundable-only'];
+    if (values['converted-only'] !== undefined) {
+      out.convertedRateInfoOnly = values['converted-only'];
+    }
+    if (values['exact-match-only'] !== undefined) {
+      out.exactMatchOnly = values['exact-match-only'];
+    }
+    if (values['shop-key'] !== undefined) out.shopKey = values['shop-key'];
+    const rateSources = splitCommaList(values['rate-sources']);
+    if (rateSources !== undefined) out.rateSource = rateSources;
+    if (values['sort-order'] !== undefined) {
+      if (values['sort-order'] !== 'ASC' && values['sort-order'] !== 'DESC') {
+        throw new CliUsageError(
+          `Invalid --sort-order value '${values['sort-order']}'. Expected ASC or DESC.`,
+        );
+      }
+      out.sortOrder = values['sort-order'];
+    }
+    if (values['sort-by'] !== undefined) out.sortBy = values['sort-by'];
+    if (contentRef !== undefined) out.contentRef = contentRef;
+    return out;
+  }
+
+  // hotel-ref flow
+  const missing: string[] = [];
+  if (!values['start-date']) missing.push('--start-date');
+  if (!values['end-date']) missing.push('--end-date');
+  if (missing.length > 0) {
+    throw new CliUsageError(
+      `get-hotel-details (--hotel-code flow) requires: ${missing.join(', ')}.`,
+    );
+  }
+
+  const codeContext = values['code-context'];
+  if (codeContext !== undefined && codeContext !== 'SABRE' && codeContext !== 'GLOBAL') {
+    throw new CliUsageError(
+      `Invalid --code-context value '${codeContext}'. Expected SABRE or GLOBAL.`,
+    );
+  }
+
+  const rooms: Extract<GetHotelDetailsInput, { kind: 'hotel-ref' }>['rateCriteria']['rooms'] =
+    values.room !== undefined && values.room.length > 0
+      ? values.room.map((spec, i) => parseHotelRoomSpec(spec, i + 1))
+      : [{ index: 1, adults: 1 }];
+
+  const rateCriteria: Extract<GetHotelDetailsInput, { kind: 'hotel-ref' }>['rateCriteria'] = {
+    stayDateTimeRange: {
+      startDate: values['start-date'] as string,
+      endDate: values['end-date'] as string,
+    },
+    rooms,
+  };
+
+  if (values['currency-code'] !== undefined) rateCriteria.currencyCode = values['currency-code'];
+  if (values['prepaid-qualifier'] !== undefined) {
+    if (!RATE_INFO_PREPAID.has(values['prepaid-qualifier'] as never)) {
+      throw new CliUsageError(
+        `Invalid --prepaid-qualifier value '${values['prepaid-qualifier']}'. Expected IncludePrepaid, PrepaidOnly, or ExcludePrepaid.`,
+      );
+    }
+    rateCriteria.prepaidQualifier = values['prepaid-qualifier'] as NonNullable<
+      typeof rateCriteria.prepaidQualifier
+    >;
+  }
+  if (values['refundable-only'] !== undefined)
+    rateCriteria.refundableOnly = values['refundable-only'];
+  if (values['converted-only'] !== undefined) {
+    rateCriteria.convertedRateInfoOnly = values['converted-only'];
+  }
+  const rateSources = splitCommaList(values['rate-sources']);
+  if (rateSources !== undefined) rateCriteria.rateSource = rateSources;
+  if (values['sort-by'] !== undefined) rateCriteria.sortBy = values['sort-by'];
+  if (values['sort-order'] !== undefined) {
+    if (values['sort-order'] !== 'ASC' && values['sort-order'] !== 'DESC') {
+      throw new CliUsageError(
+        `Invalid --sort-order value '${values['sort-order']}'. Expected ASC or DESC.`,
+      );
+    }
+    rateCriteria.sortOrder = values['sort-order'];
+  }
+
+  const input: Extract<GetHotelDetailsInput, { kind: 'hotel-ref' }> = {
+    kind: 'hotel-ref',
+    hotelRef:
+      codeContext === undefined
+        ? { code: values['hotel-code'] as string }
+        : { code: values['hotel-code'] as string, codeContext },
+    rateCriteria,
+  };
+  if (values.pcc !== undefined) input.pointOfSale = { pseudoCityCode: values.pcc };
+  if (values['corporate-number'] !== undefined) input.corporateNumber = values['corporate-number'];
+  if (values['shop-key'] !== undefined) input.shopKey = values['shop-key'];
+  if (contentRef !== undefined) input.contentRef = contentRef;
+  return input;
+}
+
+/**
+ * Builds a `DetailsContentRef` from the `--with-*` flags. Returns
+ * `undefined` when none are set so the mapper omits the block entirely
+ * (Sabre defaults to a rate-only response).
+ */
+function buildDetailsContentRef(
+  values: HotelDetailsFlagValues,
+): NonNullable<GetHotelDetailsInput['contentRef']> | undefined {
+  const ref: NonNullable<GetHotelDetailsInput['contentRef']> = {};
+
+  const descriptions = splitCommaList(values['with-descriptions']);
+  if (descriptions !== undefined) {
+    for (const type of descriptions) {
+      if (!DETAILS_DESCRIPTION_TYPES.has(type as never)) {
+        throw new CliUsageError(
+          `Invalid --with-descriptions value '${type}'. Expected one of: ${Array.from(
+            DETAILS_DESCRIPTION_TYPES,
+          ).join(', ')}.`,
+        );
+      }
+    }
+  }
+
+  const di: NonNullable<NonNullable<GetHotelDetailsInput['contentRef']>['descriptiveInfo']> = {};
+  if (values['with-property-info']) di.propertyInfo = true;
+  if (values['with-location']) di.locationInfo = true;
+  if (values['with-amenities']) di.amenities = true;
+  if (values['with-security']) di.securityFeatures = true;
+  if (values['with-sustainability']) di.sustainability = true;
+  if (descriptions !== undefined) {
+    di.descriptions = descriptions as NonNullable<typeof di.descriptions>;
+  }
+  if (Object.keys(di).length > 0) ref.descriptiveInfo = di;
+
+  const images = splitCommaList(values['media-images']);
+  if (images !== undefined) {
+    for (const size of images) {
+      if (!DETAILS_IMAGE_SIZES.has(size as never)) {
+        throw new CliUsageError(
+          `Invalid --media-images value '${size}'. Expected one of: ${Array.from(
+            DETAILS_IMAGE_SIZES,
+          ).join(', ')}.`,
+        );
+      }
+    }
+  }
+  const needsMedia =
+    values['with-media'] === true || images !== undefined || values['media-max'] !== undefined;
+  if (needsMedia) {
+    const media: NonNullable<NonNullable<GetHotelDetailsInput['contentRef']>['media']> = {};
+    if (values['media-max'] !== undefined) media.maxItems = values['media-max'];
+    if (values['with-media']) media.mediaTypes = ['IMAGE'];
+    if (images !== undefined) {
+      media.images = images as NonNullable<typeof media.images>;
+    }
+    ref.media = media;
+  }
+
+  return Object.keys(ref).length > 0 ? ref : undefined;
+}
+
 /** Flag set for `hotel-price-check`. */
 export interface HotelPriceCheckFlagValues {
   'rate-key'?: string;
@@ -1977,6 +2268,37 @@ const HOTEL_RATE_INFO_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const HOTEL_DETAILS_OPTIONS = {
+  ...COMMON_OPTIONS,
+  'hotel-code': { type: 'string' },
+  'code-context': { type: 'string' },
+  'rate-key': { type: 'string' },
+  'start-date': { type: 'string' },
+  'end-date': { type: 'string' },
+  'currency-code': { type: 'string' },
+  room: { type: 'string', multiple: true },
+  'prepaid-qualifier': { type: 'string' },
+  'refundable-only': { type: 'boolean' },
+  'converted-only': { type: 'boolean' },
+  'exact-match-only': { type: 'boolean' },
+  'rate-sources': { type: 'string' },
+  'sort-by': { type: 'string' },
+  'sort-order': { type: 'string' },
+  pcc: { type: 'string' },
+  'corporate-number': { type: 'string' },
+  'shop-key': { type: 'string' },
+  'with-property-info': { type: 'boolean' },
+  'with-location': { type: 'boolean' },
+  'with-amenities': { type: 'boolean' },
+  'with-security': { type: 'boolean' },
+  'with-sustainability': { type: 'boolean' },
+  'with-descriptions': { type: 'string' },
+  'with-media': { type: 'boolean' },
+  'media-images': { type: 'string' },
+  'media-max': { type: 'string' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 const HOTEL_PRICE_CHECK_OPTIONS = {
   ...COMMON_OPTIONS,
   'rate-key': { type: 'string' },
@@ -2115,6 +2437,7 @@ Commands:
   get-ancillaries           Sabre Get Ancillaries v2
   get-booking               Sabre Booking Management v1 — Get Booking
   get-hotel-avail           Sabre Get Hotel Avail v5
+  get-hotel-details         Sabre Get Hotel Details v5
   get-hotel-rate-info       Sabre Get Hotel Rate Info v5
   get-seats                 Sabre Get Seats v2
   hotel-price-check         Sabre Hotel Price Check v5
@@ -2351,6 +2674,72 @@ Examples:
   sabre-rest get-hotel-rate-info --hotel-code 100072188 --code-context GLOBAL \\
     --start-date 2026-06-20 --end-date 2026-06-22 --currency-code USD --format table
   sabre-rest get-hotel-rate-info --rate-key 'NFZ6Y...==' --refundable-only
+`;
+
+const HOTEL_DETAILS_HELP = `Usage: sabre-rest get-hotel-details [flags]
+
+Sabre Get Hotel Details v5. Returns a single property's full rate grid
+(room types × rate plans with policies, guarantees) and optionally its
+descriptive content and media. This is the canonical "Refine" step
+between get-hotel-avail and hotel-price-check in the CSL hotel flow.
+
+Two mutually exclusive flows (plus --body):
+  1. Fresh shop by hotel code:
+     --hotel-code <code>        Hotel property ID (global or Sabre)
+     --code-context SABRE|GLOBAL
+                                 (default: server applies SABRE)
+     --start-date <YYYY-MM-DD>   Stay check-in (required)
+     --end-date <YYYY-MM-DD>     Stay check-out (required)
+  2. Rerun a prior search by opaque rate key:
+     --rate-key <key>            Rate key from a prior avail response
+
+Rate criteria (hotel-code flow; some also valid on rate-key flow):
+  --currency-code <ISO>        ISO 4217 currency (required with --rate-range)
+  --room <spec>                Repeatable; ADULTS[:CHILDREN[:AGES]] (default: 1)
+  --prepaid-qualifier <v>      IncludePrepaid | PrepaidOnly | ExcludePrepaid
+  --refundable-only            Only return refundable rates
+  --converted-only             Only return ConvertedRateInfo entries
+  --exact-match-only           (rate-key flow) Only exact matches
+  --rate-sources <list>        Comma-separated source codes (e.g. 100,110,112,113)
+  --sort-by <key>              Sabre-defined sort key
+  --sort-order <order>         ASC or DESC
+  --shop-key <key>             Pagination key to fetch the next set of rates
+
+POS:
+  --pcc <code>                 Optional branch PCC (POS/Source)
+  --corporate-number <n>       Optional corporate number
+
+Descriptive content (opt-in; Sabre omits these unless requested):
+  --with-property-info         Include floors, rooms, policies, property type
+  --with-location              Include coordinates, address, neighborhoods, contact
+  --with-amenities             Include hotel amenities (HAC OTA codes)
+  --with-security              Include security features (SEC OTA codes)
+  --with-sustainability        Include sustainability block
+  --with-descriptions <list>   Comma-separated: ShortDescription,Dining,Facilities,
+                               Recreation,Services,Attractions,CancellationPolicy,
+                               DepositPolicy,Directions,Policies,SafetyInfo,
+                               TransportationInfo,GuaranteePolicy
+
+Media (opt-in):
+  --with-media                 Include media items (IMAGE type)
+  --media-images <list>        Comma-separated sizes:
+                               ORIGINAL,THUMBNAIL,SMALL,MEDIUM,LARGE
+  --media-max <n>              Max media items to return
+
+Other:
+  --body <json>                Override input with raw JSON (ignores other flags)
+  --base-url <url>             Override SABRE_BASE_URL
+  --format json|table          Output format (default: json). Table is one row
+                               per rate plan (room, source, before-tax,
+                               after-tax, currency, rateKey).
+  --debug-request              Print the outbound HTTP request to stderr
+  -h, --help                   Show this help
+
+Examples:
+  sabre-rest get-hotel-details --hotel-code 100072188 --code-context GLOBAL \\
+    --start-date 2026-06-20 --end-date 2026-06-22 --currency-code USD --format table
+  sabre-rest get-hotel-details --rate-key 'NFZ6Y...==' \\
+    --with-property-info --with-amenities --with-descriptions ShortDescription,Policies
 `;
 
 const HOTEL_PRICE_CHECK_HELP = `Usage: sabre-rest hotel-price-check [flags]
@@ -2819,6 +3208,33 @@ async function getHotelRateInfoCommand(
   });
 }
 
+async function getHotelDetailsCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: HOTEL_DETAILS_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(HOTEL_DETAILS_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildHotelDetailsInput(values);
+  const result = await client.getHotelDetailsV5.getDetails(input);
+  emitResult(result, format, io, () => {
+    const { headers, rows } = detailsToTableRows(result);
+    return renderTable(headers, rows);
+  });
+}
+
 async function hotelPriceCheckCommand(
   argv: readonly string[],
   env: CliEnvConfig,
@@ -3175,6 +3591,7 @@ export const COMMANDS: Record<
   'get-ancillaries': getAncillariesCommand,
   'get-booking': getBookingCommand,
   'get-hotel-avail': getHotelAvailCommand,
+  'get-hotel-details': getHotelDetailsCommand,
   'get-hotel-rate-info': getHotelRateInfoCommand,
   'get-seats': getSeatsCommand,
   'hotel-price-check': hotelPriceCheckCommand,
