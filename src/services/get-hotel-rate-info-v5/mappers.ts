@@ -53,6 +53,20 @@ import type {
 const PATH = 'v5/get/hotelrateinfo';
 
 /**
+ * Hardcoded schema version sent on every request at
+ * `GetHotelRateInfoRQ.version`. Sabre's v5 canonical sample payload (see
+ * `docs/specifications/get-hotel-rate-info/sample-request.json`) includes
+ * this field; the CSL v3 Postman collection pins it to `"3.0.0"`. The
+ * field is not marked `required` in the RQ JSON Schema, but omitting it
+ * produced empty `Complete`-with-no-`HotelRateInfos` envelopes in CERT.
+ * Same category of protocol-level constant as
+ * bargain-finder-max-v5's `Version: '5'` —
+ * a runtime requirement that's not in the spec's `required` list but is
+ * present in every canonical example.
+ */
+const SCHEMA_VERSION = '5.0.0';
+
+/**
  * Builds the outgoing {@link SabreRequest} for the `getHotelRateInfo`
  * operation.
  *
@@ -62,9 +76,11 @@ const PATH = 'v5/get/hotelrateinfo';
  * hotel-price-check-v5, this mapper does **not** auto-send those defaults
  * on the consumer's behalf. Sabre applies them server-side when fields are
  * omitted, so the wire body reflects exactly what the consumer asked for.
- * If that ever starts failing with "schema version"-type errors, the
- * mapper will need to start sending documented defaults explicitly; no
- * known failures today.
+ *
+ * Exception: `GetHotelRateInfoRQ.version` is hardcoded to
+ * {@link SCHEMA_VERSION} because it is a protocol-level constant (not user
+ * data) that Sabre's runtime requires despite the spec not marking it
+ * required. See {@link SCHEMA_VERSION}.
  */
 export function toGetRateInfoRequest(baseUrl: string, input: GetHotelRateInfoInput): SabreRequest {
   const url = new URL(PATH, ensureTrailingSlash(baseUrl));
@@ -84,7 +100,7 @@ export function toGetRateInfoRequest(baseUrl: string, input: GetHotelRateInfoInp
 }
 
 function buildSearchByHotelRef(input: RateInfoSearchByHotelRef): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
+  const out: Record<string, unknown> = { version: SCHEMA_VERSION };
   if (input.corporateNumber !== undefined) out.CorporateNumber = input.corporateNumber;
   if (input.pointOfSale !== undefined) {
     out.POS = { Source: { PseudoCityCode: input.pointOfSale.pseudoCityCode } };
@@ -97,7 +113,7 @@ function buildSearchByHotelRef(input: RateInfoSearchByHotelRef): Record<string, 
 }
 
 function buildSearchByRateKey(input: RateInfoSearchByRateKey): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
+  const out: Record<string, unknown> = { version: SCHEMA_VERSION };
   if (input.pointOfSale !== undefined) {
     out.POS = { Source: { PseudoCityCode: input.pointOfSale.pseudoCityCode } };
   }

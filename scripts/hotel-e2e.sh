@@ -36,7 +36,11 @@
 # ## Prerequisites
 #   1. `npm run build`
 #   2. A .env file with SABRE_CLIENT_ID, SABRE_CLIENT_SECRET,
-#      SABRE_BASE_URL (loaded automatically by the CLI).
+#      SABRE_BASE_URL (loaded automatically by the CLI). SABRE_PCC is
+#      sourced explicitly by this script and forwarded to every step via
+#      --pcc, because the CLI does not fall back to env.pcc on hotel
+#      commands. Without a PCC, Sabre CSL routes rate-info requests
+#      through a default that commonly returns empty envelopes.
 #   3. `jq` on PATH.
 #
 # ## Usage
@@ -111,6 +115,25 @@ if [[ ! -f "dist/cli.js" ]]; then
   exit 2
 fi
 
+# Source .env so we can read SABRE_PCC. The CLI already reads
+# SABRE_CLIENT_ID / SABRE_CLIENT_SECRET / SABRE_BASE_URL itself, but the
+# hotel commands do not fall back to env.pcc, so the script forwards PCC
+# on every call that accepts it.
+if [[ -f ".env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+
+PCC_FLAG=()
+if [[ -n "${SABRE_PCC:-}" ]]; then
+  PCC_FLAG=(--pcc "$SABRE_PCC")
+else
+  echo "warning: SABRE_PCC not set — hotel steps will run without --pcc." >&2
+  echo "         Sabre CSL typically returns empty envelopes without a PCC." >&2
+fi
+
 # Default stay window: 30 days from today, 2-night stay. macOS and GNU date
 # differ on `-d` / `-v`; probe once at startup.
 if [[ -z "$START_DATE" ]]; then
@@ -177,7 +200,7 @@ fi
 # ---------------------------------------------------------------------------
 step 1 "hotel-search"
 
-if ! run_cli $CLI hotel-search "${BASE_URL_FLAG[@]}" \
+if ! run_cli $CLI hotel-search "${BASE_URL_FLAG[@]}" "${PCC_FLAG[@]}" \
   "${ANCHOR_FLAGS[@]}" \
   --radius "$RADIUS" \
   --uom "$UOM" \
@@ -202,7 +225,7 @@ if [[ -n "$RATE_KEY" ]]; then
 else
   step 2 "get-hotel-avail ($START_DATE → $END_DATE in $CURRENCY_CODE)"
 
-  if ! run_cli $CLI get-hotel-avail "${BASE_URL_FLAG[@]}" \
+  if ! run_cli $CLI get-hotel-avail "${BASE_URL_FLAG[@]}" "${PCC_FLAG[@]}" \
     "${ANCHOR_FLAGS[@]}" \
     --radius "$RADIUS" \
     --uom "$UOM" \
@@ -244,7 +267,7 @@ fi
 # ---------------------------------------------------------------------------
 step 3 "get-hotel-rate-info"
 
-if ! run_cli $CLI get-hotel-rate-info "${BASE_URL_FLAG[@]}" \
+if ! run_cli $CLI get-hotel-rate-info "${BASE_URL_FLAG[@]}" "${PCC_FLAG[@]}" \
   --rate-key "$RATE_KEY" \
   --format json >"$RATE_INFO_FILE"; then
   cat "$TMP_ERR" >&2
@@ -269,7 +292,7 @@ fi
 # ---------------------------------------------------------------------------
 step 4 "hotel-price-check"
 
-if ! run_cli $CLI hotel-price-check "${BASE_URL_FLAG[@]}" \
+if ! run_cli $CLI hotel-price-check "${BASE_URL_FLAG[@]}" "${PCC_FLAG[@]}" \
   --rate-key "$RATE_KEY" \
   --start-date "$START_DATE" \
   --end-date "$END_DATE" \

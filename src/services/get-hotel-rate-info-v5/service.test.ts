@@ -86,6 +86,7 @@ describe('GetHotelRateInfoV5Service.getRateInfo', () => {
     expect(headers['Content-Type']).toBe('application/json');
     expect(JSON.parse(req.body as string)).toEqual({
       GetHotelRateInfoRQ: {
+        version: '5.0.0',
         HotelRefs: { HotelRef: { HotelCode: '100072188', CodeContext: 'GLOBAL' } },
         RateInfoRef: {
           StayDateTimeRange: { StartDate: '2026-06-20', EndDate: '2026-06-22' },
@@ -116,7 +117,7 @@ describe('GetHotelRateInfoV5Service.getRateInfo', () => {
     const [, init] = fetchMock.mock.calls[0] ?? [];
     const req = init as RequestInit;
     expect(JSON.parse(req.body as string)).toEqual({
-      GetHotelRateInfoRQ: { RateKeyRef: { RateKey: 'OPAQUE==' } },
+      GetHotelRateInfoRQ: { version: '5.0.0', RateKeyRef: { RateKey: 'OPAQUE==' } },
     });
   });
 
