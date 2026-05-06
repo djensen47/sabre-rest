@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.14.0](https://github.com/djensen47/sabre-rest/compare/v0.13.0...v0.14.0) (2026-05-06)
+
+
+### Features
+
+* **create-passenger-name-record-v25:** add Sabre hotel booking service, CLI, and e2e smoke step ([#86](https://github.com/djensen47/sabre-rest/issues/86)) ([c253060](https://github.com/djensen47/sabre-rest/commit/c2530605a4189a279b30510cdbf250dd957679a9))
+* **get-hotel-avail-v5:** add Sabre Get Hotel Avail v5 service, CLI, and end-to-end smoke ([#80](https://github.com/djensen47/sabre-rest/issues/80)) ([47d7e28](https://github.com/djensen47/sabre-rest/commit/47d7e28ea82706ce2ea23fc5097534d9ac4abf17))
+* **get-hotel-details-v5:** add Sabre Get Hotel Details v5 service, CLI, and smoke step ([#84](https://github.com/djensen47/sabre-rest/issues/84)) ([ba33508](https://github.com/djensen47/sabre-rest/commit/ba335087a605338e34bee22d60c98abebf91794b))
+* **get-hotel-rate-info-v5:** add Sabre Get Hotel Rate Info v5 service, CLI, and smoke-test wiring ([#82](https://github.com/djensen47/sabre-rest/issues/82)) ([02ddcec](https://github.com/djensen47/sabre-rest/commit/02ddcec31a728dd314ff87d6d8e02689e26fe490))
+* **hotel-price-check-v5:** add Sabre Hotel Price Check v5 service, CLI, and smoke-test skeleton ([#79](https://github.com/djensen47/sabre-rest/issues/79)) ([cd979e5](https://github.com/djensen47/sabre-rest/commit/cd979e532e536014d3d247c92bdb7d9d2ea73d84))
+* **hotel-search-v2:** add Sabre Hotel Search v2 service and CLI command ([#77](https://github.com/djensen47/sabre-rest/issues/77)) ([203a56d](https://github.com/djensen47/sabre-rest/commit/203a56dc965e62f466d82a842b74a418100dedc8))
+
+
+### Bug Fixes
+
+* **get-hotel-rate-info-v5:** send schema version and forward SABRE_PCC in smoke test ([#83](https://github.com/djensen47/sabre-rest/issues/83)) ([c5253b9](https://github.com/djensen47/sabre-rest/commit/c5253b93c560d7c4e7f84be33915289fc28ae432))
+
 ## [0.13.0](https://github.com/djensen47/sabre-rest/compare/v0.12.0...v0.13.0) (2026-04-26)
 
 
