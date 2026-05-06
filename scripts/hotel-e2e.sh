@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
 # hotel-e2e.sh — hotel end-to-end smoke test.
 #
-# The full hotel flow Sabre supports is:
+# The CSL orchestrated hotel flow is:
 #
-#   hotel-search → get-hotel-avail → get-hotel-rate-info → hotel-price-check
+#   hotel-search → get-hotel-avail → get-hotel-details → hotel-price-check
 #     → create-booking (hotel) → get-booking → cancel-booking
 #
 # This library currently wraps:
 #
-#   * hotel-search        — property discovery (no rates)
-#   * get-hotel-avail     — lead rates, produces rateKeys
-#   * get-hotel-rate-info — per-property rate drill-down from a rateKey
-#   * hotel-price-check   — revalidates a rateKey, produces bookingKey
+#   * hotel-search      — property discovery (no rates)
+#   * get-hotel-avail   — lead rates, produces rateKeys
+#   * get-hotel-details — per-property rate grid + descriptive content
+#                         (canonical "Refine" step between Avail and Price Check)
+#   * hotel-price-check — revalidates a rateKey, produces bookingKey
+#
+# The `get-hotel-rate-info` service is also wrapped but intentionally not
+# exercised here — it's off the orchestrated booking path and currently
+# returns empty-`Complete` envelopes from CERT (see PR #83 for the
+# precise reproducer). Test it directly via the CLI when needed.
 #
 # Missing (not yet wrapped):
 #
@@ -26,8 +32,9 @@
 #   Step 2: get-hotel-avail   — runs against Sabre CERT, extracts a rateKey
 #                               from the first hotel's ConvertedRateInfo
 #                               (or falls back to RateInfo)
-#   Step 3: get-hotel-rate-info — runs against Sabre CERT using the rateKey
-#                                 from step 2, surfaces the hotel code
+#   Step 3: get-hotel-details — runs against Sabre CERT using the rateKey
+#                               from step 2, surfaces room count + rate-plan
+#                               count so the rate grid is visible
 #   Step 4: hotel-price-check — runs against Sabre CERT using the rateKey
 #                               from step 2 (or a --rate-key override)
 #   Step 5-7:                   [TODO — not wrapped; see booking-e2e.sh for
@@ -83,7 +90,7 @@ BASE_URL=""
 usage() {
   # Reproduces the header comment block. Update the line range when the
   # header grows or shrinks.
-  sed -n '2,64p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,72p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -156,9 +163,9 @@ BASE_URL_FLAG=()
 TMP_ERR=$(mktemp)
 SEARCH_FILE=$(mktemp)
 AVAIL_FILE=$(mktemp)
-RATE_INFO_FILE=$(mktemp)
+DETAILS_FILE=$(mktemp)
 PRICE_FILE=$(mktemp)
-trap 'rm -f "$TMP_ERR" "$SEARCH_FILE" "$AVAIL_FILE" "$RATE_INFO_FILE" "$PRICE_FILE"' EXIT
+trap 'rm -f "$TMP_ERR" "$SEARCH_FILE" "$AVAIL_FILE" "$DETAILS_FILE" "$PRICE_FILE"' EXIT
 
 run_cli() {
   : > "$TMP_ERR"
@@ -263,28 +270,36 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 3 — get-hotel-rate-info
+# Step 3 — get-hotel-details
 # ---------------------------------------------------------------------------
-step 3 "get-hotel-rate-info"
+step 3 "get-hotel-details"
 
-if ! run_cli $CLI get-hotel-rate-info "${BASE_URL_FLAG[@]}" "${PCC_FLAG[@]}" \
+if ! run_cli $CLI get-hotel-details "${BASE_URL_FLAG[@]}" "${PCC_FLAG[@]}" \
   --rate-key "$RATE_KEY" \
-  --format json >"$RATE_INFO_FILE"; then
+  --with-property-info \
+  --with-location \
+  --with-amenities \
+  --format json >"$DETAILS_FILE"; then
   cat "$TMP_ERR" >&2
-  fail "get-hotel-rate-info"
+  fail "get-hotel-details"
 fi
 
-RATE_INFO_HOTEL=$(jq -r '.hotel.info.code // empty' "$RATE_INFO_FILE")
-RATE_INFO_COUNT=$(jq -r '
-  ((.hotel.rateInfos.convertedRateInfo // []) + (.hotel.rateInfos.rateInfo // []))
-  | length
-' "$RATE_INFO_FILE")
-if [[ -n "$RATE_INFO_HOTEL" ]]; then
-  echo "rate-info hotel:   $RATE_INFO_HOTEL"
-  echo "rate-info entries: $RATE_INFO_COUNT"
+DETAILS_HOTEL=$(jq -r '.hotel.info.code // empty' "$DETAILS_FILE")
+DETAILS_ROOM_COUNT=$(jq -r '(.hotel.rooms // []) | length' "$DETAILS_FILE")
+DETAILS_RATE_PLAN_COUNT=$(jq -r '
+  [(.hotel.rooms // [])[]?.ratePlans | length] | add // 0
+' "$DETAILS_FILE")
+DETAILS_HAS_DESCRIPTIVE=$(jq -r '
+  if .hotel.descriptiveInfo != null then "yes" else "no" end
+' "$DETAILS_FILE")
+if [[ -n "$DETAILS_HOTEL" ]]; then
+  echo "details hotel:        $DETAILS_HOTEL"
+  echo "details room count:   $DETAILS_ROOM_COUNT"
+  echo "details rate plans:   $DETAILS_RATE_PLAN_COUNT"
+  echo "details descriptive:  $DETAILS_HAS_DESCRIPTIVE"
 else
   echo "no hotel returned (diagnostics-only envelope)"
-  jq '.applicationResults // empty' "$RATE_INFO_FILE"
+  jq '.applicationResults // empty' "$DETAILS_FILE"
 fi
 
 # ---------------------------------------------------------------------------
@@ -338,5 +353,5 @@ skip 7 "cancel-booking" "depends on step 5"
 
 echo ""
 echo "hotel-e2e complete."
-echo "Wrapped steps: 1 (hotel-search), 2 (get-hotel-avail), 3 (get-hotel-rate-info), 4 (hotel-price-check)."
+echo "Wrapped steps: 1 (hotel-search), 2 (get-hotel-avail), 3 (get-hotel-details), 4 (hotel-price-check)."
 echo "Missing steps: 5-7 (hotel booking flow)."
