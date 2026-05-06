@@ -9,6 +9,7 @@ import {
   buildAirlineAllianceLookupInput,
   buildAirlineLookupInput,
   buildBfmInput,
+  buildBookHotelInput,
   buildCancelBookingInput,
   buildCheckTicketsInput,
   buildFulfillTicketsInput,
@@ -30,6 +31,7 @@ import {
   parsePassenger,
   pickNotableResponseHeaders,
   priceCheckToTableRows,
+  readBookHotelCardEnv,
   readEnvConfig,
   renderError,
   renderTable,
@@ -929,12 +931,205 @@ describe('renderError for SabreApiResponseError', () => {
   });
 });
 
+describe('readBookHotelCardEnv', () => {
+  it('extracts all five card vars when present', () => {
+    expect(
+      readBookHotelCardEnv({
+        SABRE_TEST_CARD_NUMBER: '4444333322221111',
+        SABRE_TEST_CARD_CODE: 'VI',
+        SABRE_TEST_CARD_EXPIRY_MONTH: '12',
+        SABRE_TEST_CARD_EXPIRY_YEAR: '2030',
+        SABRE_TEST_CARD_CVC: '123',
+        UNRELATED: 'ignored',
+      }),
+    ).toEqual({
+      cardNumber: '4444333322221111',
+      cardCode: 'VI',
+      cardExpiryMonth: '12',
+      cardExpiryYear: '2030',
+      cardCvc: '123',
+    });
+  });
+
+  it('returns an empty object when no card vars are set', () => {
+    expect(readBookHotelCardEnv({})).toEqual({});
+  });
+
+  it('ignores empty-string values (dotenv sometimes leaves them empty)', () => {
+    expect(
+      readBookHotelCardEnv({ SABRE_TEST_CARD_NUMBER: '', SABRE_TEST_CARD_CODE: 'VI' }),
+    ).toEqual({ cardCode: 'VI' });
+  });
+});
+
+describe('buildBookHotelInput', () => {
+  const BASE_FLAGS = {
+    'booking-key': 'OPAQUE-BK==',
+    'first-name': 'Test',
+    'last-name': 'Booking',
+    phone: '817-555-1212',
+    'card-number': '4444333322221111',
+    'card-code': 'VI',
+    'card-expiry-month': '12',
+    'card-expiry-year': '2030',
+    'agency-name': 'Really Trustworthy Agency',
+    'agency-iata': '12345678',
+    pcc: 'TM61',
+    'agency-street-number': '3150 SABRE DRIVE',
+    'agency-address-line': 'SABRE TRAVEL',
+    'agency-city': 'SOUTHLAKE',
+    'agency-country': 'US',
+    'billing-address-line': ['Wadowicka 6'],
+    'billing-city': 'Krakow',
+    'billing-country': 'PL',
+  };
+
+  it('builds a minimal valid input from flags', () => {
+    const input = buildBookHotelInput(BASE_FLAGS);
+    expect(input.bookingKey).toBe('OPAQUE-BK==');
+    expect(input.leadGuest).toEqual({
+      firstName: 'Test',
+      lastName: 'Booking',
+      phone: '817-555-1212',
+    });
+    expect(input.agency.pcc).toBe('TM61');
+    expect(input.paymentCard.cardNumber).toBe('4444333322221111');
+    expect(input.paymentCard.expiryMonth).toBe(12);
+    expect(input.paymentCard.billingAddress.addressLine).toEqual(['Wadowicka 6']);
+  });
+
+  it('uses env fallbacks for PCI card fields when flags are absent', () => {
+    const {
+      'card-number': _n,
+      'card-code': _c,
+      'card-expiry-month': _m,
+      'card-expiry-year': _y,
+      ...noCard
+    } = BASE_FLAGS;
+    const input = buildBookHotelInput(noCard, {
+      cardNumber: '4111111111111111',
+      cardCode: 'VI',
+      cardExpiryMonth: '6',
+      cardExpiryYear: '2028',
+      cardCvc: '999',
+    });
+    expect(input.paymentCard.cardNumber).toBe('4111111111111111');
+    expect(input.paymentCard.expiryMonth).toBe(6);
+    expect(input.paymentCard.expiryYear).toBe('2028');
+    expect(input.paymentCard.csc).toBe('999');
+  });
+
+  it('prefers a flag over the env fallback', () => {
+    const input = buildBookHotelInput(BASE_FLAGS, { cardNumber: 'IGNORED' });
+    expect(input.paymentCard.cardNumber).toBe('4444333322221111');
+  });
+
+  it('defaults cardholder name to the guest name when not supplied', () => {
+    const input = buildBookHotelInput(BASE_FLAGS);
+    expect(input.paymentCard.holderFirstName).toBe('Test');
+    expect(input.paymentCard.holderLastName).toBe('Booking');
+  });
+
+  it('uses explicit cardholder name when supplied', () => {
+    const input = buildBookHotelInput({
+      ...BASE_FLAGS,
+      'cardholder-first-name': 'Card',
+      'cardholder-last-name': 'Holder',
+    });
+    expect(input.paymentCard.holderFirstName).toBe('Card');
+    expect(input.paymentCard.holderLastName).toBe('Holder');
+  });
+
+  it('passes optional fields through when supplied', () => {
+    const input = buildBookHotelInput({
+      ...BASE_FLAGS,
+      email: 'test@sabre.com',
+      'agency-state': 'TX',
+      'agency-postal-code': '76092',
+      'agency-contact-phone': '555-000-9999',
+      'billing-state': 'KR',
+      'billing-postal-code': '30-415',
+      'card-cvc': '123',
+      'target-city': 'ABCD',
+    });
+    expect(input.leadGuest.email).toBe('test@sabre.com');
+    expect(input.agency.address.stateCode).toBe('TX');
+    expect(input.agency.address.postalCode).toBe('76092');
+    expect(input.agency.contactPhone).toBe('555-000-9999');
+    expect(input.paymentCard.csc).toBe('123');
+    expect(input.paymentCard.billingAddress.stateCode).toBe('KR');
+    expect(input.paymentCard.billingAddress.postalCode).toBe('30-415');
+    expect(input.targetCity).toBe('ABCD');
+  });
+
+  it('parses --halt-on-error case-insensitively', () => {
+    expect(
+      buildBookHotelInput({ ...BASE_FLAGS, 'halt-on-error': 'TRUE' }).haltOnHotelBookError,
+    ).toBe(true);
+    expect(
+      buildBookHotelInput({ ...BASE_FLAGS, 'halt-on-error': 'false' }).haltOnHotelBookError,
+    ).toBe(false);
+  });
+
+  it('rejects an invalid --halt-on-error value', () => {
+    expect(() => buildBookHotelInput({ ...BASE_FLAGS, 'halt-on-error': 'yes' })).toThrowError(
+      CliUsageError,
+    );
+  });
+
+  it('returns the parsed body verbatim when --body is supplied', () => {
+    const body = JSON.stringify({ bookingKey: 'BODY', leadGuest: {} });
+    expect(buildBookHotelInput({ body })).toEqual({ bookingKey: 'BODY', leadGuest: {} });
+  });
+
+  it('throws when --booking-key is missing', () => {
+    const { 'booking-key': _k, ...rest } = BASE_FLAGS;
+    expect(() => buildBookHotelInput(rest)).toThrowError(/booking-key/);
+  });
+
+  it('throws when card PAN is missing from both flags and env', () => {
+    const { 'card-number': _n, ...rest } = BASE_FLAGS;
+    expect(() => buildBookHotelInput(rest)).toThrowError(/SABRE_TEST_CARD_NUMBER/);
+  });
+
+  it('throws when card expiry month is missing', () => {
+    const { 'card-expiry-month': _m, ...rest } = BASE_FLAGS;
+    expect(() => buildBookHotelInput(rest)).toThrowError(/SABRE_TEST_CARD_EXPIRY_MONTH/);
+  });
+
+  it('throws when expiry month is out of range', () => {
+    expect(() => buildBookHotelInput({ ...BASE_FLAGS, 'card-expiry-month': '13' })).toThrowError(
+      /Invalid expiry month/,
+    );
+    expect(() => buildBookHotelInput({ ...BASE_FLAGS, 'card-expiry-month': '0' })).toThrowError(
+      /Invalid expiry month/,
+    );
+    expect(() => buildBookHotelInput({ ...BASE_FLAGS, 'card-expiry-month': 'june' })).toThrowError(
+      /Invalid expiry month/,
+    );
+  });
+
+  it('throws when --billing-address-line is empty or missing', () => {
+    const { 'billing-address-line': _a, ...rest } = BASE_FLAGS;
+    expect(() => buildBookHotelInput(rest)).toThrowError(/billing-address-line/);
+    expect(() => buildBookHotelInput({ ...BASE_FLAGS, 'billing-address-line': [] })).toThrowError(
+      /billing-address-line/,
+    );
+  });
+
+  it('throws when --pcc is missing', () => {
+    const { pcc: _p, ...rest } = BASE_FLAGS;
+    expect(() => buildBookHotelInput(rest)).toThrowError(/pcc/);
+  });
+});
+
 describe('COMMANDS dispatch table', () => {
   it('exposes a handler for every supported subcommand', () => {
     expect(Object.keys(COMMANDS).sort()).toEqual([
       'airline-alliance-lookup',
       'airline-lookup',
       'bargain-finder-max',
+      'book-hotel',
       'cancel-booking',
       'check-tickets',
       'create-booking',

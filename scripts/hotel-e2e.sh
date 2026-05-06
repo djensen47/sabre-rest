@@ -19,12 +19,19 @@
 # returns empty-`Complete` envelopes from CERT (see PR #83 for the
 # precise reproducer). Test it directly via the CLI when needed.
 #
+#   * book-hotel              — CreatePassengerNameRecord v2.5.0, hotel
+#                               path. Consumes the bookingKey from
+#                               price-check, produces a Sabre PNR locator.
+#
 # Missing (not yet wrapped):
 #
-#   * hotel create-booking   — consumes the bookingKey from price-check
-#   * hotel get-booking      — unclear whether booking-management v1 handles
-#                              hotel PNRs; verify when create-booking lands
-#   * hotel cancel-booking   — same caveat
+#   * hotel get-booking       — unclear whether booking-management v1
+#                               handles hotel PNRs; verify after first
+#                               successful book-hotel run in CERT.
+#   * hotel cancel-booking    — same caveat. Until wired, PNRs created
+#                               by this script must be cancelled manually
+#                               in CERT (the script prints the locator
+#                               loudly at the end).
 #
 # ## What this script does today
 #
@@ -37,8 +44,13 @@
 #                               count so the rate grid is visible
 #   Step 4: hotel-price-check — runs against Sabre CERT using the rateKey
 #                               from step 2 (or a --rate-key override)
-#   Step 5-7:                   [TODO — not wrapped; see booking-e2e.sh for
-#                               the cleanup pattern when hotel booking lands]
+#   Step 5: book-hotel        — runs against Sabre CERT using the bookingKey
+#                               from step 4; requires SABRE_TEST_CARD_* env
+#                               vars for PCI-sensitive card fields. Prints
+#                               the PNR locator loudly for manual cancel.
+#   Step 6-7:                   [TODO — hotel get-booking / cancel-booking
+#                               not yet verified against booking-management
+#                               v1; manual cleanup required until they are]
 #
 # ## Prerequisites
 #   1. `npm run build`
@@ -50,13 +62,17 @@
 #      through a default that commonly returns empty envelopes.
 #   3. `jq` on PATH.
 #
+# Step 5 uses Sabre's published CERT test card (4444333322221111) with
+# a future expiry — not a real PAN. Hardcoded in the script because
+# CERT test data does not need PCI treatment.
+#
 # ## Usage
-#   scripts/hotel-e2e.sh --ref-point 6:DFW:CODE --start-date 2026-06-20 --end-date 2026-06-22
-#   scripts/hotel-e2e.sh --ref-point 6:DFW:CODE --rate-key '...opaque...'
+#   scripts/hotel-e2e.sh --ref-point 6:BWI:CODE --start-date 2026-06-20 --end-date 2026-06-22
+#   scripts/hotel-e2e.sh --ref-point 6:BWI:CODE --rate-key '...opaque...'
 #   scripts/hotel-e2e.sh --geo-code 32.758,-97.08 --radius 2
 #
 # ## Flags
-#   --ref-point <T:V:C>            Anchor (default: 6:DFW:CODE)
+#   --ref-point <T:V:C>            Anchor (default: 6:BWI:CODE)
 #   --geo-code <lat,lon>           Alternative anchor
 #   --address <fields>             Alternative anchor
 #   --radius <n>                   Search radius (default: 5)
@@ -74,7 +90,7 @@
 set -o pipefail
 
 CLI="node dist/cli.js"
-REF_POINT="6:DFW:CODE"
+REF_POINT="6:BWI:CODE"
 GEO_CODE=""
 ADDRESS=""
 RADIUS="5"
@@ -90,7 +106,7 @@ BASE_URL=""
 usage() {
   # Reproduces the header comment block. Update the line range when the
   # header grows or shrinks.
-  sed -n '2,72p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,88p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -334,24 +350,88 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 5 — hotel create-booking (TODO)
+# Step 5 — book-hotel
 # ---------------------------------------------------------------------------
-skip 5 "hotel create-booking" "hotel booking not yet wrapped"
-# TODO: Wrap the hotel booking endpoint. When it's in, chain it here using
-# the bookingKey from step 4, add a cleanup trap for cancel-booking the
-# same way scripts/booking-e2e.sh does.
+PNR_LOCATOR=""
+
+if [[ -z "$BOOKING_KEY" ]]; then
+  skip 5 "book-hotel" "price-check did not return a bookingKey"
+else
+  step 5 "book-hotel"
+
+  BOOK_FILE=$(mktemp)
+  trap 'rm -f "$TMP_ERR" "$SEARCH_FILE" "$AVAIL_FILE" "$DETAILS_FILE" "$PRICE_FILE" "$BOOK_FILE"' EXIT
+
+  # Sabre's published CERT test card (see docs/specifications/create-pnr/
+  # sample-request-hotel-gds.json). Not a real PAN. Expiry must be in the
+  # future so Sabre doesn't reject on date validation — the Postman
+  # sample ships with 3/2022 which has since expired.
+  TEST_CARD_NUMBER="4444333322221111"
+  TEST_CARD_CODE="VI"
+  TEST_CARD_EXPIRY_MONTH="12"
+  TEST_CARD_EXPIRY_YEAR="2030"
+  TEST_CARD_CVC="123"
+
+  # Agency / billing addresses are derived from Sabre's published
+  # sample bodies (docs/specifications/create-pnr/sample-request-hotel-gds.json).
+  if ! run_cli $CLI book-hotel "${BASE_URL_FLAG[@]}" \
+    --booking-key "$BOOKING_KEY" \
+    --first-name Test --last-name Booking --phone 817-555-1212 \
+    --email test@sabre.com \
+    --card-number "$TEST_CARD_NUMBER" \
+    --card-code "$TEST_CARD_CODE" \
+    --card-expiry-month "$TEST_CARD_EXPIRY_MONTH" \
+    --card-expiry-year "$TEST_CARD_EXPIRY_YEAR" \
+    --card-cvc "$TEST_CARD_CVC" \
+    --agency-name 'Really Trustworthy Agency' \
+    --agency-iata 12345678 \
+    --pcc "${SABRE_PCC:-TM61}" \
+    --agency-street-number '3150 SABRE DRIVE' \
+    --agency-address-line 'SABRE TRAVEL' \
+    --agency-city SOUTHLAKE --agency-state TX --agency-country US \
+    --agency-postal-code 76092 \
+    --billing-address-line 'Wadowicka 6' \
+    --billing-city Krakow --billing-country PL --billing-postal-code 30-415 \
+    --format json >"$BOOK_FILE"; then
+    cat "$TMP_ERR" >&2
+    fail "book-hotel"
+  fi
+
+  PNR_LOCATOR=$(jq -r '.pnrLocator // empty' "$BOOK_FILE")
+  AR_STATUS=$(jq -r '.applicationResults.status // empty' "$BOOK_FILE")
+  AR_ERRORS=$(jq -r '.applicationResults.errors // [] | length' "$BOOK_FILE")
+  AR_WARNINGS=$(jq -r '.applicationResults.warnings // [] | length' "$BOOK_FILE")
+
+  if [[ -n "$PNR_LOCATOR" ]]; then
+    echo "pnrLocator:     $PNR_LOCATOR"
+    echo "status:         $AR_STATUS"
+    echo "errors:         $AR_ERRORS"
+    echo "warnings:       $AR_WARNINGS"
+  else
+    echo "no PNR locator returned (diagnostics-only envelope)"
+    echo "status:         $AR_STATUS"
+    jq '.applicationResults // empty' "$BOOK_FILE"
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # Step 6 — get-booking (TODO)
 # ---------------------------------------------------------------------------
-skip 6 "get-booking (verify hotel)" "depends on step 5; also verify booking-management v1 handles hotel PNRs"
+skip 6 "get-booking (verify hotel)" "booking-management v1 hotel-PNR support not yet verified"
 
 # ---------------------------------------------------------------------------
 # Step 7 — cancel-booking (TODO)
 # ---------------------------------------------------------------------------
-skip 7 "cancel-booking" "depends on step 5"
+skip 7 "cancel-booking" "hotel PNR cancel path not yet wrapped"
 
 echo ""
 echo "hotel-e2e complete."
-echo "Wrapped steps: 1 (hotel-search), 2 (get-hotel-avail), 3 (get-hotel-details), 4 (hotel-price-check)."
-echo "Missing steps: 5-7 (hotel booking flow)."
+echo "Wrapped steps: 1 (hotel-search), 2 (get-hotel-avail), 3 (get-hotel-details),"
+echo "               4 (hotel-price-check), 5 (book-hotel)."
+echo "Missing steps: 6 (get-booking), 7 (cancel-booking)."
+if [[ -n "$PNR_LOCATOR" ]]; then
+  echo ""
+  echo "============================================================"
+  echo "  LIVE PNR IN CERT — cancel manually: $PNR_LOCATOR"
+  echo "============================================================"
+fi

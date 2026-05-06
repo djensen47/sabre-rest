@@ -25,6 +25,7 @@ import type {
   AvailGeoCodeRef,
   AvailHotel,
   AvailReferencePointRef,
+  BookHotelInput,
   BookingReturnOnly,
   BookingSource,
   CabinClass,
@@ -1670,6 +1671,195 @@ function buildDetailsContentRef(
   return Object.keys(ref).length > 0 ? ref : undefined;
 }
 
+/** Flag set for `book-hotel`. */
+export interface BookHotelFlagValues {
+  'booking-key'?: string;
+  'first-name'?: string;
+  'last-name'?: string;
+  email?: string;
+  phone?: string;
+  'card-number'?: string;
+  'card-code'?: string;
+  'card-expiry-month'?: string;
+  'card-expiry-year'?: string;
+  'card-cvc'?: string;
+  'cardholder-first-name'?: string;
+  'cardholder-last-name'?: string;
+  'agency-name'?: string;
+  'agency-iata'?: string;
+  'agency-street-number'?: string;
+  'agency-address-line'?: string;
+  'agency-city'?: string;
+  'agency-state'?: string;
+  'agency-country'?: string;
+  'agency-postal-code'?: string;
+  'agency-contact-phone'?: string;
+  'billing-address-line'?: string[];
+  'billing-city'?: string;
+  'billing-state'?: string;
+  'billing-country'?: string;
+  'billing-postal-code'?: string;
+  pcc?: string;
+  'target-city'?: string;
+  'halt-on-error'?: string;
+  body?: string;
+}
+
+/** Environment fallbacks for PCI-sensitive CLI flags. */
+export interface BookHotelEnvFallbacks {
+  cardNumber?: string;
+  cardCode?: string;
+  cardExpiryMonth?: string;
+  cardExpiryYear?: string;
+  cardCvc?: string;
+}
+
+/**
+ * Reads the `SABRE_TEST_CARD_*` environment variables into a
+ * {@link BookHotelEnvFallbacks}. Kept separate from {@link readEnvConfig}
+ * because card data only matters for the booking smoke test and should
+ * not flow into services that never need it.
+ */
+export function readBookHotelCardEnv(env: NodeJS.ProcessEnv): BookHotelEnvFallbacks {
+  const out: BookHotelEnvFallbacks = {};
+  if (env.SABRE_TEST_CARD_NUMBER) out.cardNumber = env.SABRE_TEST_CARD_NUMBER;
+  if (env.SABRE_TEST_CARD_CODE) out.cardCode = env.SABRE_TEST_CARD_CODE;
+  if (env.SABRE_TEST_CARD_EXPIRY_MONTH) out.cardExpiryMonth = env.SABRE_TEST_CARD_EXPIRY_MONTH;
+  if (env.SABRE_TEST_CARD_EXPIRY_YEAR) out.cardExpiryYear = env.SABRE_TEST_CARD_EXPIRY_YEAR;
+  if (env.SABRE_TEST_CARD_CVC) out.cardCvc = env.SABRE_TEST_CARD_CVC;
+  return out;
+}
+
+/**
+ * Builds the input for `createPassengerNameRecordV25.bookHotel` from
+ * CLI flags, with `SABRE_TEST_CARD_*` env-var fallbacks for PCI-
+ * sensitive card fields so the smoke test doesn't splatter a PAN and
+ * CVV across shell history.
+ *
+ * When `--body` is supplied it is parsed as JSON and returned verbatim.
+ *
+ * Throws {@link CliUsageError} on malformed or missing flags.
+ */
+export function buildBookHotelInput(
+  values: BookHotelFlagValues,
+  cardEnv: BookHotelEnvFallbacks = {},
+): BookHotelInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as BookHotelInput;
+  }
+
+  const need = (name: keyof BookHotelFlagValues, label: string): string => {
+    const raw = values[name];
+    if (typeof raw !== 'string' || raw === '') {
+      throw new CliUsageError(`book-hotel requires --${label}. (Or supply --body with full JSON.)`);
+    }
+    return raw;
+  };
+
+  const cardNumber = values['card-number'] ?? cardEnv.cardNumber;
+  if (!cardNumber) {
+    throw new CliUsageError(
+      'book-hotel requires --card-number or SABRE_TEST_CARD_NUMBER in the environment.',
+    );
+  }
+  const cardCode = values['card-code'] ?? cardEnv.cardCode;
+  if (!cardCode) {
+    throw new CliUsageError(
+      'book-hotel requires --card-code or SABRE_TEST_CARD_CODE in the environment.',
+    );
+  }
+  const expiryMonthRaw = values['card-expiry-month'] ?? cardEnv.cardExpiryMonth;
+  if (!expiryMonthRaw) {
+    throw new CliUsageError(
+      'book-hotel requires --card-expiry-month or SABRE_TEST_CARD_EXPIRY_MONTH.',
+    );
+  }
+  const expiryMonth = Number(expiryMonthRaw);
+  if (!Number.isInteger(expiryMonth) || expiryMonth < 1 || expiryMonth > 12) {
+    throw new CliUsageError(`Invalid expiry month '${expiryMonthRaw}'. Expected an integer 1-12.`);
+  }
+  const expiryYear = values['card-expiry-year'] ?? cardEnv.cardExpiryYear;
+  if (!expiryYear) {
+    throw new CliUsageError(
+      'book-hotel requires --card-expiry-year or SABRE_TEST_CARD_EXPIRY_YEAR.',
+    );
+  }
+
+  const billingAddressLines = values['billing-address-line'];
+  if (billingAddressLines === undefined || billingAddressLines.length === 0) {
+    throw new CliUsageError(
+      'book-hotel requires at least one --billing-address-line (repeatable).',
+    );
+  }
+
+  const firstName = need('first-name', 'first-name');
+  const lastName = need('last-name', 'last-name');
+
+  const input: BookHotelInput = {
+    bookingKey: need('booking-key', 'booking-key'),
+    leadGuest: {
+      firstName,
+      lastName,
+      phone: need('phone', 'phone'),
+    },
+    agency: {
+      name: need('agency-name', 'agency-name'),
+      pcc: need('pcc', 'pcc'),
+      iata: need('agency-iata', 'agency-iata'),
+      address: {
+        streetNumber: need('agency-street-number', 'agency-street-number'),
+        addressLine: need('agency-address-line', 'agency-address-line'),
+        cityName: need('agency-city', 'agency-city'),
+        countryCode: need('agency-country', 'agency-country'),
+      },
+    },
+    paymentCard: {
+      cardCode,
+      cardNumber,
+      expiryMonth,
+      expiryYear,
+      holderFirstName: values['cardholder-first-name'] ?? firstName,
+      holderLastName: values['cardholder-last-name'] ?? lastName,
+      billingAddress: {
+        addressLine: billingAddressLines,
+        cityName: need('billing-city', 'billing-city'),
+        countryCode: need('billing-country', 'billing-country'),
+      },
+    },
+  };
+
+  if (values.email !== undefined) input.leadGuest.email = values.email;
+  if (values['agency-state'] !== undefined) {
+    input.agency.address.stateCode = values['agency-state'];
+  }
+  if (values['agency-postal-code'] !== undefined) {
+    input.agency.address.postalCode = values['agency-postal-code'];
+  }
+  if (values['agency-contact-phone'] !== undefined) {
+    input.agency.contactPhone = values['agency-contact-phone'];
+  }
+  const csc = values['card-cvc'] ?? cardEnv.cardCvc;
+  if (csc !== undefined) input.paymentCard.csc = csc;
+  if (values['billing-state'] !== undefined) {
+    input.paymentCard.billingAddress.stateCode = values['billing-state'];
+  }
+  if (values['billing-postal-code'] !== undefined) {
+    input.paymentCard.billingAddress.postalCode = values['billing-postal-code'];
+  }
+  if (values['target-city'] !== undefined) input.targetCity = values['target-city'];
+  if (values['halt-on-error'] !== undefined) {
+    const v = values['halt-on-error'].toLowerCase();
+    if (v !== 'true' && v !== 'false') {
+      throw new CliUsageError(
+        `Invalid --halt-on-error value '${values['halt-on-error']}'. Expected 'true' or 'false'.`,
+      );
+    }
+    input.haltOnHotelBookError = v === 'true';
+  }
+
+  return input;
+}
+
 /** Flag set for `hotel-price-check`. */
 export interface HotelPriceCheckFlagValues {
   'rate-key'?: string;
@@ -2310,6 +2500,40 @@ const HOTEL_PRICE_CHECK_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const BOOK_HOTEL_OPTIONS = {
+  ...COMMON_OPTIONS,
+  'booking-key': { type: 'string' },
+  'first-name': { type: 'string' },
+  'last-name': { type: 'string' },
+  email: { type: 'string' },
+  phone: { type: 'string' },
+  'card-number': { type: 'string' },
+  'card-code': { type: 'string' },
+  'card-expiry-month': { type: 'string' },
+  'card-expiry-year': { type: 'string' },
+  'card-cvc': { type: 'string' },
+  'cardholder-first-name': { type: 'string' },
+  'cardholder-last-name': { type: 'string' },
+  'agency-name': { type: 'string' },
+  'agency-iata': { type: 'string' },
+  'agency-street-number': { type: 'string' },
+  'agency-address-line': { type: 'string' },
+  'agency-city': { type: 'string' },
+  'agency-state': { type: 'string' },
+  'agency-country': { type: 'string' },
+  'agency-postal-code': { type: 'string' },
+  'agency-contact-phone': { type: 'string' },
+  'billing-address-line': { type: 'string', multiple: true },
+  'billing-city': { type: 'string' },
+  'billing-state': { type: 'string' },
+  'billing-country': { type: 'string' },
+  'billing-postal-code': { type: 'string' },
+  pcc: { type: 'string' },
+  'target-city': { type: 'string' },
+  'halt-on-error': { type: 'string' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 const REVALIDATE_OPTIONS = {
   ...COMMON_OPTIONS,
   from: { type: 'string' },
@@ -2430,6 +2654,7 @@ Commands:
   airline-lookup            Sabre Airline Lookup v1
   airline-alliance-lookup   Sabre Airline Alliance Lookup v1
   bargain-finder-max        Sabre Bargain Finder Max v5
+  book-hotel                Sabre Create Passenger Name Record v2.5.0 (hotel)
   cancel-booking            Sabre Booking Management v1 — Cancel Booking
   check-tickets             Sabre Booking Management v1 — Check Tickets
   create-booking            Sabre Booking Management v1 — Create Booking
@@ -2459,6 +2684,11 @@ Environment:
   SABRE_BASE_URL            Sabre base URL, e.g. https://api.cert.platform.sabre.com
   SABRE_COMPANY_CODE        Optional agency company code (bargain-finder-max)
   SABRE_PCC                 Optional pseudo city code (bargain-finder-max)
+  SABRE_TEST_CARD_NUMBER    PAN fallback for book-hotel (PCI-sensitive)
+  SABRE_TEST_CARD_CODE      Card code fallback for book-hotel (e.g. VI)
+  SABRE_TEST_CARD_EXPIRY_MONTH  Expiry month fallback for book-hotel (1-12)
+  SABRE_TEST_CARD_EXPIRY_YEAR   Expiry year fallback for book-hotel (YYYY)
+  SABRE_TEST_CARD_CVC       CVC fallback for book-hotel (PCI-sensitive)
 
 A .env file in the current directory is loaded automatically.
 
@@ -2740,6 +2970,69 @@ Examples:
     --start-date 2026-06-20 --end-date 2026-06-22 --currency-code USD --format table
   sabre-rest get-hotel-details --rate-key 'NFZ6Y...==' \\
     --with-property-info --with-amenities --with-descriptions ShortDescription,Policies
+`;
+
+const BOOK_HOTEL_HELP = `Usage: sabre-rest book-hotel [flags]
+
+Sabre Create Passenger Name Record v2.5.0. Books a single hotel room
+against a priced bookingKey from hotel-price-check and returns the new
+Sabre PNR locator.
+
+PCI-sensitive card fields fall back to environment variables:
+  --card-number        SABRE_TEST_CARD_NUMBER
+  --card-code          SABRE_TEST_CARD_CODE
+  --card-expiry-month  SABRE_TEST_CARD_EXPIRY_MONTH
+  --card-expiry-year   SABRE_TEST_CARD_EXPIRY_YEAR
+  --card-cvc           SABRE_TEST_CARD_CVC
+
+Required (unless --body):
+  --booking-key <key>               Opaque booking key from hotel-price-check
+  --first-name <name>               Lead guest first name
+  --last-name <name>                Lead guest last name
+  --phone <phone>                   Lead guest contact phone
+  --card-code <AX|VI|MC|...>        Two-letter card code
+  --card-number <pan>               PAN, digits only
+  --card-expiry-month <1-12>
+  --card-expiry-year <YYYY>
+  --agency-name <name>              POS.Source.AgencyName
+  --agency-iata <id>                POS.Source.RequestorID.Id
+  --pcc <code>                      POS.Source.PseudoCityCode
+  --agency-street-number <s>
+  --agency-address-line <s>
+  --agency-city <s>
+  --agency-country <ISO-2>
+  --billing-address-line <s>        Cardholder billing address; repeatable
+  --billing-city <s>
+  --billing-country <ISO-2>
+
+Optional:
+  --email <addr>                    Guest email
+  --card-cvc <code>
+  --cardholder-first-name <name>    Defaults to --first-name
+  --cardholder-last-name <name>     Defaults to --last-name
+  --agency-state <s>
+  --agency-postal-code <s>
+  --agency-contact-phone <s>
+  --billing-state <s>
+  --billing-postal-code <s>
+  --target-city <pcc>               Sabre targetCity PCC
+  --halt-on-error true|false        Default: true — halt on hotel supplier errors
+  --body <json>                     Override input with raw JSON (ignores other flags)
+  --base-url <url>                  Override SABRE_BASE_URL
+  --format json|table               Output format (default: json). Table is a single-row summary.
+  --debug-request                   Print the outbound HTTP request to stderr
+  -h, --help                        Show this help
+
+Example (relies on SABRE_TEST_CARD_* env vars):
+  sabre-rest book-hotel \\
+    --booking-key "\$BOOKING_KEY" \\
+    --first-name Test --last-name Booking --phone 817-555-1212 \\
+    --email test@sabre.com \\
+    --agency-name 'Really Trustworthy Agency' --agency-iata 12345678 --pcc TM61 \\
+    --agency-street-number '3150 SABRE DRIVE' --agency-address-line 'SABRE TRAVEL' \\
+    --agency-city SOUTHLAKE --agency-state TX --agency-country US --agency-postal-code 76092 \\
+    --billing-address-line 'Wadowicka 6' --billing-city Krakow --billing-country PL \\
+    --format json
 `;
 
 const HOTEL_PRICE_CHECK_HELP = `Usage: sabre-rest hotel-price-check [flags]
@@ -3262,6 +3555,31 @@ async function hotelPriceCheckCommand(
   });
 }
 
+async function bookHotelCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: BOOK_HOTEL_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(BOOK_HOTEL_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const cardEnv = readBookHotelCardEnv(process.env);
+  const input = buildBookHotelInput(values, cardEnv);
+  const result = await client.createPassengerNameRecordV25.bookHotel(input);
+  emitResult(result, format, io, () => formatJson(result));
+}
+
 async function hotelSearchCommand(
   argv: readonly string[],
   env: CliEnvConfig,
@@ -3584,6 +3902,7 @@ export const COMMANDS: Record<
   'airline-lookup': airlineLookupCommand,
   'airline-alliance-lookup': airlineAllianceLookupCommand,
   'bargain-finder-max': bargainFinderMaxCommand,
+  'book-hotel': bookHotelCommand,
   'cancel-booking': cancelBookingCommand,
   'check-tickets': checkTicketsCommand,
   'create-booking': createBookingCommand,

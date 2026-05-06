@@ -51,7 +51,14 @@ These are supporting APIs, not steps you insert into the flow above:
 
 ### Create Passenger Name Record (REST)
 
-- Path: `POST {base}/v2.2.0/passenger/records?mode=create`
+- Path: `POST {base}/v2.5.0/passenger/records?mode=create`
+- Published versions: `2.3.0`, `2.4.0`, `2.5.0` (Sabre defaults to
+  `2.5.0`). Reference spec:
+  `https://developer.sabre.com/rest-api/create-passenger-name-record/2.5.0/_attachments/spec.yml`
+- Scope per Sabre's overview: "used to create a full reservation for
+  air, hotel, and rental car content; all within a single request."
+  This library exposes only the hotel path — air bookings go through
+  `bookingManagementV1` at `/v1/trip/orders/createBooking`.
 - The `CreatePassengerNameRecordRQ` body wraps a `HotelBook` block:
   - `BookingInfo.BookingKey` — from Price Check
   - `BookingInfo.RequestorID`
@@ -61,7 +68,34 @@ These are supporting APIs, not steps you insert into the flow above:
     `ISOCountryCode`, `PseudoCityCode`
 - Working request bodies for GDS, EAN, BCOM, and HBD suppliers are
   committed under [`docs/specifications/create-pnr/`](../specifications/create-pnr/README.md),
-  extracted from Sabre's published CSL Postman collection.
+  extracted from Sabre's published CSL Postman collection. The samples
+  declare `"version": "2.2.0"`; confirm the on-wire value when reading
+  the v2.5.0 spec.
+
+#### "Legacy segments are being sunset" — what the banner means
+
+The overview on Sabre's [Create Passenger Name Record REST page](https://developer.sabre.com/rest-api/create-passenger-name-record/2.5.0/index.html)
+carries this banner:
+
+> Sabre's legacy hotel shopping and booking services are being sunset.
+> Please upgrade to the new Content Services for Lodging platform (CSL).
+> As per SAN 16384, all new hotel bookings can only be created as CSL
+> segments starting from March 26, 2024.
+
+This is about the **segment type** recorded inside the Sabre PNR, not
+about the CPNR endpoint. Sabre can record a hotel booking as either a
+"legacy segment" or a "CSL segment"; SAN 16384 forbids creating new
+legacy segments. CPNR REST itself is current — v2.5.0 is Sabre's default
+documented version, and the CSL Setup & Guides page lists "Create PNR
+(SOAP | REST)" as one of three valid "Reserve" options in the
+orchestrated CSL flow (alongside SOAP-only Enhanced Hotel Book and
+Update Itinerary).
+
+In practice the request body our mapper builds must route Sabre into
+producing a CSL segment, not a legacy one. The Postman samples we
+committed are Sabre-authored against the current stack, so they should
+already be on the CSL-segment path — confirm the exact discriminator
+when reading the v2.5.0 spec.
 
 ### Enhanced Hotel Book (SOAP only)
 
