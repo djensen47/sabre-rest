@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 
 # Playwright MCP session artifacts
 .playwright-mcp/
+
+# Claude Code worktree scratch directory
+.claude/worktrees/

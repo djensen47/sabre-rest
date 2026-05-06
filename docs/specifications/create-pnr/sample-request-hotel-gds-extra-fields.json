@@ -1,0 +1,155 @@
+{
+  "CreatePassengerNameRecordRQ": {
+    "version": "2.2.0",
+    "targetCity": "TM61",
+    "haltOnAirPriceError": false,
+    "TravelItineraryAddInfo": {
+      "AgencyInfo": {
+        "Address": {
+          "AddressLine": "SABRE TRAVEL",
+          "CityName": "SOUTHLAKE",
+          "CountryCode": "US",
+          "PostalCode": "76092",
+          "StateCountyProv": {
+            "StateCode": "TX"
+          },
+          "StreetNmbr": "3150 SABRE DRIVE"
+        },
+        "Ticketing": {
+          "TicketType": "7TAW"
+        }
+      },
+      "CustomerInfo": {
+        "ContactNumbers": {
+          "ContactNumber": [
+            {
+              "NameNumber": "1.1",
+              "Phone": "817-555-1212",
+              "PhoneUseType": "H"
+            }
+          ]
+        },
+        "PersonName": [
+          {
+            "NameNumber": "1.1",
+            "NameReference": "ABC123",
+            "PassengerType": "ADT",
+            "GivenName": "Test",
+            "Surname": "Booking"
+          }
+        ]
+      }
+    },
+    "HotelBook": {
+      "BookingInfo": {
+        "BookingKey": "{{booking-key}}",
+        "RequestorID": "SG000000",
+        "Email": "test@sabre.com",
+        "CorpDiscount": "CD1234567",
+        "PromotionalCode": "XJKGHLDE"
+      },
+      "Rooms": {
+        "Room": [
+          {
+            "Guests": {
+              "Guest": [
+                {
+                  "Contact": {
+                    "Phone": "817-555-1212"
+                  },
+                  "FirstName": "Test",
+                  "LastName": "Booking",
+                  "Index": 1,
+                  "LeadGuest": true,
+                  "Type": 10,
+                  "Email": "test@sabre.com",
+                  "FrequentFlyerNumber": "FLY12345",
+                  "LoyaltyId": "LOY12345"
+                }
+              ]
+            },
+            "RoomIndex": 1,
+            "RoomExtras": {
+              "RoomExtra": [
+                {
+                  "Type": 26,
+                  "Quantity": 1
+                }
+              ]
+            },
+            "SpecialInstructions": {
+              "SpecialInstruction": ["Room with a view"]
+            }
+          }
+        ]
+      },
+      "PaymentInformation": {
+        "FormOfPayment": {
+          "PaymentCard": {
+            "PaymentType": "CC",
+            "CardCode": "VI",
+            "CardNumber": "4444333322221111",
+            "ExpiryMonth": 3,
+            "ExpiryYear": "2022",
+            "FullCardHolderName": {
+              "FirstName": "Test",
+              "LastName": "Booking"
+            },
+            "CSC": "123",
+            "Address": {
+              "AddressLine": ["Wadowicka 6"],
+              "CityName": "Krakow",
+              "StateProvince": {
+                "code": "KR"
+              },
+              "StateProvinceCodes": {
+                "Code": [
+                  {
+                    "content": "KR"
+                  }
+                ]
+              },
+              "PostCode": "30-415",
+              "CountryCodes": {
+                "Code": [
+                  {
+                    "content": "PL"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "Type": "DEPOSIT"
+      },
+      "POS": {
+        "Source": {
+          "RequestorID": {
+            "Type": 5,
+            "Id": "12345678",
+            "IdContext": "IATA"
+          },
+          "AgencyAddress": {
+            "AddressLine1": "3150 SABRE DRIVE",
+            "CityName": {},
+            "CountryName": {
+              "Code": "US"
+            }
+          },
+          "AgencyName": "Really Trustworthy Agency",
+          "ISOCountryCode": "US",
+          "PseudoCityCode": "TM61"
+        }
+      }
+    },
+    "PostProcessing": {
+      "RedisplayReservation": true,
+      "ARUNK": "",
+      "EndTransaction": {
+        "Source": {
+          "ReceivedFrom": "TM61"
+        }
+      }
+    }
+  }
+}
