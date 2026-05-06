@@ -20,6 +20,10 @@ import {
   DefaultBookingManagementV1Service,
 } from './services/booking-management-v1/service.js';
 import {
+  type CreatePassengerNameRecordV25Service,
+  DefaultCreatePassengerNameRecordV25Service,
+} from './services/create-passenger-name-record-v25/service.js';
+import {
   DefaultGetAncillariesV2Service,
   type GetAncillariesV2Service,
 } from './services/get-ancillaries-v2/service.js';
@@ -101,6 +105,17 @@ export interface SabreClient {
    * operations for bookings and flight tickets.
    */
   readonly bookingManagementV1: BookingManagementV1Service;
+
+  /**
+   * Sabre Create Passenger Name Record v2.5.0.
+   *
+   * Orchestrated booking endpoint for hotel reservations. Consumes a
+   * `bookingKey` from {@link HotelPriceCheckV5Service.check} and
+   * returns a Sabre PNR locator. Hardcodes SAN 16384 CSL-segment
+   * compliance; air bookings go through
+   * {@link BookingManagementV1Service.createBooking} instead.
+   */
+  readonly createPassengerNameRecordV25: CreatePassengerNameRecordV25Service;
 
   /**
    * Sabre Get Ancillaries v2.
@@ -256,6 +271,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
   const airlineAllianceLookupV1 = new DefaultAirlineAllianceLookupV1Service(deps);
   const bargainFinderMaxV5 = new DefaultBargainFinderMaxV5Service(deps);
   const bookingManagementV1 = new DefaultBookingManagementV1Service(deps);
+  const createPassengerNameRecordV25 = new DefaultCreatePassengerNameRecordV25Service(deps);
   const getAncillariesV2 = new DefaultGetAncillariesV2Service(deps);
   const getHotelAvailV5 = new DefaultGetHotelAvailV5Service(deps);
   const getHotelDetailsV5 = new DefaultGetHotelDetailsV5Service(deps);
@@ -271,6 +287,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
     airlineAllianceLookupV1,
     bargainFinderMaxV5,
     bookingManagementV1,
+    createPassengerNameRecordV25,
     getAncillariesV2,
     getHotelAvailV5,
     getHotelDetailsV5,
@@ -288,6 +305,7 @@ interface SabreClientServices {
   airlineAllianceLookupV1: AirlineAllianceLookupV1Service;
   bargainFinderMaxV5: BargainFinderMaxV5Service;
   bookingManagementV1: BookingManagementV1Service;
+  createPassengerNameRecordV25: CreatePassengerNameRecordV25Service;
   getAncillariesV2: GetAncillariesV2Service;
   getHotelAvailV5: GetHotelAvailV5Service;
   getHotelDetailsV5: GetHotelDetailsV5Service;
@@ -310,6 +328,7 @@ class DefaultSabreClient implements SabreClient {
   readonly airlineAllianceLookupV1: AirlineAllianceLookupV1Service;
   readonly bargainFinderMaxV5: BargainFinderMaxV5Service;
   readonly bookingManagementV1: BookingManagementV1Service;
+  readonly createPassengerNameRecordV25: CreatePassengerNameRecordV25Service;
   readonly getAncillariesV2: GetAncillariesV2Service;
   readonly getHotelAvailV5: GetHotelAvailV5Service;
   readonly getHotelDetailsV5: GetHotelDetailsV5Service;
@@ -326,6 +345,7 @@ class DefaultSabreClient implements SabreClient {
     this.airlineAllianceLookupV1 = services.airlineAllianceLookupV1;
     this.bargainFinderMaxV5 = services.bargainFinderMaxV5;
     this.bookingManagementV1 = services.bookingManagementV1;
+    this.createPassengerNameRecordV25 = services.createPassengerNameRecordV25;
     this.getAncillariesV2 = services.getAncillariesV2;
     this.getHotelAvailV5 = services.getHotelAvailV5;
     this.getHotelDetailsV5 = services.getHotelDetailsV5;

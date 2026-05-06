@@ -203,6 +203,19 @@ export type {
   VoidTicketsInput,
   VoidTicketsOutput,
 } from './services/booking-management-v1/types.js';
+export type { CreatePassengerNameRecordV25Service } from './services/create-passenger-name-record-v25/service.js';
+export type {
+  BookHotelAgency,
+  BookHotelAgencyAddress,
+  BookHotelApplicationMessage,
+  BookHotelApplicationResults,
+  BookHotelBillingAddress,
+  BookHotelGuest,
+  BookHotelInput,
+  BookHotelOutput,
+  BookHotelPaymentCard,
+  BookHotelSystemSpecificResult,
+} from './services/create-passenger-name-record-v25/types.js';
 export type { BargainFinderMaxV5Service } from './services/bargain-finder-max-v5/service.js';
 export type { GetAncillariesV2Service } from './services/get-ancillaries-v2/service.js';
 export type {
