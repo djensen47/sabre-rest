@@ -136,6 +136,9 @@ export interface AvailGeoAttribute {
 /**
  * Geographic anchor. Exactly one variant: `geoCode`, `refPoint`, or
  * `addressRef`. All share `radius` + `uom`.
+ *
+ * See `docs/guides/hotel-search-anchors.md` for how to pick an anchor
+ * type, the full OTA `refPointType` table, and CERT-specific caveats.
  */
 export type AvailGeoRef = AvailGeoCodeRef | AvailReferencePointRef | AvailAddressRef;
 
@@ -160,8 +163,11 @@ export interface AvailGeoCodeRef extends AvailGeoRefCommon {
 }
 
 /**
- * Reference-point anchor: airport / landmark / polygon / etc. `refPointType`
- * is an OTA code (`6` = airport, `37` = polygon, etc.).
+ * Reference-point anchor: airport / landmark / polygon / etc.
+ * `refPointType` is an OTA code: `5` (city), `6` (airport),
+ * `7` (rail station), `11` (landmark), `16` (metro station),
+ * `18` (neighborhood), `37` (polygon). See
+ * `docs/guides/hotel-search-anchors.md` for the full table.
  */
 export interface AvailReferencePointRef extends AvailGeoRefCommon {
   kind: 'refPoint';

@@ -89,6 +89,9 @@ export interface GeoSearch {
  * Geographic anchor for the search. Exactly one variant per request:
  * `geoCode` for a raw latitude/longitude, `refPoint` for a named reference
  * (airport, landmark, polygon), or `addressRef` for an address match.
+ *
+ * See `docs/guides/hotel-search-anchors.md` for how to pick an anchor
+ * type, the full OTA `refPointType` table, and CERT-specific caveats.
  */
 export type GeoRef = GeoCodeRef | ReferencePointRef | AddressRef;
 
@@ -124,8 +127,11 @@ export interface GeoCodeRef extends GeoRefCommon {
 export interface ReferencePointRef extends GeoRefCommon {
   kind: 'refPoint';
   /**
-   * OTA reference-point type. Valid values: `5`, `6`, `7`, `11`, `16`,
-   * `18`, `37`. See Sabre's OTA code documentation.
+   * OTA reference-point type. Valid values: `5` (city), `6` (airport),
+   * `7` (rail station), `11` (landmark), `16` (metro station),
+   * `18` (neighborhood), `37` (polygon). See
+   * `docs/guides/hotel-search-anchors.md` for the full table with
+   * `value` / `valueContext` examples.
    */
   refPointType: '5' | '6' | '7' | '11' | '16' | '18' | '37';
   /** The reference value (e.g., `DFW` for an airport code). */
