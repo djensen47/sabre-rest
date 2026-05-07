@@ -45,7 +45,8 @@ These are supporting APIs, not steps you insert into the flow above:
 - **Get Hotel List / Get Hotel Content / Get Hotel Descriptive Info / Get Hotel
   Media / Get Hotel Image** — property discovery and static content.
 - **Geo Search / Geo Autocomplete / Property Name Autocomplete** — location
-  resolution utilities.
+  resolution utilities. See [`hotel-search-anchors.md`](./hotel-search-anchors.md)
+  for how these feed the `refPoint` anchor used by Search and Avail.
 
 ## Booking endpoint
 
