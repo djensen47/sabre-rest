@@ -446,8 +446,8 @@ else
     --agency-address-line 'SABRE TRAVEL' \
     --agency-city SOUTHLAKE --agency-state TX --agency-country US \
     --agency-postal-code 76092 \
-    --billing-address-line 'Wadowicka 6' \
-    --billing-city Krakow --billing-country PL --billing-postal-code 30-415 \
+    --billing-address-line '3150 Sabre Drive' \
+    --billing-city Southlake --billing-country US --billing-postal-code 76092 \
     --format json >"$BOOK_FILE"; then
     cat "$TMP_ERR" >&2
     fail "book-hotel"
