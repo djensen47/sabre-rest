@@ -37,10 +37,11 @@
 #   --to <iata>                   Destination IATA (required)
 #   --departure-date <YYYY-MM-DD> Departure date (required)
 #   --itinerary-index <n>         Which BFM result to book (default: 0)
-#   --given-name <name>           Traveler given name (default: JOHN)
-#   --surname <name>              Traveler surname (default: DOE)
-#   --phone <number>              Contact phone (default: 1234567890)
-#   --email <addr>                Contact email (optional)
+#   --given-name <name>           Traveler given name (default: randomly generated)
+#   --surname <name>              Traveler surname (default: randomly generated)
+#   --phone <number>              Contact phone (default: randomly generated)
+#   --email <addr>                Contact email (default: randomly generated)
+#   --seed <n>                    Reproduce a prior run's random traveler identity
 #   --card-number <pan>           Credit card PAN (default: 4111111111111111)
 #   --card-cvv <code>             Card security code (default: 123)
 #   --card-expiry <YYYY-MM>       Card expiry (default: 2027-12)
@@ -50,15 +51,20 @@
 
 set -o pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./lib/random-person.sh
+source "$SCRIPT_DIR/lib/random-person.sh"
+
 CLI="node dist/cli.js"
 FROM=""
 TO=""
 DEP_DATE=""
 ITIN_INDEX=0
-GIVEN_NAME="JOHN"
-SURNAME="DOE"
-PHONE="1234567890"
+GIVEN_NAME=""
+SURNAME=""
+PHONE=""
 EMAIL=""
+SEED=""
 CARD_NUMBER="4111111111111111"
 CARD_CVV="123"
 CARD_EXPIRY="2027-12"
@@ -66,7 +72,7 @@ CARD_TYPE="VI"
 BASE_URL=""
 
 usage() {
-  sed -n '2,49p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -79,6 +85,7 @@ while [[ $# -gt 0 ]]; do
     --surname) SURNAME="${2:-}"; shift 2 ;;
     --phone) PHONE="${2:-}"; shift 2 ;;
     --email) EMAIL="${2:-}"; shift 2 ;;
+    --seed) SEED="${2:-}"; shift 2 ;;
     --card-number) CARD_NUMBER="${2:-}"; shift 2 ;;
     --card-cvv) CARD_CVV="${2:-}"; shift 2 ;;
     --card-expiry) CARD_EXPIRY="${2:-}"; shift 2 ;;
@@ -88,6 +95,13 @@ while [[ $# -gt 0 ]]; do
     *) echo "error: unknown argument '$1'" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+generate_person "$SEED"
+GIVEN_NAME="${GIVEN_NAME:-$PERSON_GIVEN_NAME}"
+SURNAME="${SURNAME:-$PERSON_SURNAME}"
+PHONE="${PHONE:-$PERSON_PHONE}"
+EMAIL="${EMAIL:-$PERSON_EMAIL}"
+echo "traveler: $GIVEN_NAME $SURNAME  phone=$PHONE  email=$EMAIL  (seed=$PERSON_SEED)"
 
 missing=()
 [[ -z "$FROM" ]] && missing+=("--from")
@@ -308,7 +322,10 @@ FULFILL_BODY=$(jq -n \
   --arg cardExpiry "$CARD_EXPIRY" \
   '{
     confirmationId: $cid,
-    fulfillments: [{}],
+    fulfillments: [{
+      payment: { primaryFormOfPayment: 1 }
+    }],
+    designatePrinters: [{ ticket: { countryCode: "US" } }],
     formsOfPayment: [{
       type: "PAYMENTCARD",
       cardTypeCode: $cardType,

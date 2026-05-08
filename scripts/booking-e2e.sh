@@ -28,28 +28,34 @@
 #   --to <iata>                   Destination IATA (required)
 #   --departure-date <YYYY-MM-DD> Departure date (required)
 #   --itinerary-index <n>         Which BFM result to book (default: 0)
-#   --given-name <name>           Traveler given name (default: JOHN)
-#   --surname <name>              Traveler surname (default: DOE)
-#   --phone <number>              Contact phone (default: 1234567890)
-#   --email <addr>                Contact email (optional)
+#   --given-name <name>           Traveler given name (default: randomly generated)
+#   --surname <name>              Traveler surname (default: randomly generated)
+#   --phone <number>              Contact phone (default: randomly generated)
+#   --email <addr>                Contact email (default: randomly generated)
+#   --seed <n>                    Reproduce a prior run's random traveler identity
 #   --base-url <url>              Override SABRE_BASE_URL
 #   -h, --help                    Show this help
 
 set -o pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./lib/random-person.sh
+source "$SCRIPT_DIR/lib/random-person.sh"
 
 CLI="node dist/cli.js"
 FROM=""
 TO=""
 DEP_DATE=""
 ITIN_INDEX=0
-GIVEN_NAME="JOHN"
-SURNAME="DOE"
-PHONE="1234567890"
+GIVEN_NAME=""
+SURNAME=""
+PHONE=""
 EMAIL=""
+SEED=""
 BASE_URL=""
 
 usage() {
-  sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -62,11 +68,19 @@ while [[ $# -gt 0 ]]; do
     --surname) SURNAME="${2:-}"; shift 2 ;;
     --phone) PHONE="${2:-}"; shift 2 ;;
     --email) EMAIL="${2:-}"; shift 2 ;;
+    --seed) SEED="${2:-}"; shift 2 ;;
     --base-url) BASE_URL="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "error: unknown argument '$1'" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+generate_person "$SEED"
+GIVEN_NAME="${GIVEN_NAME:-$PERSON_GIVEN_NAME}"
+SURNAME="${SURNAME:-$PERSON_SURNAME}"
+PHONE="${PHONE:-$PERSON_PHONE}"
+EMAIL="${EMAIL:-$PERSON_EMAIL}"
+echo "traveler: $GIVEN_NAME $SURNAME  phone=$PHONE  email=$EMAIL  (seed=$PERSON_SEED)"
 
 missing=()
 [[ -z "$FROM" ]] && missing+=("--from")

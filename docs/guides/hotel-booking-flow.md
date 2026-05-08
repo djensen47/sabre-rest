@@ -14,11 +14,28 @@ Source: Sabre Developer Hub, [Content Services for Lodging (CSL) — Setup and G
 | 2 | Refine | Get Hotel Details | Optional\* |
 | 3 | Review | Hotel Price Check | **Mandatory** |
 | 4 | Reserve | Create Passenger Name Record | **Mandatory** |
-| 5 | Retrieve | Get Reservation (SOAP only) | Optional |
+| 5 | Retrieve | Booking Management v1 `getBooking`† | Optional |
+| 6 | Cancel | Booking Management v1 `cancelBooking`‡ | Optional |
 
 _\* At least one of Get Hotel Avail **or** Get Hotel Details must be called
 before Hotel Price Check — the `RateKey` produced by those two endpoints is
 the input to Price Check._
+
+_† Sabre's CSL Setup & Guides page lists this step as "Get Reservation (SOAP
+only)", but Booking Management v1 (`POST /v1/trip/orders/getBooking`) is
+spec-documented for hotel PNRs (see [`booking-management.yml`](../specifications/booking-management.yml)
+at lines 1134, 2545, 2703 — the response schema includes
+`hotels[]` reservations). In practice, we have not yet exercised this
+against a CSL-segment hotel PNR: our CERT OAuth credentials currently
+return `UNAUTHORIZED_ACCESS` on this endpoint (sibling issue to
+[`docs/sabre-support-tjr-request.md`](../sabre-support-tjr-request.md))._
+
+_‡ Verified end-to-end in CERT on 2026-05-07: Booking Management v1
+`cancelBooking` with `--cancel-all` accepts a PNR created by the CSL
+`createPassengerNameRecord` v2.5.0 hotel flow and returns a clean success
+envelope. This contradicts the SOAP-only retrieve/cancel implication on
+Sabre's CSL Setup & Guides page. `scripts/hotel-e2e.sh` uses this call to
+self-clean after booking._
 
 ### Key chaining
 
