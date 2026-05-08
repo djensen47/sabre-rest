@@ -269,7 +269,9 @@ CREATE_BODY=$(jq -n \
         departureDate: $depDate,
         departureTime: $depTime,
         bookingClass: $bookingClass
-      }]
+      }],
+      haltOnFlightStatusCodes: ["NO"],
+      retryBookingUnconfirmedFlights: true
     },
     travelers: [{
       givenName: $givenName,
