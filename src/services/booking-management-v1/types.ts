@@ -893,42 +893,88 @@ export interface BookGenericSeat {
   columnLetter?: string;
 }
 
-/** Pricing details/qualifiers for ATPCO flights. */
+/**
+ * Pricing details for an entry in `flightDetails.flightPricing[]`.
+ *
+ * Per Sabre's `PricingDetails` schema, the only top-level fields are
+ * `priceComparisons` and `qualifiers` — every other pricing knob
+ * (validating carrier, account code, tour code, etc.) lives under
+ * `qualifiers`. An empty `{}` is sufficient to trigger Sabre's default
+ * pricing pass and persist a Price Quote on the PNR, which is what
+ * `fulfillTickets` (`AirTicketLLSRQ`) needs in order to ticket.
+ */
 export interface BookPricingDetails {
+  /**
+   * Acceptable booking-price thresholds. If the priced result exceeds
+   * a threshold, Sabre stops processing and returns an error.
+   */
+  priceComparisons?: readonly BookPriceComparison[];
+  /** Pricing qualifiers (validating carrier, account code, etc.). */
+  qualifiers?: BookPricingQualifiers;
+}
+
+/**
+ * A single booking-price threshold for `BookPricingDetails.priceComparisons`.
+ * `amount` and `percent` are mutually exclusive.
+ */
+export interface BookPriceComparison {
+  /** The desired amount that serves as the basis of the comparison. Decimal string. */
+  desiredAmount: string;
+  /** The comparison method. */
+  comparisonType: BookComparisonType;
+  /** Acceptable monetary threshold the desired amount may exceed. Decimal string. */
+  amount?: string;
+  /** Acceptable percent threshold the desired amount may exceed. */
+  percent?: string;
+}
+
+/**
+ * Pricing qualifiers for `BookPricingDetails.qualifiers`. Sabre's
+ * `PricingQualifiers` schema is broad (40+ fields including branded
+ * fares, corporate fares, exchange penalties, baggage allowance, tour
+ * code overrides, retailer rules, Spanish discount codes, etc.). Only
+ * the most commonly-used fields are typed here today; the interface is
+ * open via index signature so other documented fields can be sent
+ * without a type update. If you add a field that catches on, please
+ * promote it to a typed property in a follow-up.
+ */
+export interface BookPricingQualifiers {
+  /** Two-letter IATA designator of the desired validating airline. */
+  validatingAirlineCode?: string;
+  /** Tour code to use during pricing. 1–15 uppercase alphanumeric. */
+  tourCode?: string;
+  /** Handling option for how the tour code is printed. */
+  tourCodeOverrides?: BookTourCodeOverrideOption;
   /** Traveler indices (1-based) this pricing applies to. */
   travelerIndices?: readonly number[];
-  /** Fare type code (e.g., `'PUB'` for published, `'NET'` for net). */
-  fareType?: string;
-  /** Validating carrier airline code. */
-  validatingAirlineCode?: string;
-  /** Account code for negotiated fares. */
-  accountCode?: string;
-  /** Override pricing amounts. */
-  priceComparisons?: readonly BookPriceComparison[];
-  /** Tour code override options. */
-  tourCodeOverrides?: BookTourCodeOverrides;
-  /** Passenger status (for resident/nationality pricing). */
+  /** Flight indices (1-based) this pricing applies to. */
+  flightIndices?: readonly number[];
+  /** Cabin code (e.g. `YB`) — combine with `rebookLowestFares`. */
+  cabinCode?: string;
+  /** Three-letter ISO 4217 currency for pricing. */
+  currencyPricing?: string;
+  /** If `true`, search for the lowest fare and rebook automatically. */
+  rebookLowestFares?: boolean;
+  /** Use only public (published) fares. */
+  usePublicFare?: boolean;
+  /** Use only private (negotiated) fares. */
+  usePrivateFare?: boolean;
+  /** Use only net fares. */
+  useNetFare?: boolean;
+  /** Use only excursion fares. */
+  useExcursionFare?: boolean;
+  /** Use only round-the-world fares. */
+  useRoundTheWorldFare?: boolean;
+  /** Passenger residency/nationality status for resident pricing. */
   passengerStatus?: BookPassengerStatus;
-  /** Country code for passenger status. */
+  /** Country code (ISO 3166) for the passenger status. */
   passengerStatusCountryCode?: string;
-  /** Brand fare IDs to price with. */
-  brandFareIds?: readonly string[];
-}
-
-/** Price comparison for pricing overrides. */
-export interface BookPriceComparison {
-  /** Comparison type (increase/decrease by amount/percent). */
-  type: BookComparisonType;
-  /** Amount or percentage value. */
-  value: string;
-}
-
-/** Tour code override options for pricing. */
-export interface BookTourCodeOverrides {
-  /** Tour code to apply. */
-  tourCode?: string;
-  /** Override option. */
-  option?: BookTourCodeOverrideOption;
+  /**
+   * Allow other documented `PricingQualifiers` fields without a type
+   * update. See `docs/specifications/booking-management.yml` for the
+   * full list.
+   */
+  [key: string]: unknown;
 }
 
 /** Hotel to book. */
