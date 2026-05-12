@@ -46,6 +46,15 @@
 #   --card-cvv <code>             Card security code (default: 123)
 #   --card-expiry <YYYY-MM>       Card expiry (default: 2027-12)
 #   --card-type <code>            Card vendor code (default: VI for Visa)
+#   --with-printers               Include designatePrinters in fulfillTickets.
+#                                 Default is to omit it, matching the shape
+#                                 the demo-flights app uses successfully in
+#                                 CERT. With this flag Sabre routes through
+#                                 DesignatePrinterLLSRQ, which on H50H has
+#                                 surfaced PRINTER_NOT_ASSIGNED → SELECT
+#                                 PRINTER TYPES → INVALID TICKET STOCK.
+#                                 Kept as a flag so the investigation trace
+#                                 in PR #88 remains reproducible.
 #   --base-url <url>              Override SABRE_BASE_URL
 #   -h, --help                    Show this help
 
@@ -65,14 +74,15 @@ SURNAME=""
 PHONE=""
 EMAIL=""
 SEED=""
-CARD_NUMBER="4111111111111111"
+CARD_NUMBER="4487971000000006"
 CARD_CVV="123"
 CARD_EXPIRY="2027-12"
 CARD_TYPE="VI"
+WITH_PRINTERS=0
 BASE_URL=""
 
 usage() {
-  sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,60p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -90,6 +100,7 @@ while [[ $# -gt 0 ]]; do
     --card-cvv) CARD_CVV="${2:-}"; shift 2 ;;
     --card-expiry) CARD_EXPIRY="${2:-}"; shift 2 ;;
     --card-type) CARD_TYPE="${2:-}"; shift 2 ;;
+    --with-printers) WITH_PRINTERS=1; shift ;;
     --base-url) BASE_URL="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "error: unknown argument '$1'" >&2; usage >&2; exit 2 ;;
@@ -125,6 +136,16 @@ fi
 
 BASE_URL_FLAG=()
 [[ -n "$BASE_URL" ]] && BASE_URL_FLAG=(--base-url "$BASE_URL")
+
+# Source .env so SABRE_PCC is available to jq -n below. The CLI itself
+# already reads SABRE_CLIENT_ID / SABRE_CLIENT_SECRET / SABRE_BASE_URL
+# independently, but targetPcc is explicit in the fulfillTickets body.
+if [[ -f ".env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
 
 TMP_ERR=$(mktemp)
 trap 'rm -f "$TMP_ERR"' EXIT
@@ -259,6 +280,9 @@ CREATE_BODY=$(jq -n \
   --arg surname "$SURNAME" \
   --arg phone "$PHONE" \
   --arg email "$EMAIL" \
+  --arg cardType "$CARD_TYPE" \
+  --arg cardNumber "$CARD_NUMBER" \
+  --arg cardExpiry "$CARD_EXPIRY" \
   '{
     flightDetails: {
       flights: [{
@@ -270,6 +294,7 @@ CREATE_BODY=$(jq -n \
         departureTime: $depTime,
         bookingClass: $bookingClass
       }],
+      flightPricing: [{ fareType: "PUB" }],
       haltOnFlightStatusCodes: ["NO"],
       retryBookingUnconfirmedFlights: true
     },
@@ -281,7 +306,36 @@ CREATE_BODY=$(jq -n \
     contactInfo: (
       { phones: [$phone] }
       + (if $email == "" then {} else { emails: [$email] } end)
-    )
+    ),
+    payment: {
+      billingAddress: {
+        name: "John Smith",
+        street: "1230 Ellen Ave, apt 10",
+        city: "Dallas",
+        stateProvince: "TX",
+        postalCode: "75063",
+        countryCode: "US"
+      },
+      formsOfPayment: [{
+        type: "PAYMENTCARD",
+        cardTypeCode: $cardType,
+        cardNumber: $cardNumber,
+        expiryDate: $cardExpiry,
+        cardHolder: {
+          givenName: "John",
+          surname: "Smith",
+          email: $email,
+          phone: $phone,
+          address: {
+            street: "1230 Ellen Ave, apt 10",
+            city: "Dallas",
+            stateProvince: "TX",
+            postalCode: "75063",
+            countryCode: "US"
+          }
+        }
+      }]
+    }
   }')
 
 if ! CREATE_OUT=$(run_cli $CLI create-booking "${BASE_URL_FLAG[@]}" --body "$CREATE_BODY"); then
@@ -304,6 +358,15 @@ fi
 echo "isTicketed:   $(echo "$GET_OUT" | jq -r '.isTicketed // false')"
 echo "isCancelable: $(echo "$GET_OUT" | jq -r '.isCancelable // false')"
 echo "flights:      $(echo "$GET_OUT" | jq -r '.flights | length // 0')"
+# TEMP DIAG — what does the PNR look like for PQ records? Revert before commit.
+echo "DIAG PQ-ish fields:"
+echo "$GET_OUT" | jq '{
+  fares: (.fares // null),
+  pricingInfo: (.pricingInfo // null),
+  pricingSubjectToChange: (.pricingSubjectToChange // null),
+  priceQuotes: (.priceQuotes // null),
+  topLevelKeys: keys
+}'
 
 # ---------------------------------------------------------------------------
 step 5 "check-tickets (pre-fulfillment QC)"
@@ -316,26 +379,35 @@ echo "errors:           $(echo "$CHECK_OUT" | jq -r '.errors | length // 0')"
 
 # ---------------------------------------------------------------------------
 step 6 "fulfill-tickets (PAYMENTCARD ${CARD_TYPE} ****$(printf '%s' "$CARD_NUMBER" | tail -c 4))"
+# designatePrinters is omitted by default because sending it on H50H
+# routes Sabre through DesignatePrinterLLSRQ, which surfaces
+# PRINTER_NOT_ASSIGNED / SELECT PRINTER TYPES / INVALID TICKET STOCK.
+# The demo-flights app omits designatePrinters entirely and tickets
+# successfully. Pass --with-printers to reproduce the PR #88 trace.
 FULFILL_BODY=$(jq -n \
   --arg cid "$CONFIRMATION_ID" \
+  --arg pcc "${SABRE_PCC:-}" \
   --arg cardType "$CARD_TYPE" \
   --arg cardNumber "$CARD_NUMBER" \
   --arg cardCvv "$CARD_CVV" \
   --arg cardExpiry "$CARD_EXPIRY" \
+  --argjson withPrinters "$WITH_PRINTERS" \
   '{
     confirmationId: $cid,
     fulfillments: [{
       payment: { primaryFormOfPayment: 1 }
     }],
-    designatePrinters: [{ ticket: { countryCode: "US" } }],
     formsOfPayment: [{
       type: "PAYMENTCARD",
       cardTypeCode: $cardType,
       cardNumber: $cardNumber,
-      cardSecurityCode: $cardCvv,
       expiryDate: $cardExpiry
     }]
-  }')
+  }
+  + (if $pcc == "" then {} else { targetPcc: $pcc } end)
+  + (if $withPrinters == 1
+     then { designatePrinters: [{ ticket: { countryCode: "AT" } }] }
+     else {} end)')
 
 if ! FULFILL_OUT=$(run_cli $CLI fulfill-tickets "${BASE_URL_FLAG[@]}" --body "$FULFILL_BODY"); then
   cat "$TMP_ERR" >&2
