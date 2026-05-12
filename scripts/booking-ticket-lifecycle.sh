@@ -30,7 +30,7 @@
 #   3. `jq` on PATH.
 #
 # Usage:
-#   scripts/booking-ticket-lifecycle.sh --from DFW --to LAX --departure-date 2026-05-20
+#   scripts/booking-ticket-lifecycle.sh --from SFO --to LAX --departure-date 2026-06-15
 #
 # Flags:
 #   --from <iata>                 Origin IATA (required)
@@ -112,7 +112,9 @@ GIVEN_NAME="${GIVEN_NAME:-$PERSON_GIVEN_NAME}"
 SURNAME="${SURNAME:-$PERSON_SURNAME}"
 PHONE="${PHONE:-$PERSON_PHONE}"
 EMAIL="${EMAIL:-$PERSON_EMAIL}"
-echo "traveler: $GIVEN_NAME $SURNAME  phone=$PHONE  email=$EMAIL  (seed=$PERSON_SEED)"
+BIRTHDATE="$PERSON_BIRTHDATE"
+GENDER="$PERSON_GENDER"
+echo "traveler: $GIVEN_NAME $SURNAME ($GENDER, $BIRTHDATE)  phone=$PHONE  email=$EMAIL  (seed=$PERSON_SEED)"
 
 missing=()
 [[ -z "$FROM" ]] && missing+=("--from")
@@ -278,6 +280,8 @@ CREATE_BODY=$(jq -n \
   --arg bookingClass "$BOOKING_CLASS" \
   --arg givenName "$GIVEN_NAME" \
   --arg surname "$SURNAME" \
+  --arg birthDate "$BIRTHDATE" \
+  --arg gender "$GENDER" \
   --arg phone "$PHONE" \
   --arg email "$EMAIL" \
   --arg cardType "$CARD_TYPE" \
@@ -294,14 +298,23 @@ CREATE_BODY=$(jq -n \
         departureTime: $depTime,
         bookingClass: $bookingClass
       }],
-      flightPricing: [{ fareType: "PUB" }],
+      flightPricing: [{}],
       haltOnFlightStatusCodes: ["NO"],
       retryBookingUnconfirmedFlights: true
     },
     travelers: [{
       givenName: $givenName,
       surname: $surname,
-      passengerCode: "ADT"
+      birthDate: $birthDate,
+      gender: $gender,
+      passengerCode: "ADT",
+      identityDocuments: [{
+        documentType: "SECURE_FLIGHT_PASSENGER_DATA",
+        givenName: $givenName,
+        surname: $surname,
+        birthDate: $birthDate,
+        gender: $gender
+      }]
     }],
     contactInfo: (
       { phones: [$phone] }
@@ -401,7 +414,9 @@ FULFILL_BODY=$(jq -n \
       type: "PAYMENTCARD",
       cardTypeCode: $cardType,
       cardNumber: $cardNumber,
-      expiryDate: $cardExpiry
+      expiryDate: $cardExpiry,
+      manualApprovalCode: "123456",
+      authentications: [{ channelCode: "EC" }]
     }]
   }
   + (if $pcc == "" then {} else { targetPcc: $pcc } end)

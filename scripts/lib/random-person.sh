@@ -11,6 +11,7 @@
 #   PERSON_GIVEN_NAME   e.g. JANE           (uppercase, alpha-only, PNR-safe)
 #   PERSON_SURNAME      e.g. MARTINEZ
 #   PERSON_BIRTHDATE    e.g. 1987-03-14     (ISO, adult age 18–75)
+#   PERSON_GENDER       MALE or FEMALE      (Sabre BookGender subset)
 #   PERSON_EMAIL        e.g. jane.martinez+a1b2c3@example.com
 #   PERSON_PHONE        e.g. 14155550123    (11 digits, US-shaped)
 #   PERSON_SEED         the seed used (echoed so failed runs can be rerun)
@@ -87,4 +88,12 @@ generate_person() {
   local area=$((200 + $(_rp_rand 800 "$((seed + 6))")))
   local line=$((100 + $(_rp_rand 100 "$((seed + 7))")))
   PERSON_PHONE=$(printf '1%03d555%04d' "$area" "$line")
+
+  # Gender: MALE or FEMALE (Sabre BookGender also supports INFANT_* and
+  # UNDISCLOSED, but SFPD for adult fare classes expects a binary value).
+  if (( $(_rp_rand 2 "$((seed + 8))") == 0 )); then
+    PERSON_GENDER="MALE"
+  else
+    PERSON_GENDER="FEMALE"
+  fi
 }
