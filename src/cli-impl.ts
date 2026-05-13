@@ -16,6 +16,7 @@ import { type ParseArgsConfig, parseArgs } from 'node:util';
 import { createOAuthV2 } from './auth/oauth-v2.js';
 import { type SabreClient, createSabreClient } from './client.js';
 import { SabreApiResponseError } from './errors/sabre-api-response-error.js';
+import { SabreAuthenticationError } from './errors/sabre-authentication-error.js';
 import { SabreError } from './errors/sabre-error.js';
 import type { Middleware, SabreRequest } from './http/types.js';
 import type {
@@ -3975,6 +3976,21 @@ export function renderError(err: unknown, io: CliIo): void {
   if (err instanceof SabreApiResponseError) {
     io.stderr.write(`error: ${err.name}: ${err.message}\n`);
     io.stderr.write(`status: ${err.statusCode}\n`);
+    for (const { name, value } of pickNotableResponseHeaders(err.responseHeaders)) {
+      io.stderr.write(`${name}: ${value}\n`);
+    }
+    if (err.responseBody !== undefined) {
+      const body =
+        typeof err.responseBody === 'string' ? err.responseBody : formatJson(err.responseBody);
+      io.stderr.write(`body: ${body}\n`);
+    }
+    return;
+  }
+  if (err instanceof SabreAuthenticationError) {
+    io.stderr.write(`error: ${err.name}: ${err.message}\n`);
+    if (err.statusCode !== undefined) {
+      io.stderr.write(`status: ${err.statusCode}\n`);
+    }
     for (const { name, value } of pickNotableResponseHeaders(err.responseHeaders)) {
       io.stderr.write(`${name}: ${value}\n`);
     }

@@ -53,6 +53,16 @@ npm run generate -- <basename>
 
 This produces `src/generated/<basename>.ts`. The script also runs `tsc --noEmit` after generation to verify the output compiles. If generation or the post-generation typecheck fails, stop and tell the user — don't try to hand-edit the generated file.
 
+If generation fails with `Unsupported Swagger version: 2.x`, the spec is Swagger 2.0 and must be converted in place to OpenAPI 3.x before generating. See `docs/decisions.md` → "Swagger 2.0 specs are converted in place to OpenAPI 3.x". The conversion command is:
+
+```bash
+npx swagger2openapi --yaml \
+  --outfile docs/specifications/<basename>.yml \
+  docs/specifications/<basename>.yml
+```
+
+Then re-run `npm run generate -- <basename>`.
+
 ### 3. Decide and confirm the service identifiers
 
 These come from the OAS `info` block plus a hand-curated short form. Confirm with the user (or propose, then confirm) before writing files. Worked example using `info.title: "Airline Lookup"`, `info.version: "v1"`:

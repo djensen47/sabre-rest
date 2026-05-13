@@ -290,6 +290,55 @@ Unknown names error out with the list of available specs.
 
 ---
 
+## Swagger 2.0 specs are converted in place to OpenAPI 3.x
+
+### Decision
+
+Most Sabre specs are published as OpenAPI 3.x and work directly with our
+type generator. A small number ship as Swagger 2.0, which
+`openapi-typescript` does not accept.
+
+When a spec arrives as Swagger 2.0, convert it in place using
+`swagger2openapi` (no install; runs via `npx`):
+
+```bash
+npx swagger2openapi --yaml \
+  --outfile docs/specifications/<basename>.yml \
+  docs/specifications/<basename>.yml
+```
+
+After conversion the spec is OpenAPI 3.0.0 and `npm run generate -- <basename>`
+works normally. Commit the converted file. There is no separate "original"
+copy.
+
+### Why
+
+- **One pipeline, one input format.** The generator targets OpenAPI 3.x.
+  Converting at intake keeps the rest of the toolchain identical regardless
+  of what Sabre publishes.
+- **Conversion is lossless and stable.** `swagger2openapi` is the
+  reference converter; output is deterministic and reviewable as a normal
+  diff.
+- **No new dependency.** `npx` runs it on demand; the project stays
+  dependency-free at runtime.
+- **Simpler than dual-format support** in `scripts/generate-types.mjs`.
+  Swagger 2.0 specs are rare here, so a script branch isn't worth its
+  complexity yet. If we accumulate several, promote the conversion into the
+  script.
+
+### Alternatives rejected
+
+- **Keep both `<spec>.swagger.yml` and `<spec>.openapi.yml`.** Two files per
+  API for one piece of information; provenance is already captured in
+  git history.
+- **Add `swagger2openapi` to `scripts/generate-types.mjs` as a pre-step.**
+  Reasonable, but only worthwhile once we have multiple Swagger 2.0 inputs.
+  Until then it's untested code on the hot path.
+- **Pin a different generator that accepts Swagger 2.0.** Forks the toolchain
+  for a minority case.
+
+---
+
 ## API space coverage roadmap
 
 ### Decision
