@@ -2114,17 +2114,21 @@ function buildSegment(s: components['schemas']['SegmentBasics']): BookingSegment
 }
 
 function buildFlightTicket(ft: components['schemas']['FlightTicket']): BookingFlightTicket {
+  // Spec marks `flightCoupons` and `payment` required, but Sabre omits
+  // them on some ticket records (observed: voided tickets after
+  // void-tickets → cancel-booking in CERT on H50H). Default defensively
+  // so a follow-up getBooking on a cancelled PNR doesn't crash.
   const out: BookingFlightTicket = {
     number: ft.number,
     date: ft.date,
     airlineCode: ft.airlineCode,
     travelerIndex: ft.travelerIndex,
-    flightCoupons: ft.flightCoupons.map((c) => ({
+    flightCoupons: (ft.flightCoupons ?? []).map((c) => ({
       itemId: c.itemId,
       couponStatus: c.couponStatus,
       couponStatusCode: c.couponStatusCode,
     })) as BookingFlightCoupon[],
-    payment: buildTotalValues(ft.payment),
+    payment: ft.payment ? buildTotalValues(ft.payment) : ({} as BookingTotalValues),
   };
   if (ft.agencyIataNumber !== undefined) out.agencyIataNumber = ft.agencyIataNumber;
   if (ft.allCoupons !== undefined) {

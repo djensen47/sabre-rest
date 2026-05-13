@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 
 # Claude Code worktree scratch directory
 .claude/worktrees/
+
+# Local-only scratch (drafts, support correspondence, ad-hoc notes)
+.local/

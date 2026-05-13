@@ -21,7 +21,7 @@
 #   3. `jq` on PATH.
 #
 # Usage:
-#   scripts/booking-e2e.sh --from DFW --to LAX --departure-date 2026-05-15
+#   scripts/booking-e2e.sh --from SFO --to LAX --departure-date 2026-06-15
 #
 # Flags:
 #   --from <iata>                 Origin IATA (required)
@@ -242,7 +242,9 @@ CREATE_BODY=$(jq -n \
         departureDate: $depDate,
         departureTime: $depTime,
         bookingClass: $bookingClass
-      }]
+      }],
+      haltOnFlightStatusCodes: ["NO"],
+      retryBookingUnconfirmedFlights: true
     },
     travelers: [{
       givenName: $givenName,
