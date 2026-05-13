@@ -59,6 +59,10 @@ import {
   DefaultRevalidateItineraryV5Service,
   type RevalidateItineraryV5Service,
 } from './services/revalidate-itinerary-v5/service.js';
+import {
+  DefaultStatelessExchangesAirSearchV1Service,
+  type StatelessExchangesAirSearchV1Service,
+} from './services/stateless-exchanges-air-search-v1/service.js';
 import type { ServiceDeps } from './services/types.js';
 
 /**
@@ -193,6 +197,16 @@ export interface SabreClient {
   readonly revalidateItineraryV5: RevalidateItineraryV5Service;
 
   /**
+   * Sabre Stateless Exchanges Air Search v1.
+   *
+   * Shops alternate flight itineraries for an existing booking the
+   * consumer wants to exchange, returning the priced delta — fare diff,
+   * tax diff, and a change-fee/other-fee breakdown. Read-only quote;
+   * does not mutate the PNR.
+   */
+  readonly statelessExchangesAirSearchV1: StatelessExchangesAirSearchV1Service;
+
+  /**
    * Send a request through the configured middleware chain. Used by
    * service implementations; rarely useful to call directly.
    */
@@ -281,6 +295,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
   const hotelSearchV2 = new DefaultHotelSearchV2Service(deps);
   const multiAirportCityLookupV1 = new DefaultMultiAirportCityLookupV1Service(deps);
   const revalidateItineraryV5 = new DefaultRevalidateItineraryV5Service(deps);
+  const statelessExchangesAirSearchV1 = new DefaultStatelessExchangesAirSearchV1Service(deps);
 
   return new DefaultSabreClient(chain, {
     airlineLookupV1,
@@ -297,6 +312,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
     hotelSearchV2,
     multiAirportCityLookupV1,
     revalidateItineraryV5,
+    statelessExchangesAirSearchV1,
   });
 }
 
@@ -315,6 +331,7 @@ interface SabreClientServices {
   hotelSearchV2: HotelSearchV2Service;
   multiAirportCityLookupV1: MultiAirportCityLookupV1Service;
   revalidateItineraryV5: RevalidateItineraryV5Service;
+  statelessExchangesAirSearchV1: StatelessExchangesAirSearchV1Service;
 }
 
 /**
@@ -338,6 +355,7 @@ class DefaultSabreClient implements SabreClient {
   readonly hotelSearchV2: HotelSearchV2Service;
   readonly multiAirportCityLookupV1: MultiAirportCityLookupV1Service;
   readonly revalidateItineraryV5: RevalidateItineraryV5Service;
+  readonly statelessExchangesAirSearchV1: StatelessExchangesAirSearchV1Service;
 
   constructor(run: (req: SabreRequest) => Promise<SabreResponse>, services: SabreClientServices) {
     this.#run = run;
@@ -355,6 +373,7 @@ class DefaultSabreClient implements SabreClient {
     this.hotelSearchV2 = services.hotelSearchV2;
     this.multiAirportCityLookupV1 = services.multiAirportCityLookupV1;
     this.revalidateItineraryV5 = services.revalidateItineraryV5;
+    this.statelessExchangesAirSearchV1 = services.statelessExchangesAirSearchV1;
   }
 
   request(req: SabreRequest): Promise<SabreResponse> {

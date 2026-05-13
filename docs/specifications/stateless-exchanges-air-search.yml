@@ -1,0 +1,1482 @@
+openapi: 3.0.0
+info:
+  title: Stateless Exchanges Air Search API
+  description: The Stateless Air Exchange Search API is used for exchange shopping
+    and to provide flight search results.
+  version: "1.2"
+x-lingo-api-type: rpc
+security:
+  - oauth2_authentication: []
+tags:
+  - name: AirExchangeSearch
+    description: Air Exchange Search.
+paths:
+  /getFlights:
+    post:
+      operationId: AirExchangeSearch
+      description: Creates a list of itineraries with the given search criteria during
+        exchange. The response contains a list of itineraries with fare
+        offerings and detailed price breakdown.
+      tags:
+        - AirExchangeSearch
+      parameters:
+        - $ref: "#/components/parameters/RequestHeader"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExchangeAirSearchRequest"
+        description: Contains the required parameters to search for the itineraries.
+      responses:
+        "200":
+          description: Successful response or application layer errors held in the response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExchangeAirSearchResponse"
+servers:
+  - url: http://api.cert.platform.sabre.com/v1/dc/exchanges
+  - url: https://api.cert.platform.sabre.com/v1/dc/exchanges
+components:
+  parameters:
+    RequestHeader:
+      in: header
+      name: X-Request-ID
+      description: The unique ID of the request to track flow level transactions.
+      schema:
+        type: string
+  securitySchemes:
+    oauth2_authentication:
+      type: oauth2
+      x-base64-encode-client-credentials: true
+      flows:
+        clientCredentials:
+          tokenUrl: https://api.cert.platform.sabre.com/v2/auth/token
+          scopes: {}
+  schemas:
+    ExchangeAirSearchRequest:
+      type: object
+      description: Performs a search for itineraries with the search criteria in JSON
+        format during exchange. The response contains a list of itineraries with
+        fare offerings and detailed price breakdown.
+      required:
+        - shoppingSource
+        - pnrLocator
+        - itineraryParts
+        - clientContext
+      properties:
+        pnrLocator:
+          type: string
+          pattern: ^[A-Z0-9]{1,8}$
+          example: LVKWZG
+          description: The Passenger Name Record (PNR) for which the exchange pricing is
+            requested for.
+        calculateReaccommodationRules:
+          type: boolean
+          example: false
+          description: If true, indicates if self service reaccommodation rules will be
+            calculated for the given itinerary.
+        overrideCkinStatus:
+          type: boolean
+          default: false
+          example: false
+          description: When set to `true`, allows exchange shopping for checked-in (CKIN)
+            reservations.
+        exchangeDocuments:
+          type: array
+          minItems: 0
+          maxItems: 9
+          description: Lists the documents of the passengers that are valid for exchange.
+          items:
+            $ref: "#/components/schemas/ExchangeDocument"
+        travelPreferences:
+          $ref: "#/components/schemas/TravelPreferences"
+        shoppingSource:
+          $ref: "#/components/schemas/ShoppingSourceEnum"
+        itineraryParts:
+          type: array
+          minItems: 1
+          maxItems: 8
+          description: Lists the retained and rebooked itinerary parts.
+          items:
+            $ref: "#/components/schemas/ItineraryPart"
+        clientContext:
+          $ref: "#/components/schemas/ClientContext"
+    ExchangeDocument:
+      type: object
+      description: Contains the ticket number and passenger's association with the
+        document to be exchanged.
+      required:
+        - passengerNameNumber
+        - number
+      properties:
+        number:
+          type: string
+          pattern: ^[0-9]{13}
+          example: "7952164246136"
+          description: Number of the document to be exchanged.
+        passengerNameNumber:
+          type: string
+          pattern: ^[0-9.]{3,5}
+          example: "01.01"
+          description: Passenger name number associated to the ticket.
+        passengerTypeCode:
+          type: string
+          example: ADT
+          description: The ATPCO passenger type code that is used to identify passengers.
+    TravelPreferences:
+      type: object
+      description: The travel choices of the passenger with a set of constrains to
+        further customize the air search.
+      properties:
+        includeBrandCodes:
+          type: array
+          minItems: 0
+          description: Lists the brand IDs to narrow down the search to fares-only in the
+            specified brands.
+          items:
+            type: string
+            example: AN
+        preferredCabinCode:
+          type: string
+          pattern: ^[A-Z]$
+          example: Y
+          description: The code of the preferred cabin(s) to be used in the search.
+        maximumConnections:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 3
+          example: 2
+          description: The maximum number of connections allowed per leg
+            ('OriginDestination'). Intermediate stops with no change of plane
+            are not counted as connections.
+        currencyOverrideCode:
+          type: string
+          pattern: ^[A-Z]{3}
+          example: USD
+          description: The unique code that allows to return the cost of exchange of the
+            itinerary in a different currency.
+        flightType:
+          $ref: "#/components/schemas/FlightTypeEnum"
+        maximumStopsQuantity:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 3
+          example: 1
+          description: The maximum number of stops - including hidden stops (those without
+            change of flight number) - acceptable per leg.
+        excludeVendors:
+          type: array
+          minItems: 0
+          maxItems: 5
+          description: Lists the vendors that the passenger wants to exclude from the
+            search.
+          items:
+            example: VA
+            type: string
+        accountCode:
+          type: string
+          example: AC
+          description: The unique code of the passenger(s) or corporation that can be
+            applied at the request level to search for negotiated (private)
+            fares. If there is no published fare available for the given
+            itinerary that would be cheaper than the private fare, this will be
+            returned as an 'exchangeItinerary' option.
+        corporateId:
+          type: string
+          pattern: ^[a-zA-Z0-9]{5}
+          example: CID12
+          description: The unique ID of the passenger(s) or corporation that can be
+            applied at the itinerary level to search for negotiated (private)
+            fares. If there is no published fare available for the given
+            itinerary that would be cheaper than the private fare, this will be
+            returned as an 'exchangeItinerary' option.
+        shouldReturnNegotiatedFaresOnly:
+          type: boolean
+          example: false
+          description: If true, only fares with the account code 'private' (indicating
+            negotiated fares) will be returned in the response. By default,
+            false.
+        returnOnlineServiceOnly:
+          type: boolean
+          example: false
+          description: If true, returns only those itineraries on a single-carrier service
+            (that is, it excludes 'includeInterlineFlights'). By default, false.
+            If false or no indicator set, multiple-carrier service is deemed
+            acceptable if CAT 31 allows exchange to such itineraries.
+        includeInterlineFlights:
+          type: boolean
+          example: false
+          description: If true, itineraries on multiple carriers are returned, excluding
+            online only ('onlineIndicator') itineraries.
+        returnNoPenaltyFares:
+          type: boolean
+          example: false
+          description: If true, only fares that have no refund penalty will be returned.
+            By default, false.
+        splitFaresByLeg:
+          type: boolean
+          example: false
+          description: If true, leg fares for each passenger type will be returned. By
+            default, false.
+    FlightTypeEnum:
+      type: string
+      example: Direct
+      description: Identifies the type of flight. Can be 'Nonstop' (without plane
+        change and without intermediate landing), 'Direct' (without plane change
+        and possible intermediate landing), or 'Connection' (with plane changes,
+        allowing a maximum of 24 hours for each change).
+      enum:
+        - Nonstop
+        - Direct
+        - Connection
+    ShoppingSourceEnum:
+      type: string
+      example: ExchangeShop
+      description: Identifies the source of shopping. Can be 'Interline Branded Fares'
+        or 'Exchange Context Shopping'.
+      enum:
+        - InterlineBrandedFaresShopping
+        - ExchangeShop
+    ItineraryPart:
+      type: object
+      description: Contains the details of retained and rebooked itinerary part.
+      required:
+        - referenceNumber
+        - departureDate
+        - departureAirportCode
+        - arrivalAirportCode
+      properties:
+        referenceNumber:
+          type: integer
+          format: int32
+          minimum: 1
+          example: 1
+          description: In Interline Branded Fares Shop it defines the sequence of the leg.
+        departureDate:
+          type: string
+          format: date
+          example: 2019-03-16
+          description: Date of departure of the 'itineraryPart'.
+        departureAirportCode:
+          $ref: "#/components/schemas/AirportCode"
+        arrivalAirportCode:
+          $ref: "#/components/schemas/AirportCode"
+        shopForExchange:
+          type: boolean
+          example: true
+          description: Indicator that given ItineraryPart is subject to be exchanged.
+        returnFullDiversityFares:
+          type: boolean
+          example: false
+          description: If true, the response is presented with full diversity for the
+            specific 'ItineraryPart'.
+        isPreselected:
+          type: boolean
+          example: false
+          description: If true, the leg has been shopped in one of the previous requests
+            and been already selected by the user.
+        numberOfDateFlexibilityDays:
+          type: integer
+          format: int32
+          example: 2
+          description: The number of alternate days around the travel date to search for
+            the air exchange with a best fare.
+        maximumOneWayOptions:
+          type: integer
+          format: int32
+          example: 2
+          description: The maximum number of one-way options to return.
+        numberOfOneWayOptions:
+          type: integer
+          format: int32
+          example: 2
+          description: Number of one-way options for the requested date.
+        connections:
+          type: array
+          minItems: 0
+          maxItems: 3
+          description: Lists the connection cities through which the passenger wishes to
+            travel.
+          items:
+            $ref: "#/components/schemas/Connections"
+        connectionTime:
+          $ref: "#/components/schemas/ConnectionTime"
+        includeVendors:
+          type: array
+          minItems: 0
+          description: Lists the specific carriers for the leg.
+          items:
+            example: VA
+            type: string
+        shouldPreserveConnections:
+          type: boolean
+          example: false
+          description: If true, searches for exchange itinerary options for the same
+            connecting cities as the passenger has already booked/ticketed.
+            Cannot be combined with connection elements.
+        segments:
+          type: array
+          minItems: 0
+          maxItems: 16
+          description: Lists the offer details in the segment.
+          items:
+            $ref: "#/components/schemas/Segment"
+    AirportCode:
+      type: string
+      pattern: ^[A-Z]{3}$
+      example: DFW
+      description: The three-letter IATA code of the airport.
+    Connections:
+      type: object
+      required:
+        - locationCode
+      properties:
+        locationCode:
+          type: string
+          pattern: ^[a-zA-Z]{3}
+          example: PER
+          description: Abbreviated code(s) of multiple or single city and airports. For
+            Internal Branded Fare (IBF) path, the three-letter IATA code of the
+            airport.
+        isPreferred:
+          type: boolean
+          example: true
+          description: If true, considers only the specified location for connections.
+    ConnectionTime:
+      type: object
+      description: Contains the connection time between segments.
+      properties:
+        minimumTimeInMinutes:
+          type: integer
+          format: int32
+          example: 30
+          description: The minimum connection time in minutes between the segments.
+        maximumTimeInMinutes:
+          type: integer
+          format: int32
+          example: 120
+          description: The maximum connection time in minutes between the segments.
+    Segment:
+      type: object
+      description: Contains various details of the segment.
+      required:
+        - bookingClassCode
+        - brandCode
+        - operatingAirlineCode
+        - bookingAirlineCode
+        - bookingFlightNumber
+        - departureDateTime
+        - arrivalDateTime
+        - departureAirportCode
+        - arrivalAirportCode
+      properties:
+        bookingClassCode:
+          type: string
+          pattern: ^[A-Z]{1,2}$
+          example: S
+          description: The unique code of the booking class of the selected offer.
+        brandCode:
+          type: string
+          pattern: ^[a-zA-Z0-9]{2}
+          example: CH
+          description: The unique ID of the brand that is used to price the itinerary.
+            Only returned if the same brand was used for all segments. Also used
+            together with @invalidReason' to indicate an invalid brand.
+        operatingAirlineCode:
+          $ref: "#/components/schemas/AirlineCode"
+        bookingAirlineCode:
+          $ref: "#/components/schemas/AirlineCode"
+        bookingFlightNumber:
+          type: string
+          example: "234"
+          description: The flight number of the airline that provides the passenger's
+            booking or reservation.
+        departureDateTime:
+          $ref: "#/components/schemas/DateTime"
+        arrivalDateTime:
+          $ref: "#/components/schemas/DateTime"
+        departureAirportCode:
+          $ref: "#/components/schemas/AirportCode"
+        arrivalAirportCode:
+          $ref: "#/components/schemas/AirportCode"
+    AirlineCode:
+      type: string
+      pattern: ^([A-Z0-9]{2}|[A-Z]{3})$
+      example: VA
+      description: The IATA code of the operating or booking airline.
+    ExchangeAirSearchResponse:
+      type: object
+      description: Air Exchange Search response.
+      properties:
+        pricedItineraries:
+          type: array
+          minItems: 0
+          description: Lists the fares returned for the given search criteria.
+          items:
+            $ref: "#/components/schemas/PricedItinerary"
+        warnings:
+          type: array
+          minItems: 0
+          description: Lists the warnings that are applicable to all passengers.
+          items:
+            $ref: "#/components/schemas/Error"
+        errors:
+          type: array
+          minItems: 0
+          description: Lists the error messages that are applicable for any error scenarios.
+          items:
+            $ref: "#/components/schemas/Error"
+    PricedItinerary:
+      type: object
+      description: Contains the priced itineraries.
+      required:
+        - itinerary
+        - airItineraryPricing
+      properties:
+        itinerary:
+          $ref: "#/components/schemas/Itinerary"
+        airItineraryPricing:
+          $ref: "#/components/schemas/AirItineraryPricing"
+    Itinerary:
+      type: object
+      description: Contains details of the itineraries that are priced.
+      required:
+        - itineraryParts
+      properties:
+        itineraryParts:
+          type: array
+          minItems: 0
+          maxItems: 8
+          description: Lists the details of the itinerary parts for the fare available.
+          items:
+            $ref: "#/components/schemas/OriginDestination"
+    AirItineraryPricing:
+      type: object
+      description: Contains the pricing information for an air itinerary.
+      required:
+        - fares
+      properties:
+        fares:
+          type: array
+          minItems: 0
+          description: Lists the fares that returned.
+          items:
+            $ref: "#/components/schemas/Fare"
+    OriginDestination:
+      type: object
+      description: Contains the origin and destination information also called legs,
+        that group the connecting flights.
+      required:
+        - departureAirportCode
+        - arrivalAirportCode
+        - segments
+      properties:
+        elapsedTime:
+          type: integer
+          format: int32
+          example: 90
+          description: The time in minutes that elapsed between the origin and destination.
+        departureAirportCode:
+          $ref: "#/components/schemas/AirportCode"
+        arrivalAirportCode:
+          $ref: "#/components/schemas/AirportCode"
+        segments:
+          type: array
+          minItems: 1
+          maxItems: 16
+          description: Lists the segments that are reserved.
+          items:
+            $ref: "#/components/schemas/ReservationSegment"
+    ReservationSegment:
+      type: object
+      description: Contains various data related to the flight segment, along with
+        'MarriageGroup'.
+      required:
+        - arrivalAirportCode
+        - bookingFlightNumber
+        - bookingAirlineCode
+        - operatingAirlineCode
+        - departureDateTime
+        - departureAirportCode
+      properties:
+        elapsedTime:
+          type: integer
+          format: int32
+          example: 90
+          description: The time in minutes that elapsed between the origin and destination.
+        supportsElectronicTicket:
+          type: boolean
+          example: true
+          description: If true, electronic ticketing is allowed for the segment.
+        arrivalDateTime:
+          $ref: "#/components/schemas/DateTime"
+        arrivalAirportCode:
+          $ref: "#/components/schemas/AirportCode"
+        bookingFlightNumber:
+          type: string
+          example: "965"
+          description: The flight number of the airline that provides the passenger's
+            booking or reservation.
+        bookingAirlineCode:
+          $ref: "#/components/schemas/AirlineCode"
+        operatingAirlineCode:
+          $ref: "#/components/schemas/AirlineCode"
+        operatingFlightNumber:
+          type: string
+          example: "551"
+          description: The flight number of the airline that operates the flight and
+            transports the passengers in a codeshare scenario.
+        marriageGroup:
+          type: string
+          pattern: ^[a-zA-Z]{1}
+          example: O
+          description: In Sabre system married connections enables your airline to link up
+            to three segments together as a single locked unit. These segments
+            are considered as a single unit for pricing and ticketing.
+        sequence:
+          type: integer
+          format: int32
+          example: 1
+          description: The sequence number of the segment that is used link the segments
+            with the additional information provided under
+            PricedItinerary/Fare/ReservationSegmentDetails in the ECS path.
+        departureDateTime:
+          $ref: "#/components/schemas/DateTime"
+        departureAirportCode:
+          $ref: "#/components/schemas/AirportCode"
+        stopQuantity:
+          type: integer
+          format: int32
+          example: 1
+          description: Number of stops in the Reservation Segment.
+        equipment:
+          type: array
+          minItems: 0
+          description: Lists details of the flight equipment.
+          items:
+            $ref: "#/components/schemas/Equipment"
+        departureAirportDetails:
+          $ref: "#/components/schemas/AirportDetails"
+        arrivalAirportDetails:
+          $ref: "#/components/schemas/AirportDetails"
+        stopLocations:
+          type: array
+          minItems: 0
+          description: Lists the locations where the flight has stops.
+          items:
+            $ref: "#/components/schemas/StopLocation"
+        onTimePerformance:
+          $ref: "#/components/schemas/OnTimePerformance"
+    Equipment:
+      type: object
+      description: Contains information about the flight equipment.
+      properties:
+        type:
+          $ref: "#/components/schemas/EquipmentType"
+        changeOfGauge:
+          type: boolean
+          example: false
+          description: If true, there is an equipment/aircraft change.
+    EquipmentType:
+      type: string
+      pattern: ^[A-Z0-9]{3}$
+      example: 73H
+      description: The three-character IATA code of the aircraft equipment type that
+        determines the plane type.
+    AirportDetails:
+      type: object
+      description: Contains additional details about the location of the airport.
+      properties:
+        terminalId:
+          type: string
+          example: "2"
+          description: The number of the terminal.
+        gmtOffset:
+          type: number
+          format: float
+          example: 11
+          description: Location offset from GMT time zone represented in hours. This value
+            can be negative or positive and can contain fractional value.
+    StopLocation:
+      type: object
+      description: Contains the stop point of the flight segment.
+      properties:
+        locationCode:
+          $ref: "#/components/schemas/AirportCode"
+        arrivalDateTime:
+          $ref: "#/components/schemas/DateTime"
+        departureDateTime:
+          $ref: "#/components/schemas/DateTime"
+        elapsedTime:
+          type: integer
+          example: 40
+          description: The time in minutes that elapsed between segments.
+        duration:
+          type: integer
+          example: 40
+          description: Layover time in minutes.
+        gmtOffset:
+          type: number
+          format: float
+          example: 11
+          description: Location offset from GMT time zone represented in hours. This value
+            can be negative or positive and can contain fractional value.
+        equipmentType:
+          $ref: "#/components/schemas/EquipmentType"
+    OnTimePerformance:
+      type: object
+      description: Contains the statistical data on how often the flight is on time.
+      properties:
+        level:
+          type: string
+          pattern: ^[0-9]{1}$
+          example: "1"
+          description: The numeric value (0-9) associated with the level of on time
+            performance of the flight.
+        percentage:
+          type: string
+          pattern: ^[0-9]{1,3}$
+          example: "20"
+          description: The percentage of the flight's on-time performance pattern.
+    Fare:
+      type: object
+      description: Contains information on the possible branded fares and their prices
+        for the itinerary.
+      required:
+        - isSoldOut
+        - reservationSegmentsDetails
+      properties:
+        brandCode:
+          $ref: "#/components/schemas/BrandCode"
+        brandName:
+          $ref: "#/components/schemas/BrandName"
+        brandProgramId:
+          $ref: "#/components/schemas/BrandProgramId"
+        brandProgramCode:
+          $ref: "#/components/schemas/BrandProgramCode"
+        brandProgramDescription:
+          $ref: "#/components/schemas/BrandProgramDescription"
+        brandProgramSystemCode:
+          $ref: "#/components/schemas/BrandProgramSystemCode"
+        isSoldOut:
+          type: boolean
+          default: false
+          description: If true, the particular fare is sold out.
+        isValid:
+          type: boolean
+          example: true
+          description: If true, a valid fare in the given brand was found. If not,
+            '@invalidReason' attribute will be present with a reason code.
+        invalidReason:
+          $ref: "#/components/schemas/InvalidReasonEnum"
+        isPassengersPricedInDifferentCurrencies:
+          type: boolean
+          example: false
+          description: If true, individual passenger's prices should be used, because
+            passengers are calculated in different currencies.
+        reservationSegmentsDetails:
+          type: array
+          minItems: 0
+          description: The list of reservation segments details.
+          items:
+            $ref: "#/components/schemas/ReservationSegmentDetails"
+        passengersPriceDetails:
+          type: array
+          minItems: 0
+          description: List of passengers that are priced for this itinerary solution.
+            Will not be returned if fare is not available.
+          items:
+            $ref: "#/components/schemas/PassengerPriceDetails"
+        totalPriceDifference:
+          $ref: "#/components/schemas/TotalPriceDifference"
+        passengerFares:
+          type: array
+          minItems: 0
+          description: Only for Interline Branded Fares search path. The total passenger
+            fare with cost breakdown.
+          items:
+            $ref: "#/components/schemas/FareType"
+        totalFare:
+          $ref: "#/components/schemas/TotalFare"
+    InvalidReasonEnum:
+      type: string
+      example: NoSeatsAvailable
+      description: The reason code that indicates why a valid fare was not found in
+        the given brand.
+      enum:
+        - NoSeatsAvailable
+        - BrandNotOffered
+        - NoApplicableFareFound
+        - UnknownReason
+    ReservationSegmentDetails:
+      type: object
+      description: Contains additional information on each of the itinerary segments
+        that are necessary to book the segment and get the same fare in the
+        exchange.
+      required:
+        - passengersBookingDetails
+      properties:
+        passengersBookingDetails:
+          type: array
+          minItems: 0
+          description: Lists the booking details of the passengers.
+          items:
+            $ref: "#/components/schemas/PassengerBookingDetails"
+        segmentNumber:
+          type: integer
+          example: 1
+          description: The sequence number of the segment that is used link the segments
+            with the additional information provided under
+            Solution/BookItinerary/OriginDestination/ReservationSegment in the
+            ECS path.
+    PassengerBookingDetails:
+      type: object
+      description: Contains passenger-specific information related to the itinerary
+        booking. All passengers are listed in the same order as in
+        'PassengerPriceInformation'. The unique document numbers identify the
+        passengers and their booking and price information.
+      required:
+        - cabinCode
+        - fareBasisCode
+      properties:
+        passengerFareRef:
+          type: string
+          example: ref
+          description: The unique reference to the passenger's fare for Internal Brand
+            Fare (IBF) shopping path.
+        brandCode:
+          $ref: "#/components/schemas/BrandCode"
+        brandName:
+          $ref: "#/components/schemas/BrandName"
+        brandProgramId:
+          $ref: "#/components/schemas/BrandProgramId"
+        brandProgramCode:
+          $ref: "#/components/schemas/BrandProgramCode"
+        brandProgramDescription:
+          $ref: "#/components/schemas/BrandProgramDescription"
+        brandProgramSystemCode:
+          $ref: "#/components/schemas/BrandProgramSystemCode"
+        cabinCode:
+          type: string
+          pattern: ^[A-Z]$
+          example: Y
+          description: The code of the cabin.
+        bookingClassCode:
+          type: string
+          pattern: ^[A-Z]{1,2}$
+          example: N
+          description: Booking class code.
+        documentNumber:
+          type: string
+          example: "7952149868597"
+          description: Flight Document to be exchanged/reissued for the passenger.
+        fareBasisCode:
+          type: string
+          example: WI7AUEY8
+          description: The Fare Basis Code is used to designate a fare.
+        mealCode:
+          type: string
+          pattern: ^[A-Z]{1,4}$
+          example: S
+          description: Specific meal that consumer will be provided for their flight.
+        departureAirportCode:
+          $ref: "#/components/schemas/AirportCode"
+        arrivalAirportCode:
+          $ref: "#/components/schemas/AirportCode"
+        directionality:
+          $ref: "#/components/schemas/DirectionalityEnum"
+    BrandCode:
+      type: string
+      example: EV
+      description: The unique ID of the brand that is used to price the itinerary.
+        Only returned if the same brand was used for all segments. Also used
+        together with @invalidReason' to indicate an invalid brand.
+    BrandName:
+      type: string
+      example: Flex
+      description: The name of the brand that is used to price the itinerary. Only
+        returned if the same brand was used for all segments.
+    BrandProgramId:
+      type: string
+      example: "107357"
+      description: The unique ID of the brand program.
+    BrandProgramCode:
+      type: string
+      example: VAC
+      description: The unique code of the brand program.
+    BrandProgramDescription:
+      type: string
+      example: FO2 BASIC
+      description: The commercial name of the brand or program (BUSINESS FLEXIBLE,
+        Basic etc.).
+    BrandProgramSystemCode:
+      type: string
+      example: V
+      description: The system code associated with the brand program.
+    DirectionalityEnum:
+      type: string
+      example: To
+      description: The directionality of the usage of the fare component.
+      enum:
+        - From
+        - To
+    PassengerPriceDetails:
+      type: object
+      description: Contains information of the passengers and their associated price
+        details. This is only for Exchange Context Shopping path. As passengers
+        may be in different orders than requested, their unique document numbers
+        are used for identification.
+      required:
+        - documentNumber
+        - givenName
+        - surname
+        - typeCode
+        - passengerPriceDifference
+      properties:
+        documentNumber:
+          type: string
+          example: "7952149868597"
+          description: The unique number on the passenger's travel document that needs to
+            be exchanged or reissued.
+        givenName:
+          type: string
+          example: John
+          description: Passenger's first name.
+        surname:
+          type: string
+          example: Smith
+          description: Passenger's last name.
+        typeCode:
+          type: string
+          example: ADT
+          description: The ATPCO passenger type code to identify the passengers eligible
+            for the exchange.
+        passengerPriceDifference:
+          $ref: "#/components/schemas/PassengerPriceDifference"
+        reaccommodationRule:
+          $ref: "#/components/schemas/ReaccommodationRule"
+    PassengerPriceDifference:
+      type: object
+      description: The price of the ticket for the passenger.
+      required:
+        - differenceType
+        - total
+        - totalBreakdown
+      properties:
+        differenceType:
+          $ref: "#/components/schemas/DifferenceTypeEnum"
+        lastDayToTicket:
+          type: string
+          format: date
+          example: 2019-03-16
+          description: The last day to fulfill the solution if booked and priced.
+        total:
+          $ref: "#/components/schemas/AmountCurrency"
+        totalBreakdown:
+          $ref: "#/components/schemas/PriceCalculationDetails"
+    DifferenceTypeEnum:
+      type: string
+      example: Even
+      description: Difference type AddCollect - indicates that additional collection
+        will be required to fulfill this itinerary solution Even - indicates
+        that there is no additional cost to fulfill this itinerary solution
+        Refund - indicates that there is a refund amount that will be returned
+        when fulfilling this itinerary solution.
+      enum:
+        - AddCollect
+        - Even
+        - Refund
+    AmountCurrency:
+      type: object
+      description: Contains the total difference in fare for the new itinerary.
+      properties:
+        amount:
+          type: string
+          format: number
+          example: "230.00"
+          description: The difference-in-amount of the new itinerary in a given currency
+            with a maximum of three decimals.
+        currencyCode:
+          type: string
+          pattern: ^[A-Z]{3}$
+          example: USD
+          description: The three-letter ISO-4217 code of the currency.
+        decimalPlaces:
+          type: integer
+          minimum: 0
+          example: 3
+          description: Number of decimal places in the currency.
+    PriceCalculationDetails:
+      type: object
+      description: Contains the price difference in ticket for the old and rebooked
+        itineray.
+      required:
+        - fare
+        - tax
+        - totalFees
+        - nonRefundableAmount
+      properties:
+        fare:
+          $ref: "#/components/schemas/AmountCurrency"
+        tax:
+          $ref: "#/components/schemas/AmountCurrency"
+        totalFees:
+          type: array
+          minItems: 0
+          description: The total change in fare or penalty fees as applicable. Fee total
+            is split by type.
+          items:
+            $ref: "#/components/schemas/TotalFee"
+        totalFeeTax:
+          $ref: "#/components/schemas/AmountCurrency"
+        nonRefundableAmount:
+          $ref: "#/components/schemas/AmountCurrency"
+    TotalFee:
+      description: Contains the total change in fare or penalty fees as applicable.
+        Fee total is split by type.
+      allOf:
+        - $ref: "#/components/schemas/AmountCurrency"
+        - type: object
+          properties:
+            feeType:
+              $ref: "#/components/schemas/FeeTypeEnum"
+    TotalPriceDifference:
+      type: object
+      description: Contains the total difference in price for all passengers in the
+        request or response. If the individual exchange costs are in different
+        currencies, this element will be omitted and the attribute
+        'passengersPricedInDifferentCurrencies' will be set to true.
+      required:
+        - differenceType
+        - total
+        - totalBreakdown
+      properties:
+        differenceType:
+          $ref: "#/components/schemas/DifferenceTypeEnum"
+        lastDayToTicket:
+          type: string
+          format: date
+          example: 2019-03-16
+          description: The last day to fulfill the solution if booked and priced.
+        total:
+          $ref: "#/components/schemas/AmountCurrency"
+        totalBreakdown:
+          $ref: "#/components/schemas/PriceCalculationDetails"
+    FareType:
+      type: object
+      description: Contains the base fare, tax, total difference in fare for the new
+        itinerary, and currency information on a price.
+      required:
+        - equivalentFare
+        - totalFare
+      properties:
+        passengerFareId:
+          type: string
+          example: Fare ID.
+          description: The unique fare ID of the passenger for mapping with
+            'PassengerBookingDetails'.
+        passengerTypeCode:
+          type: string
+          example: ADT
+          description: The unique code associated with the passenger type, known as
+            Passenger Type Code (PTC).
+        passengerQuantity:
+          type: integer
+          example: 2
+          description: The number of Passenger Type Codes (PTCs).
+        baseFare:
+          $ref: "#/components/schemas/AmountCurrency"
+        nonRefundableBaseFare:
+          $ref: "#/components/schemas/AmountCurrency"
+        fareConstruction:
+          $ref: "#/components/schemas/AmountCurrency"
+        equivalentFare:
+          $ref: "#/components/schemas/EquivalentAmountCurrency"
+        taxes:
+          $ref: "#/components/schemas/Taxes"
+        fees:
+          type: array
+          minItems: 0
+          description: Lists any additional fee incurred by the passenger but not shown on
+            the ticket.
+          items:
+            $ref: "#/components/schemas/Fee"
+        obFees:
+          type: array
+          minItems: 0
+          description: The returned OB fees.
+          items:
+            $ref: "#/components/schemas/ObFee"
+        rateOfExchange:
+          type: number
+          example: 23
+          description: Exchange rate.
+        currencyConversions:
+          type: array
+          minItems: 0
+          description: The list of currency conversions.
+          items:
+            $ref: "#/components/schemas/Conversion"
+        totalFare:
+          $ref: "#/components/schemas/AmountCurrency"
+        legFares:
+          type: array
+          minItems: 0
+          description: This is a collection of Leg Information.
+          items:
+            $ref: "#/components/schemas/Leg"
+        reaccommodationRule:
+          $ref: "#/components/schemas/ReaccommodationRule"
+    EquivalentAmountCurrency:
+      description: Price of the inventory excluding taxes and fees in the payable currency.
+      allOf:
+        - $ref: "#/components/schemas/AmountCurrency"
+        - type: object
+          properties:
+            effectivePriceDeviation:
+              type: number
+              example: 54
+              description: Used for amounts, max 3 decimals.
+            effectiveDeviationType:
+              $ref: "#/components/schemas/EffectiveDeviationTypeEnum"
+    EffectiveDeviationTypeEnum:
+      type: string
+      example: Amount
+      description: Effective Deviation Type.
+      enum:
+        - Percentage
+        - Amount
+    Taxes:
+      type: object
+      description: This is a collection of Taxes.
+      required:
+        - taxes
+      properties:
+        fareComponentsTaxes:
+          type: array
+          minItems: 0
+          description: Fare component taxes.
+          items:
+            $ref: "#/components/schemas/FareComponentTaxes"
+        legsTaxes:
+          type: array
+          minItems: 0
+          description: The leg's taxes.
+          items:
+            $ref: "#/components/schemas/LegTaxes"
+        taxes:
+          type: array
+          minItems: 0
+          description: Any individual tax applied to the fare.
+          items:
+            $ref: "#/components/schemas/Tax"
+        taxSummaries:
+          type: array
+          minItems: 0
+          description: Tax Summary Information.
+          items:
+            $ref: "#/components/schemas/TaxSummary"
+        totalTax:
+          $ref: "#/components/schemas/AmountCurrency"
+    FareComponentTaxes:
+      type: object
+      description: Fare component taxes.
+      required:
+        - flightSegments
+        - taxes
+        - taxSummaries
+      properties:
+        flightSegments:
+          type: array
+          minItems: 0
+          description: A container for necessary data to describe one or more flight
+            segments.
+          items:
+            $ref: "#/components/schemas/FlightSegment"
+        taxes:
+          type: array
+          minItems: 0
+          description: Any individual tax applied to the fare.
+          items:
+            $ref: "#/components/schemas/Tax"
+        taxSummaries:
+          type: array
+          minItems: 0
+          description: Tax Summary Information.
+          items:
+            $ref: "#/components/schemas/TaxSummary"
+    FlightSegment:
+      type: object
+      description: Data to describe one flight segments.
+      properties:
+        departureAirportCode:
+          $ref: "#/components/schemas/AirportCode"
+        arrivalAirportCode:
+          $ref: "#/components/schemas/AirportCode"
+    Tax:
+      type: object
+      description: Defines the data fields available for air tax.
+      required:
+        - code
+        - amount
+        - airTaxReissue
+      properties:
+        code:
+          type: string
+          example: TOTALTAX
+          description: Identifies the code for the tax.
+        amount:
+          $ref: "#/components/schemas/AmountCurrency"
+        airlineCode:
+          type: string
+          pattern: ^([A-Z0-9]{2}|[A-Z]{3})$
+          example: VA
+          description: Carrier used for this tax.
+        minimumAmount:
+          type: number
+          example: 10
+          description: Minimum tax amount.
+        maximumAmount:
+          type: number
+          example: 100
+          description: Maximum tax amount.
+        currencyCode:
+          type: string
+          example: AUD
+          description: Min/Max tax currency code.
+        rateUsed:
+          type: number
+          example: 23
+          description: Tax rate used.
+        stationCode:
+          type: string
+          example: MEL
+          description: Airport code at which the tax or surcharge is being applied.
+        countryCode:
+          type: string
+          example: AU
+          description: Tax Country Code - 2 character country code as defined in ISO3166.
+        hasTaxOnChangeFee:
+          type: boolean
+          example: false
+          description: If set to true then it indicates Tax on change fee.
+        isRefundable:
+          type: boolean
+          example: true
+          description: If set to true then tax amount refundable during exchange.
+        airTaxReissue:
+          $ref: "#/components/schemas/AirTaxReissue"
+    AirTaxReissue:
+      type: object
+      properties:
+        code:
+          type: string
+          example: ATT
+          description: Reissue tax type.
+        hasRestriction:
+          type: boolean
+          example: true
+          description: If set to true it indicates that reissue restriction apply.
+        isRefundable:
+          type: boolean
+          example: true
+          description: Reissue tax refundable applicability.
+        shouldApplyToReissue:
+          type: boolean
+          example: false
+          description: If set to true then Apply to reissue applies.
+        maximumAmount:
+          type: number
+          example: 100
+          description: Reissue max amount.
+        currencyCode:
+          type: string
+          example: USD
+          description: Reissue currency.
+        publishedAmount:
+          type: number
+          example: 100
+          description: Published amount.
+        publishedCurrencyCode:
+          type: string
+          example: USD
+          description: Published currency.
+    TaxSummary:
+      type: object
+      description: Defines the data fields available for air tax summary.
+      required:
+        - code
+        - amount
+      properties:
+        code:
+          type: string
+          example: TOTALTAX
+          description: Identifies the code for the tax.
+        amount:
+          $ref: "#/components/schemas/AmountCurrency"
+        stationCode:
+          type: string
+          example: SC
+          description: Code of the airport at which the tax or surcharge is being applied.
+        countryCode:
+          type: string
+          example: AU
+          description: Tax Country Code - 2 character country code as defined in ISO3166.
+        publishedAmount:
+          type: number
+          example: 100
+          description: Tax summary published amount.
+        publishedCurrencyCode:
+          type: string
+          example: USD
+          description: Tax summary published currency.
+    LegTaxes:
+      type: object
+      required:
+        - taxes
+      properties:
+        taxes:
+          type: array
+          minItems: 0
+          description: Any individual tax applied to the fare.
+          items:
+            $ref: "#/components/schemas/Tax"
+        taxSummaries:
+          type: array
+          minItems: 0
+          description: Tax Summary Information.
+          items:
+            $ref: "#/components/schemas/TaxSummary"
+        legNumber:
+          type: integer
+          example: 1
+          description: Leg number.
+    Fee:
+      description: Defines the data fields available for the fees.
+      allOf:
+        - $ref: "#/components/schemas/AmountCurrency"
+        - type: object
+          properties:
+            feeCode:
+              type: string
+              example: FC
+              description: Identifies the code for the fee.
+    ObFee:
+      description: Defines the data fields available for the ob fees.
+      allOf:
+        - $ref: "#/components/schemas/AmountCurrency"
+        - type: object
+          properties:
+            obFeeType:
+              type: string
+              example: OBF
+              description: OB Fee sub type code.
+            description:
+              type: string
+              example: OB Fee description
+              description: OB Fee description.
+    Conversion:
+      type: object
+      properties:
+        from:
+          type: string
+          example: USD
+          description: Conversion original currency.
+        to:
+          type: string
+          example: AUD
+          description: Converted currency.
+        rateOfExchange:
+          type: number
+          example: 23
+          description: The rate of exchange.
+    Leg:
+      type: object
+      description: Leg Information.
+      required:
+        - baseFare
+        - totalFare
+      properties:
+        baseFare:
+          $ref: "#/components/schemas/AmountCurrency"
+        equivFare:
+          $ref: "#/components/schemas/EquivalentAmountCurrency"
+        taxes:
+          type: array
+          minItems: 0
+          description: Lists any individual tax applied to the fare.
+          items:
+            $ref: "#/components/schemas/Tax"
+        totalFare:
+          $ref: "#/components/schemas/AmountCurrency"
+        number:
+          type: integer
+          example: 2
+          description: Number of legs.
+    TotalFare:
+      type: object
+      description: Total price of the itinerary - only for IBF search.
+      required:
+        - equivFare
+        - totalFare
+      properties:
+        passengerFareId:
+          type: string
+          example: Passenger fare id.
+          description: The unique ID of the passenger fare to map with
+            'PassengerBookingDetails'.
+        passengerType:
+          type: string
+          example: ADT
+          description: Specifies a PTC (Passenger Type Code).
+        passengerQuantity:
+          type: integer
+          example: 2
+          description: The number of Passenger Type Codes (PTCs).
+        baseFare:
+          $ref: "#/components/schemas/AmountCurrency"
+        nonRefundableBaseFare:
+          $ref: "#/components/schemas/AmountCurrency"
+        fareConstruction:
+          $ref: "#/components/schemas/AmountCurrency"
+        equivFare:
+          $ref: "#/components/schemas/EquivalentAmountCurrency"
+        taxes:
+          $ref: "#/components/schemas/Taxes"
+        fees:
+          type: array
+          minItems: 0
+          description: Lists any additional fee incurred by the passenger that are not
+            shown on the ticket.
+          items:
+            $ref: "#/components/schemas/Fee"
+        obFees:
+          type: array
+          minItems: 0
+          description: The returned OB fees.
+          items:
+            $ref: "#/components/schemas/ObFee"
+        rateOfExchange:
+          type: number
+          example: 23
+          description: Exchange rate.
+        currencyConversions:
+          type: array
+          minItems: 0
+          description: Currency conversions.
+          items:
+            $ref: "#/components/schemas/Conversion"
+        totalFare:
+          $ref: "#/components/schemas/AmountCurrency"
+        legFares:
+          type: array
+          minItems: 0
+          description: This is a collection of Leg Information.
+          items:
+            $ref: "#/components/schemas/Leg"
+    FeeTypeEnum:
+      type: string
+      example: OtherFees
+      description: Type of the fee.
+      enum:
+        - ChangeFees
+        - OtherFees
+    Error:
+      type: object
+      description: Error messages that are applicable for any error scenarios.
+      required:
+        - category
+        - type
+      properties:
+        category:
+          type: string
+          example: BAD_REQUEST
+          description: A general scenario of the error and/or suggests a general behavior
+            for similar errors.
+        type:
+          type: string
+          example: REQUIRED_FIELD_MISSING
+          description: The general class of the error.
+        description:
+          type: string
+          example: May not be null.
+          description: A human-readable message that describes what caused the operation
+            to fail.
+        fieldPath:
+          type: string
+          example: someObject.someFieldPath
+          description: The full path to an object or a value that is the source of an error.
+        fieldName:
+          type: string
+          example: someName
+          description: The key to an object or a value that is the source of an error.
+        fieldValue:
+          type: string
+          example: some field value
+          description: The source of the error.
+    ClientContext:
+      type: object
+      description: Pseudo city and Office accounting code information.
+      properties:
+        pseudoCityCode:
+          type: string
+          pattern: ^[A-Z]{3}$
+          example: XYZ
+          description: Pseudo city code used as point of sale.
+        countryCode:
+          type: string
+          pattern: ^[A-Z]{2}$
+          example: US
+          description: Country as a two-letter, ISO 3166 code.
+        stateProvinceCode:
+          type: string
+          pattern: ^[A-Z]{2}$
+          example: TX
+          description: State or province as abbreviated code.
+        stationNumber:
+          type: string
+          pattern: ^\d{8}$
+          example: "99401201"
+          description: Office station identifier, assigned to a particular pseudo city.
+        accountingCode:
+          type: string
+          pattern: ^[a-zA-Z0-9]{2}$
+          example: WC
+          description: Agent-specific Office Accounting Code (OAC).
+        accountingCity:
+          type: string
+          pattern: ^[A-Z]{3}$
+          example: RKT
+          description: Accounting city used for OAC carriers.
+        dutyCode:
+          type: string
+          example: "5"
+          description: The unique duty code of the agent.
+    DateTime:
+      type: string
+      pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$
+      example: 2019-02-20T05:50:00
+      description: The date and time of the flight to be booked.
+    ReaccommodationRule:
+      type: object
+      description: Result of the self service reaccommodation rule calculation.
+      properties:
+        isChangeFeeWaived:
+          type: boolean
+          example: false
+          description: Flag indicating if the change fee for the itinerary is waived.
+        changeFeeRuleId:
+          type: string
+          example: 58071,58270
+          description: Identifier of the rule for the waiving change fee.
+        isPriceDifferenceWaived:
+          type: boolean
+          example: false
+          description: Flag indicating if price difference for the itinerary is waived.
+        priceDifferenceRuleId:
+          type: string
+          example: "89716"
+          description: Identifier of rule for the waiving price difference.
