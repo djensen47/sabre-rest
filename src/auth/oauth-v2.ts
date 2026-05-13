@@ -90,6 +90,8 @@ export function createOAuthV2(opts: OAuthV2Options): TokenProvider {
       throw new SabreAuthenticationError(
         `Failed to obtain Sabre v2 token: ${describeError(err)}`,
         undefined,
+        undefined,
+        undefined,
         { cause },
       );
     }
@@ -108,9 +110,18 @@ export function createOAuthV2(opts: OAuthV2Options): TokenProvider {
       // because losing it would be worse than a long error message.
       const trimmedBody = bodyText.trim();
       const suffix = trimmedBody.length > 0 ? `: ${trimmedBody}` : '';
+      let parsedBody: unknown = trimmedBody.length > 0 ? trimmedBody : undefined;
+      if (trimmedBody.length > 0) {
+        try {
+          parsedBody = JSON.parse(trimmedBody);
+        } catch {
+          // Leave parsedBody as the raw string when not JSON.
+        }
+      }
       throw new SabreAuthenticationError(
         `Sabre v2 token endpoint returned ${response.status} ${response.statusText}${suffix}`,
         response.status,
+        parsedBody,
       );
     }
 
@@ -121,6 +132,8 @@ export function createOAuthV2(opts: OAuthV2Options): TokenProvider {
       throw new SabreAuthenticationError(
         'Sabre v2 token endpoint returned a body that could not be parsed as JSON',
         response.status,
+        bodyText,
+        undefined,
         { cause: err },
       );
     }

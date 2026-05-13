@@ -56,8 +56,28 @@ describe('SabreAuthenticationError', () => {
 
   it('preserves cause for wrapped network failures', () => {
     const cause = new SabreNetworkError('connection refused');
-    const err = new SabreAuthenticationError('Failed to obtain token', undefined, { cause });
+    const err = new SabreAuthenticationError(
+      'Failed to obtain token',
+      undefined,
+      undefined,
+      undefined,
+      { cause },
+    );
     expect(err.cause).toBe(cause);
+  });
+
+  it('carries the response body and headers when supplied', () => {
+    const body = { errorCode: 'ERR.2SG.SEC.NOT_AUTHORIZED', message: 'Account not entitled' };
+    const headers = { 'x-correlation-id': 'abc-123' };
+    const err = new SabreAuthenticationError(
+      'Sabre rejected the request: 403 Forbidden',
+      403,
+      body,
+      headers,
+    );
+    expect(err.statusCode).toBe(403);
+    expect(err.responseBody).toEqual(body);
+    expect(err.responseHeaders).toEqual(headers);
   });
 });
 

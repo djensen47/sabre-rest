@@ -27,6 +27,8 @@ export function createErrorMappingMiddleware(): Middleware {
       throw new SabreAuthenticationError(
         `Sabre rejected the request: ${res.status} ${res.statusText}`,
         res.status,
+        parsedBody ?? res.body,
+        res.headers,
       );
     }
 
