@@ -24,6 +24,10 @@ import {
   DefaultCreatePassengerNameRecordV25Service,
 } from './services/create-passenger-name-record-v25/service.js';
 import {
+  DefaultExchangeBookingV1Service,
+  type ExchangeBookingV1Service,
+} from './services/exchange-booking-v1/service.js';
+import {
   DefaultGetAncillariesV2Service,
   type GetAncillariesV2Service,
 } from './services/get-ancillaries-v2/service.js';
@@ -116,6 +120,16 @@ export interface SabreClient {
    * {@link BookingManagementV1Service.createBooking} instead.
    */
   readonly createPassengerNameRecordV25: CreatePassengerNameRecordV25Service;
+
+  /**
+   * Sabre Exchange Booking v1.1.0.
+   *
+   * Runs an entire ticket-exchange transaction against an existing PNR
+   * in a single call: cancel old segments, sell new segments, price
+   * the exchange (creating a Price Quote Reissue), optionally collect
+   * form-of-payment, and end-transact.
+   */
+  readonly exchangeBookingV1: ExchangeBookingV1Service;
 
   /**
    * Sabre Get Ancillaries v2.
@@ -272,6 +286,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
   const bargainFinderMaxV5 = new DefaultBargainFinderMaxV5Service(deps);
   const bookingManagementV1 = new DefaultBookingManagementV1Service(deps);
   const createPassengerNameRecordV25 = new DefaultCreatePassengerNameRecordV25Service(deps);
+  const exchangeBookingV1 = new DefaultExchangeBookingV1Service(deps);
   const getAncillariesV2 = new DefaultGetAncillariesV2Service(deps);
   const getHotelAvailV5 = new DefaultGetHotelAvailV5Service(deps);
   const getHotelDetailsV5 = new DefaultGetHotelDetailsV5Service(deps);
@@ -288,6 +303,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
     bargainFinderMaxV5,
     bookingManagementV1,
     createPassengerNameRecordV25,
+    exchangeBookingV1,
     getAncillariesV2,
     getHotelAvailV5,
     getHotelDetailsV5,
@@ -306,6 +322,7 @@ interface SabreClientServices {
   bargainFinderMaxV5: BargainFinderMaxV5Service;
   bookingManagementV1: BookingManagementV1Service;
   createPassengerNameRecordV25: CreatePassengerNameRecordV25Service;
+  exchangeBookingV1: ExchangeBookingV1Service;
   getAncillariesV2: GetAncillariesV2Service;
   getHotelAvailV5: GetHotelAvailV5Service;
   getHotelDetailsV5: GetHotelDetailsV5Service;
@@ -329,6 +346,7 @@ class DefaultSabreClient implements SabreClient {
   readonly bargainFinderMaxV5: BargainFinderMaxV5Service;
   readonly bookingManagementV1: BookingManagementV1Service;
   readonly createPassengerNameRecordV25: CreatePassengerNameRecordV25Service;
+  readonly exchangeBookingV1: ExchangeBookingV1Service;
   readonly getAncillariesV2: GetAncillariesV2Service;
   readonly getHotelAvailV5: GetHotelAvailV5Service;
   readonly getHotelDetailsV5: GetHotelDetailsV5Service;
@@ -346,6 +364,7 @@ class DefaultSabreClient implements SabreClient {
     this.bargainFinderMaxV5 = services.bargainFinderMaxV5;
     this.bookingManagementV1 = services.bookingManagementV1;
     this.createPassengerNameRecordV25 = services.createPassengerNameRecordV25;
+    this.exchangeBookingV1 = services.exchangeBookingV1;
     this.getAncillariesV2 = services.getAncillariesV2;
     this.getHotelAvailV5 = services.getHotelAvailV5;
     this.getHotelDetailsV5 = services.getHotelDetailsV5;

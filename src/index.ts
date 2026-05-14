@@ -216,6 +216,33 @@ export type {
   BookHotelPaymentCard,
   BookHotelSystemSpecificResult,
 } from './services/create-passenger-name-record-v25/types.js';
+export type { ExchangeBookingV1Service } from './services/exchange-booking-v1/service.js';
+export type {
+  ExchangeApplicationMessage,
+  ExchangeApplicationResults,
+  ExchangeChangeFee,
+  ExchangeConfirm,
+  ExchangeConfirmationResult,
+  ExchangeDetails,
+  ExchangeEmail,
+  ExchangeFlightInput,
+  ExchangeFlightOutput,
+  ExchangeFormOfPayment,
+  ExchangeItinTotalFare,
+  ExchangeMoney,
+  ExchangeNewSegment,
+  ExchangePassengerTypeQuantity,
+  ExchangePriceBound,
+  ExchangePriceQuoteReissue,
+  ExchangePriceTolerance,
+  ExchangePtcFlightSegment,
+  ExchangeRedisplay,
+  ExchangeSignatureLine,
+  ExchangeSystemSpecificResult,
+  ExchangeTaxes,
+  ExchangeTaxLine,
+  ExchangeTransactionInformation,
+} from './services/exchange-booking-v1/types.js';
 export type { BargainFinderMaxV5Service } from './services/bargain-finder-max-v5/service.js';
 export type { GetAncillariesV2Service } from './services/get-ancillaries-v2/service.js';
 export type {

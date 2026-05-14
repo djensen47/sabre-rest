@@ -37,6 +37,7 @@ import type {
   CheckHotelPriceOutput,
   CheckTicketsInput,
   CreateBookingInput,
+  ExchangeFlightInput,
   FulfillTicketsInput,
   GeoRef,
   GetAncillariesInput,
@@ -2567,6 +2568,11 @@ const CREATE_BOOKING_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const EXCHANGE_BOOKING_OPTIONS = {
+  ...COMMON_OPTIONS,
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 const GET_BOOKING_OPTIONS = {
   ...COMMON_OPTIONS,
   'confirmation-id': { type: 'string' },
@@ -2659,6 +2665,7 @@ Commands:
   cancel-booking            Sabre Booking Management v1 — Cancel Booking
   check-tickets             Sabre Booking Management v1 — Check Tickets
   create-booking            Sabre Booking Management v1 — Create Booking
+  exchange-booking          Sabre Exchange Booking v1.1.0
   fulfill-tickets           Sabre Booking Management v1 — Fulfill Flight Tickets
   get-ancillaries           Sabre Get Ancillaries v2
   get-booking               Sabre Booking Management v1 — Get Booking
@@ -3134,6 +3141,33 @@ Flags:
 
 Examples:
   sabre-rest create-booking --body '{"flightDetails":{"flights":[{"flightNumber":100,"airlineCode":"AA","fromAirportCode":"DFW","toAirportCode":"LAX","departureDate":"2026-05-15","departureTime":"10:00","bookingClass":"Y"}]},"travelers":[{"givenName":"JOHN","surname":"DOE","passengerCode":"ADT"}],"contactInfo":{"phones":["1234567890"]}}'
+`;
+
+const EXCHANGE_BOOKING_HELP = `Usage: sabre-rest exchange-booking [flags]
+
+Sabre Exchange Booking v1.1.0. Runs an entire ticket-exchange transaction
+against an existing PNR in a single call: optionally cancel selected
+segments, optionally sell new segments, price the exchange (creating a
+Price Quote Reissue), optionally collect form-of-payment, and end-transact.
+
+Pair with bargain-finder-max + revalidate-itinerary for the full
+"change a flight" flow. Omit "confirm" in the body to quote-only (PQR
+stored, no FOP charged); include "confirm" to commit (FOP charged,
+ticket issued).
+
+The request body has many optional sub-blocks (Cancel, AirBook,
+priceTolerance, confirm, email), so use --body to supply the full JSON
+ExchangeFlightInput.
+
+Flags:
+  --body <json>             Full JSON ExchangeFlightInput (required)
+  --base-url <url>          Override SABRE_BASE_URL
+  --format json|table       Output format (default: json)
+  --debug-request           Print the outbound HTTP request to stderr
+  -h, --help                Show this help
+
+Examples:
+  sabre-rest exchange-booking --body '{"pnrLocator":"IJNPIE","originalTicketNumber":"0277173836173","receivedFrom":"SP TEST","cancelSegments":[1,2],"newSegments":[{"origin":"LAS","destination":"DFW","departureDateTime":"2026-05-03T06:00:00","arrivalDateTime":"2026-05-03T17:30:00","marketingCarrier":"AS","flightNumber":"781","bookingClass":"G"}],"priceTolerance":{"amountSpecified":0,"acceptableIncrease":{"amount":10,"haltOnNonAcceptablePrice":true}}}'
 `;
 
 const GET_ANCILLARIES_HELP = `Usage: sabre-rest get-ancillaries [flags]
@@ -3676,6 +3710,33 @@ async function createBookingCommand(
   emitResult(result, format, io, () => formatJson(result));
 }
 
+async function exchangeBookingCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: EXCHANGE_BOOKING_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(EXCHANGE_BOOKING_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  if (values.body === undefined) {
+    throw new CliUsageError('exchange-booking requires --body with a full JSON input.');
+  }
+  const input = JSON.parse(values.body) as ExchangeFlightInput;
+  const result = await client.exchangeBookingV1.exchange(input);
+  emitResult(result, format, io, () => formatJson(result));
+}
+
 async function getBookingCommand(
   argv: readonly string[],
   env: CliEnvConfig,
@@ -3907,6 +3968,7 @@ export const COMMANDS: Record<
   'cancel-booking': cancelBookingCommand,
   'check-tickets': checkTicketsCommand,
   'create-booking': createBookingCommand,
+  'exchange-booking': exchangeBookingCommand,
   'fulfill-tickets': fulfillTicketsCommand,
   'get-ancillaries': getAncillariesCommand,
   'get-booking': getBookingCommand,
