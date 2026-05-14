@@ -1133,6 +1133,7 @@ describe('COMMANDS dispatch table', () => {
       'cancel-booking',
       'check-tickets',
       'create-booking',
+      'exchange-booking',
       'fulfill-tickets',
       'get-ancillaries',
       'get-booking',
