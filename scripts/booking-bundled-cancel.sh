@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# booking-ticket-lifecycle.sh — ticket-lifecycle smoke test.
+# booking-bundled-cancel.sh — bundled-ticket-operation smoke test.
 #
 # bargain-finder-max → revalidate-itinerary → create-booking → get-booking
 # → check-tickets → fulfill-tickets → get-booking (verify ticketed)
-# → void-tickets → cancel-booking → get-booking (verify cancellation).
+# → cancel-booking --flight-ticket-operation <op> → get-booking (verify).
 #
-# Extends booking-e2e.sh past the PNR creation point into the ticketing
-# lifecycle. Issues a real ticket against the supplied form of payment,
-# then voids it (same-day, no fee) before cancelling the PNR. Defaults
-# to the universal Visa test PAN 4111-1111-1111-1111; whether Sabre
-# CERT actually accepts that PAN is empirical and may depend on the
-# carrier and PCC.
+# Mirrors booking-ticket-lifecycle.sh through fulfillment, then exercises
+# the bundled path on cancelBooking: instead of calling voidTickets (or
+# refundTickets) and cancelBooking as two separate operations, the cancel
+# call carries `flightTicketOperation: VOID|REFUND` so Sabre disposes of
+# the issued tickets as part of the cancellation in a single round trip.
+#
+# Defaults to VOID. Pass `--operation REFUND` to exercise the refund
+# path; eligibility differs (typically post-same-day, fees may apply)
+# so REFUND runs may legitimately fail in CERT depending on the carrier
+# and PCC.
 #
 # Designed for single-leg, single-segment, same-day one-way searches.
 # Multi-leg / connecting itineraries are intentionally out of scope —
@@ -30,7 +34,7 @@
 #   3. `jq` on PATH.
 #
 # Usage:
-#   scripts/booking-ticket-lifecycle.sh --from SFO --to LAX --departure-date 2026-06-15
+#   scripts/booking-bundled-cancel.sh --from SFO --to LAX --departure-date 2026-06-15
 #
 # Flags:
 #   --from <iata>                 Origin IATA (required)
@@ -42,7 +46,7 @@
 #   --phone <number>              Contact phone (default: randomly generated)
 #   --email <addr>                Contact email (default: randomly generated)
 #   --seed <n>                    Reproduce a prior run's random traveler identity
-#   --card-number <pan>           Credit card PAN (default: 4111111111111111)
+#   --card-number <pan>           Credit card PAN
 #   --card-cvv <code>             Card security code (default: 123)
 #   --card-expiry <YYYY-MM>       Card expiry (default: 2027-12)
 #   --card-type <code>            Card vendor code (default: VI for Visa)
@@ -54,6 +58,7 @@
 #                                 fulfillTickets fails PRINTER_NOT_ASSIGNED.
 #                                 Pass this flag to reproduce that failure
 #                                 (the PR #88/#91 investigation trace).
+#   --operation <VOID|REFUND>     Bundled flightTicketOperation (default: VOID)
 #   --base-url <url>              Override SABRE_BASE_URL
 #   -h, --help                    Show this help
 
@@ -78,10 +83,11 @@ CARD_CVV="123"
 CARD_EXPIRY="2027-12"
 CARD_TYPE="VI"
 WITH_PRINTERS=1
+OPERATION="VOID"
 BASE_URL=""
 
 usage() {
-  sed -n '2,58p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,63p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -100,11 +106,17 @@ while [[ $# -gt 0 ]]; do
     --card-expiry) CARD_EXPIRY="${2:-}"; shift 2 ;;
     --card-type) CARD_TYPE="${2:-}"; shift 2 ;;
     --no-printers) WITH_PRINTERS=0; shift ;;
+    --operation) OPERATION="${2:-}"; shift 2 ;;
     --base-url) BASE_URL="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "error: unknown argument '$1'" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+case "$OPERATION" in
+  VOID|REFUND) ;;
+  *) echo "error: --operation must be VOID or REFUND (got '$OPERATION')" >&2; exit 2 ;;
+esac
 
 generate_person "$SEED"
 GIVEN_NAME="${GIVEN_NAME:-$PERSON_GIVEN_NAME}"
@@ -155,20 +167,16 @@ CONFIRMATION_ID=""
 TICKETED=0
 CLEANUP_ATTEMPTED=0
 
-# Runs the CLI capturing stdout only; stderr goes to $TMP_ERR. On
-# failure, the stderr is echoed back to the console. Using a single
-# temp file across calls is fine because each call fully consumes it
-# before the next.
 run_cli() {
   : > "$TMP_ERR"
   "$@" 2>"$TMP_ERR"
 }
 
-# Cleanup contract: if a ticket was issued, void it before cancelling
-# the PNR — voiding a same-day ticket is free, and cancel-booking on a
-# ticketed PNR may not release the financial document. Both steps are
-# best-effort and emit loud failure messages on stderr so that paid
-# tickets do not silently leak.
+# Cleanup mirrors booking-ticket-lifecycle.sh: void first (same-day, no
+# fee), then cancel. Even though the happy path uses bundled void via
+# cancelBooking, the cleanup path stays two-step so a partial failure
+# (e.g., the bundled cancel rejected mid-way) still releases any paid
+# document we managed to issue.
 cleanup() {
   [[ -z "$CONFIRMATION_ID" || "$CLEANUP_ATTEMPTED" == "1" ]] && return
   CLEANUP_ATTEMPTED=1
@@ -370,15 +378,6 @@ fi
 echo "isTicketed:   $(echo "$GET_OUT" | jq -r '.isTicketed // false')"
 echo "isCancelable: $(echo "$GET_OUT" | jq -r '.isCancelable // false')"
 echo "flights:      $(echo "$GET_OUT" | jq -r '.flights | length // 0')"
-# TEMP DIAG — what does the PNR look like for PQ records? Revert before commit.
-echo "DIAG PQ-ish fields:"
-echo "$GET_OUT" | jq '{
-  fares: (.fares // null),
-  pricingInfo: (.pricingInfo // null),
-  pricingSubjectToChange: (.pricingSubjectToChange // null),
-  priceQuotes: (.priceQuotes // null),
-  topLevelKeys: keys
-}'
 
 # ---------------------------------------------------------------------------
 step 5 "check-tickets (pre-fulfillment QC)"
@@ -451,30 +450,50 @@ if [[ "$IS_TICKETED" != "true" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-step 8 "void-tickets (release the financial document)"
-if ! VOID_OUT=$(run_cli $CLI void-tickets "${BASE_URL_FLAG[@]}" --confirmation-id "$CONFIRMATION_ID"); then
-  cat "$TMP_ERR" >&2
-  fail "void-tickets"
-fi
-echo "voidedTickets: $(echo "$VOID_OUT" | jq -r '.voidedTickets | length // 0')"
-echo "errors:        $(echo "$VOID_OUT" | jq -r '.errors | length // 0')"
-TICKETED=0
-
-# ---------------------------------------------------------------------------
-step 9 "cancel-booking (cancelAll)"
+step 8 "cancel-booking (bundled $OPERATION + cancelAll)"
+# This is the point of the script: cancel + dispose tickets in a
+# single call. The disposed-ticket count (voidedTickets for VOID,
+# refundedTickets for REFUND) must equal TICKET_COUNT for the bundled
+# path to count as exercised; otherwise we treat it as a regression
+# and fail loudly (the cleanup trap will still attempt void + cancel
+# as a safety net).
 if ! CANCEL_OUT=$(run_cli $CLI cancel-booking "${BASE_URL_FLAG[@]}" \
-    --confirmation-id "$CONFIRMATION_ID" --cancel-all --retrieve-booking); then
+    --confirmation-id "$CONFIRMATION_ID" \
+    --cancel-all \
+    --flight-ticket-operation "$OPERATION" \
+    --retrieve-booking); then
   cat "$TMP_ERR" >&2
-  fail "cancel-booking"
+  fail "cancel-booking (bundled $OPERATION)"
 fi
+VOIDED_COUNT=$(echo "$CANCEL_OUT" | jq -r '.voidedTickets | length // 0')
+REFUNDED_COUNT=$(echo "$CANCEL_OUT" | jq -r '.refundedTickets | length // 0')
+ERROR_COUNT=$(echo "$CANCEL_OUT" | jq -r '.errors | length // 0')
+echo "voidedTickets:   $VOIDED_COUNT"
+echo "refundedTickets: $REFUNDED_COUNT"
+echo "errors:          $ERROR_COUNT"
+if [[ "$ERROR_COUNT" != "0" ]]; then
+  echo "$CANCEL_OUT" | jq '.errors' >&2
+  fail "cancel-booking (response carried errors)"
+fi
+if [[ "$OPERATION" == "VOID" ]]; then
+  EXPECTED_FIELD="voidedTickets"
+  ACTUAL_COUNT="$VOIDED_COUNT"
+else
+  EXPECTED_FIELD="refundedTickets"
+  ACTUAL_COUNT="$REFUNDED_COUNT"
+fi
+if [[ "$ACTUAL_COUNT" != "$TICKET_COUNT" ]]; then
+  echo "expected $TICKET_COUNT $EXPECTED_FIELD, got $ACTUAL_COUNT — bundled $OPERATION did not fire as expected" >&2
+  fail "cancel-booking ($EXPECTED_FIELD mismatch)"
+fi
+TICKETED=0
 CLEANUP_ATTEMPTED=1
-echo "voidedTickets:   $(echo "$CANCEL_OUT" | jq -r '.voidedTickets | length // 0')"
-echo "refundedTickets: $(echo "$CANCEL_OUT" | jq -r '.refundedTickets | length // 0')"
 
 # ---------------------------------------------------------------------------
-step 10 "get-booking (post-cancel)"
+step 9 "get-booking (post-cancel)"
 if VERIFY_OUT=$(run_cli $CLI get-booking "${BASE_URL_FLAG[@]}" --confirmation-id "$CONFIRMATION_ID"); then
   echo "isCancelable: $(echo "$VERIFY_OUT" | jq -r '.isCancelable // false')"
+  echo "flights:      $(echo "$VERIFY_OUT" | jq -r '.flights | length // 0')"
 else
   if grep -q 'status: 404' "$TMP_ERR"; then
     echo "booking no longer retrievable (404) — cancellation confirmed"
@@ -485,4 +504,4 @@ else
 fi
 
 echo ""
-echo "booking-ticket-lifecycle: OK"
+echo "booking-bundled-cancel ($OPERATION): OK"

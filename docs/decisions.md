@@ -368,6 +368,45 @@ the library will release `1.0.0` and switch to strict semver from then on.
 
 ---
 
+## CERT fulfillTickets requires a designated printer (`countryCode: "AT"`)
+
+### Decision
+
+The ticketing smoke scripts (`scripts/booking-ticket-lifecycle.sh` and
+`scripts/booking-bundled-cancel.sh`) send `designatePrinters` on
+`fulfillTickets` **by default**, with `ticket.countryCode: "AT"`. A
+`--no-printers` flag omits it.
+
+### Why
+
+Sabre support confirmed our CERT PCC (`H50H`) requires a designated
+printer to issue tickets, and specified `ticket.countryCode: "AT"` as
+the value to use. Empirically this matches every run: omitting
+`designatePrinters` returns
+
+```
+APPLICATION_ERROR / PRINTER_NOT_ASSIGNED
+"No new tickets have been issued due to a lack of ticket printer
+ assignation. Designate a required printer and repeat fulfillment
+ operation."  (fieldPath: FulfillTicketsRequest.designatePrinters)
+```
+
+This **supersedes** the earlier conclusion recorded in PR #88 / PR #91,
+which made omit-the-printer the default on the basis that the
+demo-flights app omits it and tickets successfully. That shape does not
+work on our account: both smoke scripts hit `PRINTER_NOT_ASSIGNED`
+without the printer on every attempt (verified 2026-06-03 across AA and
+AS carriers). The `--no-printers` flag is retained so the original
+failing trace remains reproducible.
+
+This is a PCC-level entitlement quirk, not a library API decision — the
+`designatePrinters` field is plumbed through the public types and CLI
+regardless. It is documented here because it is the kind of
+account-specific operational fact that silently breaks ticketing and is
+otherwise undiscoverable from the spec.
+
+---
+
 ## Known spec drift
 
 A changelog of public-type drift from the upstream OAS that has been
