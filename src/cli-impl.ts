@@ -38,6 +38,7 @@ import type {
   CheckTicketsInput,
   CreateBookingInput,
   ExchangeFlightInput,
+  FlightReshopInput,
   FulfillTicketsInput,
   GeoRef,
   GetAncillariesInput,
@@ -2573,6 +2574,11 @@ const EXCHANGE_BOOKING_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const FLIGHT_RESHOP_OPTIONS = {
+  ...COMMON_OPTIONS,
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 const GET_BOOKING_OPTIONS = {
   ...COMMON_OPTIONS,
   'confirmation-id': { type: 'string' },
@@ -2666,6 +2672,7 @@ Commands:
   check-tickets             Sabre Booking Management v1 — Check Tickets
   create-booking            Sabre Booking Management v1 — Create Booking
   exchange-booking          Sabre Exchange Booking v1.1.0
+  flight-reshop             Sabre Flight Reshop v1.0
   fulfill-tickets           Sabre Booking Management v1 — Fulfill Flight Tickets
   get-ancillaries           Sabre Get Ancillaries v2
   get-booking               Sabre Booking Management v1 — Get Booking
@@ -3168,6 +3175,30 @@ Flags:
 
 Examples:
   sabre-rest exchange-booking --body '{"pnrLocator":"IJNPIE","originalTicketNumber":"0277173836173","receivedFrom":"SP TEST","cancelSegments":[1,2],"newSegments":[{"origin":"LAS","destination":"DFW","departureDateTime":"2026-05-03T06:00:00","arrivalDateTime":"2026-05-03T17:30:00","marketingCarrier":"AS","flightNumber":"781","bookingClass":"G"}],"priceTolerance":{"amountSpecified":0,"acceptableIncrease":{"amount":10,"haltOnNonAcceptablePrice":true}}}'
+`;
+
+const FLIGHT_RESHOP_HELP = `Usage: sabre-rest flight-reshop [flags]
+
+Sabre Flight Reshop v1.0. Shops for priceable reissue offers against an
+existing ticket — the REST replacement for the legacy ExchangeShoppingRQ.
+Returns exchange offers with fare difference, change fee, and new flights.
+
+Read-only: it does not cancel, rebook, or reissue. The call resolves with
+HTTP 200 even when no offers can be produced (the reason lands in the
+response "errors" array), so inspect "errors" as well as "offers".
+
+The request body has nested journeys[] and tickets[] arrays, so this
+command is body-only. Supply a full JSON FlightReshopInput via --body.
+
+Flags:
+  --body <json>             Full JSON FlightReshopInput (required)
+  --base-url <url>          Override SABRE_BASE_URL
+  --format json|table       Output format (default: json)
+  --debug-request           Print the outbound HTTP request to stderr
+  -h, --help                Show this help
+
+Examples:
+  sabre-rest flight-reshop --body '{"journeys":[{"departureLocation":{"cityCode":"DFW"},"arrivalLocation":{"cityCode":"LAX"},"departureDate":"2026-09-26"}],"tickets":[{"number":"0012972101507"}]}'
 `;
 
 const GET_ANCILLARIES_HELP = `Usage: sabre-rest get-ancillaries [flags]
@@ -3737,6 +3768,33 @@ async function exchangeBookingCommand(
   emitResult(result, format, io, () => formatJson(result));
 }
 
+async function flightReshopCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: FLIGHT_RESHOP_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(FLIGHT_RESHOP_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  if (values.body === undefined) {
+    throw new CliUsageError('flight-reshop requires --body with a full JSON input.');
+  }
+  const input = JSON.parse(values.body) as FlightReshopInput;
+  const result = await client.flightReshopV1.reshop(input);
+  emitResult(result, format, io, () => formatJson(result));
+}
+
 async function getBookingCommand(
   argv: readonly string[],
   env: CliEnvConfig,
@@ -3969,6 +4027,7 @@ export const COMMANDS: Record<
   'check-tickets': checkTicketsCommand,
   'create-booking': createBookingCommand,
   'exchange-booking': exchangeBookingCommand,
+  'flight-reshop': flightReshopCommand,
   'fulfill-tickets': fulfillTicketsCommand,
   'get-ancillaries': getAncillariesCommand,
   'get-booking': getBookingCommand,

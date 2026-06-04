@@ -1134,6 +1134,7 @@ describe('COMMANDS dispatch table', () => {
       'check-tickets',
       'create-booking',
       'exchange-booking',
+      'flight-reshop',
       'fulfill-tickets',
       'get-ancillaries',
       'get-booking',

@@ -243,6 +243,27 @@ export type {
   ExchangeTaxLine,
   ExchangeTransactionInformation,
 } from './services/exchange-booking-v1/types.js';
+export type { FlightReshopV1Service } from './services/flight-reshop-v1/service.js';
+export type {
+  FlightReshopCabinName,
+  FlightReshopChargeType,
+  FlightReshopDistributionModel,
+  FlightReshopFlight,
+  FlightReshopInput,
+  FlightReshopJourney,
+  FlightReshopJourneyResult,
+  FlightReshopLocation,
+  FlightReshopMessage,
+  FlightReshopOffer,
+  FlightReshopOfferFare,
+  FlightReshopOfferItem,
+  FlightReshopOfferSource,
+  FlightReshopOfferTraveler,
+  FlightReshopOutput,
+  FlightReshopTicket,
+  FlightReshopTimeWindow,
+  FlightReshopTotalPrice,
+} from './services/flight-reshop-v1/types.js';
 export type { BargainFinderMaxV5Service } from './services/bargain-finder-max-v5/service.js';
 export type { GetAncillariesV2Service } from './services/get-ancillaries-v2/service.js';
 export type {

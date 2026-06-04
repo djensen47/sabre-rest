@@ -28,6 +28,10 @@ import {
   type ExchangeBookingV1Service,
 } from './services/exchange-booking-v1/service.js';
 import {
+  DefaultFlightReshopV1Service,
+  type FlightReshopV1Service,
+} from './services/flight-reshop-v1/service.js';
+import {
   DefaultGetAncillariesV2Service,
   type GetAncillariesV2Service,
 } from './services/get-ancillaries-v2/service.js';
@@ -130,6 +134,16 @@ export interface SabreClient {
    * form-of-payment, and end-transact.
    */
   readonly exchangeBookingV1: ExchangeBookingV1Service;
+
+  /**
+   * Sabre Flight Reshop v1.0.
+   *
+   * Shops for priceable reissue offers against an existing ticket — the
+   * REST replacement for the legacy `ExchangeShoppingRQ`. Returns
+   * exchange offers with fare difference, change fee, and new flights.
+   * Read-only; pair with Exchange Booking to commit the reissue.
+   */
+  readonly flightReshopV1: FlightReshopV1Service;
 
   /**
    * Sabre Get Ancillaries v2.
@@ -287,6 +301,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
   const bookingManagementV1 = new DefaultBookingManagementV1Service(deps);
   const createPassengerNameRecordV25 = new DefaultCreatePassengerNameRecordV25Service(deps);
   const exchangeBookingV1 = new DefaultExchangeBookingV1Service(deps);
+  const flightReshopV1 = new DefaultFlightReshopV1Service(deps);
   const getAncillariesV2 = new DefaultGetAncillariesV2Service(deps);
   const getHotelAvailV5 = new DefaultGetHotelAvailV5Service(deps);
   const getHotelDetailsV5 = new DefaultGetHotelDetailsV5Service(deps);
@@ -304,6 +319,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
     bookingManagementV1,
     createPassengerNameRecordV25,
     exchangeBookingV1,
+    flightReshopV1,
     getAncillariesV2,
     getHotelAvailV5,
     getHotelDetailsV5,
@@ -323,6 +339,7 @@ interface SabreClientServices {
   bookingManagementV1: BookingManagementV1Service;
   createPassengerNameRecordV25: CreatePassengerNameRecordV25Service;
   exchangeBookingV1: ExchangeBookingV1Service;
+  flightReshopV1: FlightReshopV1Service;
   getAncillariesV2: GetAncillariesV2Service;
   getHotelAvailV5: GetHotelAvailV5Service;
   getHotelDetailsV5: GetHotelDetailsV5Service;
@@ -347,6 +364,7 @@ class DefaultSabreClient implements SabreClient {
   readonly bookingManagementV1: BookingManagementV1Service;
   readonly createPassengerNameRecordV25: CreatePassengerNameRecordV25Service;
   readonly exchangeBookingV1: ExchangeBookingV1Service;
+  readonly flightReshopV1: FlightReshopV1Service;
   readonly getAncillariesV2: GetAncillariesV2Service;
   readonly getHotelAvailV5: GetHotelAvailV5Service;
   readonly getHotelDetailsV5: GetHotelDetailsV5Service;
@@ -365,6 +383,7 @@ class DefaultSabreClient implements SabreClient {
     this.bookingManagementV1 = services.bookingManagementV1;
     this.createPassengerNameRecordV25 = services.createPassengerNameRecordV25;
     this.exchangeBookingV1 = services.exchangeBookingV1;
+    this.flightReshopV1 = services.flightReshopV1;
     this.getAncillariesV2 = services.getAncillariesV2;
     this.getHotelAvailV5 = services.getHotelAvailV5;
     this.getHotelDetailsV5 = services.getHotelDetailsV5;
