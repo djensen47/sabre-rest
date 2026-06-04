@@ -2,8 +2,15 @@
 # booking-ticket-lifecycle.sh — ticket-lifecycle smoke test.
 #
 # bargain-finder-max → revalidate-itinerary → create-booking → get-booking
-# → check-tickets → fulfill-tickets → get-booking (verify ticketed)
+# → check-tickets (pre-issue) → fulfill-tickets → get-booking (verify
+# ticketed) → check-tickets (post-issue, CAT31/CAT33 eligibility)
 # → void-tickets → cancel-booking → get-booking (verify cancellation).
+#
+# The post-issue check-tickets is the one that reports exchange (CAT31)
+# and refund (CAT33) eligibility — those provisions only exist once a
+# ticket is issued with an OPEN coupon, so the pre-issue check cannot
+# surface them. Pair with --carriers AA to probe whether a clean CERT
+# ticket is reissuable (Sabre's recommended exchange-test carrier).
 #
 # Extends booking-e2e.sh past the PNR creation point into the ticketing
 # lifecycle. Issues a real ticket against the supplied form of payment,
@@ -36,6 +43,12 @@
 #   --from <iata>                 Origin IATA (required)
 #   --to <iata>                   Destination IATA (required)
 #   --departure-date <YYYY-MM-DD> Departure date (required)
+#   --carriers <list>             Preferred marketing carriers passed to BFM
+#                                 (comma-separated). Sabre support recommends
+#                                 AA for CERT exchange testing — its fares and
+#                                 flights are the best maintained. Preference,
+#                                 not a hard filter: the chosen segment's actual
+#                                 carrier is printed so you can confirm.
 #   --itinerary-index <n>         Which BFM result to book (default: 0)
 #   --given-name <name>           Traveler given name (default: randomly generated)
 #   --surname <name>              Traveler surname (default: randomly generated)
@@ -67,6 +80,7 @@ CLI="node dist/cli.js"
 FROM=""
 TO=""
 DEP_DATE=""
+CARRIERS=""
 ITIN_INDEX=0
 GIVEN_NAME=""
 SURNAME=""
@@ -81,7 +95,7 @@ WITH_PRINTERS=1
 BASE_URL=""
 
 usage() {
-  sed -n '2,58p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,71p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -89,6 +103,7 @@ while [[ $# -gt 0 ]]; do
     --from) FROM="${2:-}"; shift 2 ;;
     --to) TO="${2:-}"; shift 2 ;;
     --departure-date) DEP_DATE="${2:-}"; shift 2 ;;
+    --carriers) CARRIERS="${2:-}"; shift 2 ;;
     --itinerary-index) ITIN_INDEX="${2:-}"; shift 2 ;;
     --given-name) GIVEN_NAME="${2:-}"; shift 2 ;;
     --surname) SURNAME="${2:-}"; shift 2 ;;
@@ -204,11 +219,13 @@ step() {
 }
 
 # ---------------------------------------------------------------------------
-step 1 "bargain-finder-max ($FROM → $TO on $DEP_DATE)"
+step 1 "bargain-finder-max ($FROM → $TO on $DEP_DATE${CARRIERS:+, carriers=$CARRIERS})"
 BFM_FILE=$(mktemp)
 trap 'rm -f "$TMP_ERR" "$BFM_FILE"' EXIT
+CARRIERS_FLAG=()
+[[ -n "$CARRIERS" ]] && CARRIERS_FLAG=(--carriers "$CARRIERS")
 if ! $CLI bargain-finder-max "${BASE_URL_FLAG[@]}" \
-    --from "$FROM" --to "$TO" --departure-date "$DEP_DATE" \
+    --from "$FROM" --to "$TO" --departure-date "$DEP_DATE" "${CARRIERS_FLAG[@]}" \
     >"$BFM_FILE" 2>"$TMP_ERR"; then
   cat "$TMP_ERR" >&2
   fail "bargain-finder-max"
@@ -370,15 +387,6 @@ fi
 echo "isTicketed:   $(echo "$GET_OUT" | jq -r '.isTicketed // false')"
 echo "isCancelable: $(echo "$GET_OUT" | jq -r '.isCancelable // false')"
 echo "flights:      $(echo "$GET_OUT" | jq -r '.flights | length // 0')"
-# TEMP DIAG — what does the PNR look like for PQ records? Revert before commit.
-echo "DIAG PQ-ish fields:"
-echo "$GET_OUT" | jq '{
-  fares: (.fares // null),
-  pricingInfo: (.pricingInfo // null),
-  pricingSubjectToChange: (.pricingSubjectToChange // null),
-  priceQuotes: (.priceQuotes // null),
-  topLevelKeys: keys
-}'
 
 # ---------------------------------------------------------------------------
 step 5 "check-tickets (pre-fulfillment QC)"
@@ -451,7 +459,56 @@ if [[ "$IS_TICKETED" != "true" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-step 8 "void-tickets (release the financial document)"
+# Re-run check-tickets now that a ticket is ISSUED. The step-5 check ran
+# before fulfillment, so it could not report CAT31/CAT33 provisions —
+# reissue/refund eligibility is a property of an issued ticket with an
+# OPEN coupon. This is the call that answers "is this ticket exchangeable?"
+# and is the whole reason Sabre recommends AA for CERT exchange testing.
+# Read-only; does not mutate the booking.
+step 8 "check-tickets (post-issue — CAT31 exchange / CAT33 refund eligibility)"
+if ! CHECK2_OUT=$(run_cli $CLI check-tickets "${BASE_URL_FLAG[@]}" --confirmation-id "$CONFIRMATION_ID"); then
+  cat "$TMP_ERR" >&2
+  fail "check-tickets (post-issue)"
+fi
+echo "tickets returned: $(echo "$CHECK2_OUT" | jq -r '.tickets | length // 0')"
+echo "errors:           $(echo "$CHECK2_OUT" | jq -r '.errors | length // 0')"
+# Persist the raw response. The prior exchange investigation lost its
+# tickets because nothing was saved; .local/ is gitignored, so keep the
+# full body for follow-up (e.g. feeding a ticket number into Flight Reshop).
+if [[ -d .local ]]; then
+  CHECK2_FILE=".local/check-tickets-${CONFIRMATION_ID}.json"
+  echo "$CHECK2_OUT" >"$CHECK2_FILE"
+  echo "raw response saved: $CHECK2_FILE"
+fi
+# Per-ticket eligibility summary. isChangeable + exchangePenalties is the
+# CAT31 signal we care about for the exchange flow; isRefundable +
+# refundPenalties is CAT33. Penalty amount lives at .penalty.{amount,currencyCode}
+# (Sabre's BookingFareRulePenalty → MonetaryValue).
+echo "$CHECK2_OUT" | jq -r '
+  def pens(arr): (arr // []) | map("\(.penalty.amount // "?") \(.penalty.currencyCode // "")" + (if .applicability then " (\(.applicability))" else "" end)) | join(", ");
+  (.tickets // []) as $t
+  | if ($t | length) == 0 then "  (no per-ticket eligibility returned)"
+    else ($t[] |
+      "  ticket \(.number // "?"): " +
+      "changeable=\(.isChangeable // "n/a") " +
+      "refundable=\(.isRefundable // "n/a") " +
+      "voidable=\(.isVoidable // "n/a")" +
+      (if (.exchangePenalties // []) | length > 0
+       then "\n    CAT31 exchange penalties: " + pens(.exchangePenalties)
+       else "" end) +
+      (if (.refundPenalties // []) | length > 0
+       then "\n    CAT33 refund penalties:   " + pens(.refundPenalties)
+       else "" end))
+    end'
+# Surface any errors verbatim — a "changeable=true" alongside an error
+# needs the error text to interpret correctly.
+if [[ "$(echo "$CHECK2_OUT" | jq -r '.errors | length // 0')" != "0" ]]; then
+  echo "  error detail:"
+  echo "$CHECK2_OUT" | jq -r '.errors[] | "    [\(.code // "?")] \(.message // .description // .)"'
+fi
+
+# ---------------------------------------------------------------------------
+step 9 "void-tickets (release the financial document)"
 if ! VOID_OUT=$(run_cli $CLI void-tickets "${BASE_URL_FLAG[@]}" --confirmation-id "$CONFIRMATION_ID"); then
   cat "$TMP_ERR" >&2
   fail "void-tickets"
@@ -461,7 +518,7 @@ echo "errors:        $(echo "$VOID_OUT" | jq -r '.errors | length // 0')"
 TICKETED=0
 
 # ---------------------------------------------------------------------------
-step 9 "cancel-booking (cancelAll)"
+step 10 "cancel-booking (cancelAll)"
 if ! CANCEL_OUT=$(run_cli $CLI cancel-booking "${BASE_URL_FLAG[@]}" \
     --confirmation-id "$CONFIRMATION_ID" --cancel-all --retrieve-booking); then
   cat "$TMP_ERR" >&2
@@ -472,7 +529,7 @@ echo "voidedTickets:   $(echo "$CANCEL_OUT" | jq -r '.voidedTickets | length // 
 echo "refundedTickets: $(echo "$CANCEL_OUT" | jq -r '.refundedTickets | length // 0')"
 
 # ---------------------------------------------------------------------------
-step 10 "get-booking (post-cancel)"
+step 11 "get-booking (post-cancel)"
 if VERIFY_OUT=$(run_cli $CLI get-booking "${BASE_URL_FLAG[@]}" --confirmation-id "$CONFIRMATION_ID"); then
   echo "isCancelable: $(echo "$VERIFY_OUT" | jq -r '.isCancelable // false')"
 else
