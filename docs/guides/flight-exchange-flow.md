@@ -17,6 +17,13 @@ SOAP `ExchangeShoppingRQ` + `AutomatedExchangesLLSRQ` composition.
 > so this is a host-side **automated-reissue activation** gap on the PCC, not a
 > fare-rule or entitlement problem. A Sabre request to activate CAT-31/33
 > automated reissue is open. The client code is ready for when it lands.
+>
+> **This guide is provisional.** Steps 3–5 have not been exercised end-to-end
+> against a successful reissue — the sequence reflects Sabre's documented
+> Normalized Post Booking flow plus the legacy SOAP exchange workflow, not a
+> run we have observed succeed. Treat the orchestration (call order, key
+> chaining, request shapes) as unverified until automated reissue is activated
+> and a live exchange completes; update this notice and the step statuses then.
 
 ## Orchestrated path
 
@@ -24,9 +31,9 @@ SOAP `ExchangeShoppingRQ` + `AutomatedExchangesLLSRQ` composition.
 | --- | --- | --- | --- | --- |
 | 1 | Retrieve | Booking Management v1 `getBooking` | `get-booking` | Optional |
 | 2 | Ticket eligibility | Booking Management v1 `checkFlightTickets` | `check-tickets` | Recommended |
-| 3 | Shop / price the change | **Flight Reshop** `flightReshop` | `flight-reshop` | **Mandatory** † |
-| 4 | Commit the reissue | Exchange Booking v1.1.0 `exchangeBooking` | `exchange-booking` | **Mandatory** |
-| 5 | Issue the new ticket | Booking Management v1 `fulfillFlightTickets` | `fulfill-tickets` | **Mandatory** ‡ |
+| 3 | Shop / price the change | **Flight Reshop** `flightReshop` | `flight-reshop` | **Mandatory** — ⚠ unverified † |
+| 4 | Commit the reissue | Exchange Booking v1.1.0 `exchangeBooking` | `exchange-booking` | **Mandatory** — ⚠ unverified |
+| 5 | Issue the new ticket | Booking Management v1 `fulfillFlightTickets` | `fulfill-tickets` | **Mandatory** — ⚠ unverified ‡ |
 | 6 | Verify | Booking Management v1 `getBooking` | `get-booking` | Optional |
 
 _† Flight Reshop is the REST replacement for the legacy `ExchangeShoppingRQ`. It
