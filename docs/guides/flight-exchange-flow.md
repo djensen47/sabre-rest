@@ -18,11 +18,11 @@ SOAP `ExchangeShoppingRQ` + `AutomatedExchangesLLSRQ` composition.
 > PQR #02, `amountReturned: -52.00`, no change fee — the reshop quote and the
 > PQR agree to the penny.
 >
-> Two things verified along the way are baked into the guidance below: (a) the
-> reshop `errors` array must be checked even on HTTP 200, and (b) the new
-> segment in an Exchange Booking sell must be requested with a **passive/
-> guaranteed status (`GK`)**, not `NN` — selling as `NN` trips the host's
-> HaltOnStatus and aborts the air-book step. See step 4.
+> Two things verified along the way are baked into the library: (a) the reshop
+> `errors` array must be checked even on HTTP 200, and (b) Exchange Booking
+> sells new segments with a **passive/guaranteed status (`GK`)** by default —
+> not `NN`, which would leave the segment pending and trip the host's
+> HaltOnStatus, aborting the air-book step. See step 4.
 
 ## Orchestrated path
 
@@ -144,11 +144,12 @@ end-transacts — all in one call. Omit `confirm` to **quote** (PQR stored, no
 FOP charged); include it to **commit**. Body-driven. See
 [`exchange-booking-flow.sh`](../../scripts/exchange-booking-flow.sh).
 
-> **Set the new segment's `status` to `GK`.** Exchange Booking defaults a new
-> segment's sell status to `NN` and also halts on `NN`, so a default sell trips
-> its own HaltOnStatus and aborts with "Unable to perform air booking step"
-> (`EnhancedAirBookRQ: Flight … returned status code NN`). Selling the segment
-> as `GK` (passive/guaranteed) clears the air-book step. Verified 2026-06-09.
+> **New segments sell as `GK` by default.** The library sells each new segment
+> with a passive/guaranteed status (`GK`), which holds it immediately so the
+> reissue prices in the same call. Do not override `status` to `NN`: a pending
+> `NN` segment trips the host's HaltOnStatus and aborts with "Unable to perform
+> air booking step" (`EnhancedAirBookRQ: Flight … returned status code NN`).
+> Verified 2026-06-09.
 
 ```
 sabre-rest exchange-booking --body '{
@@ -159,8 +160,7 @@ sabre-rest exchange-booking --body '{
   "newSegments": [{ "origin": "DFW", "destination": "LAX",
     "departureDateTime": "2026-06-30T07:30:00",
     "arrivalDateTime": "2026-06-30T08:49:00",
-    "marketingCarrier": "AA", "flightNumber": "1154", "bookingClass": "S",
-    "status": "GK" }],
+    "marketingCarrier": "AA", "flightNumber": "1154", "bookingClass": "S" }],
   "priceTolerance": { "amountSpecified": 0,
     "acceptableIncrease": { "amount": 500, "haltOnNonAcceptablePrice": true } }
 }'
@@ -193,11 +193,11 @@ working fulfill body.
   how we confirmed the gap was PCC-level rather than route/fare specific.
 - **Shop → price agreement (2026-06-09).** Changing a fresh AA ticket from
   AA1504 to AA1154 (DFW→LAX): Flight Reshop offered `Refund -52.00 USD`, and
-  Exchange Booking (quote, segment status `GK`) returned `status: Complete`
-  with PQR #02 `amountReturned: -52.00`, no change fee. The two agree.
-- **Air-book status gotcha.** Exchange Booking's default new-segment status
-  (`NN`) collides with its own HaltOnStatus list; sell new segments as `GK`.
-  See step 4.
+  Exchange Booking (quote) returned `status: Complete` with PQR #02
+  `amountReturned: -52.00`, no change fee. The two agree.
+- **Air-book status (handled by default).** New segments sell as `GK`; a
+  pending `NN` would collide with the HaltOnStatus list and abort the air-book
+  step. The library defaults to `GK` so callers don't hit this. See step 4.
 
 Not yet exercised end-to-end: the **commit** path (step 4 with `confirm`) and
 **fulfill** (step 5) against a live reissue — only the quote path is verified.
