@@ -2,28 +2,27 @@
 
 This guide documents the post-booking flight-change (exchange / reissue) flow:
 which REST endpoints exist, which are on the canonical path, how they chain, and
-where the flow is currently blocked in CERT.
+how the steps were verified in CERT.
 
 Source: Sabre "Normalized API Post Booking Process" (PTC guidance, 2026) and the
 legacy "End-to-End Exchanges Workflow (Shop, Book, Price, Ticket)" developer
 guide. Sabre's PTC recommended the REST/Agentic path below over the legacy
 SOAP `ExchangeShoppingRQ` + `AutomatedExchangesLLSRQ` composition.
 
-> **Status (2026-06): partially blocked in CERT.** Every endpoint below is
-> wrapped and entitled on PCC `H50H`, but the **shop / price** step
-> (`flightReshop`) and the legacy **Exchange Booking** path both return
-> "Automated reissue not active for this ticket" on freshly issued AA tickets.
-> The fare is CAT-31 changeable (`checkTickets` reports `isChangeable: true`),
-> so this is a host-side **automated-reissue activation** gap on the PCC, not a
-> fare-rule or entitlement problem. A Sabre request to activate CAT-31/33
-> automated reissue is open. The client code is ready for when it lands.
+> **Status (2026-06-09): verified end-to-end in CERT on PCC `H50H`.** Sabre
+> activated automated reissue on the PCC; the shop → price flow now works:
+> `flightReshop` returns priceable offers (45–50 per request on AA DFW→LAX), and
+> Exchange Booking quotes a matching Price Quote Reissue. Worked example: a
+> fresh AA ticket changed from AA1504 to AA1154 (DFW→LAX) reshopped at a
+> **−$52.00 refund**, and Exchange Booking returned `status: Complete` with
+> PQR #02, `amountReturned: -52.00`, no change fee — the reshop quote and the
+> PQR agree to the penny.
 >
-> **This guide is provisional.** Steps 3–5 have not been exercised end-to-end
-> against a successful reissue — the sequence reflects Sabre's documented
-> Normalized Post Booking flow plus the legacy SOAP exchange workflow, not a
-> run we have observed succeed. Treat the orchestration (call order, key
-> chaining, request shapes) as unverified until automated reissue is activated
-> and a live exchange completes; update this notice and the step statuses then.
+> Two things verified along the way are baked into the guidance below: (a) the
+> reshop `errors` array must be checked even on HTTP 200, and (b) the new
+> segment in an Exchange Booking sell must be requested with a **passive/
+> guaranteed status (`GK`)**, not `NN` — selling as `NN` trips the host's
+> HaltOnStatus and aborts the air-book step. See step 4.
 
 ## Orchestrated path
 
@@ -31,9 +30,9 @@ SOAP `ExchangeShoppingRQ` + `AutomatedExchangesLLSRQ` composition.
 | --- | --- | --- | --- | --- |
 | 1 | Retrieve | Booking Management v1 `getBooking` | `get-booking` | Optional |
 | 2 | Ticket eligibility | Booking Management v1 `checkFlightTickets` | `check-tickets` | Recommended |
-| 3 | Shop / price the change | **Flight Reshop** `flightReshop` | `flight-reshop` | **Mandatory** — ⚠ unverified † |
-| 4 | Commit the reissue | Exchange Booking v1.1.0 `exchangeBooking` | `exchange-booking` | **Mandatory** — ⚠ unverified |
-| 5 | Issue the new ticket | Booking Management v1 `fulfillFlightTickets` | `fulfill-tickets` | **Mandatory** — ⚠ unverified ‡ |
+| 3 | Shop / price the change | **Flight Reshop** `flightReshop` | `flight-reshop` | **Mandatory** ✓ † |
+| 4 | Commit the reissue | Exchange Booking v1.1.0 `exchangeBooking` | `exchange-booking` | **Mandatory** ✓ (quote) |
+| 5 | Issue the new ticket | Booking Management v1 `fulfillFlightTickets` | `fulfill-tickets` | **Mandatory** ‡ |
 | 6 | Verify | Booking Management v1 `getBooking` | `get-booking` | Optional |
 
 _† Flight Reshop is the REST replacement for the legacy `ExchangeShoppingRQ`. It
@@ -145,6 +144,12 @@ end-transacts — all in one call. Omit `confirm` to **quote** (PQR stored, no
 FOP charged); include it to **commit**. Body-driven. See
 [`exchange-booking-flow.sh`](../../scripts/exchange-booking-flow.sh).
 
+> **Set the new segment's `status` to `GK`.** Exchange Booking defaults a new
+> segment's sell status to `NN` and also halts on `NN`, so a default sell trips
+> its own HaltOnStatus and aborts with "Unable to perform air booking step"
+> (`EnhancedAirBookRQ: Flight … returned status code NN`). Selling the segment
+> as `GK` (passive/guaranteed) clears the air-book step. Verified 2026-06-09.
+
 ```
 sabre-rest exchange-booking --body '{
   "pnrLocator": "PNR123",
@@ -152,13 +157,19 @@ sabre-rest exchange-booking --body '{
   "receivedFrom": "SP TEST",
   "cancelSegments": [1],
   "newSegments": [{ "origin": "DFW", "destination": "LAX",
-    "departureDateTime": "2026-09-26T07:30:00",
-    "arrivalDateTime": "2026-09-26T08:49:00",
-    "marketingCarrier": "AA", "flightNumber": "1154", "bookingClass": "S" }],
+    "departureDateTime": "2026-06-30T07:30:00",
+    "arrivalDateTime": "2026-06-30T08:49:00",
+    "marketingCarrier": "AA", "flightNumber": "1154", "bookingClass": "S",
+    "status": "GK" }],
   "priceTolerance": { "amountSpecified": 0,
     "acceptableIncrease": { "amount": 500, "haltOnNonAcceptablePrice": true } }
 }'
 ```
+
+A successful quote returns `applicationResults.status: "Complete"` and an
+`exchangeConfirmations[]` entry with the PQR number and the priced delta, e.g.
+`{ "pqrNumber": "02", "amountReturned": "-52.00" }` — matching the Flight
+Reshop offer's `totalPriceDifference.grandTotal`.
 
 ### 5. Fulfill Flight Tickets — `fulfill-tickets`
 
@@ -167,7 +178,7 @@ PCC requires a designated printer (`ticket.countryCode "AT"` on `H50H`). See
 [`booking-ticket-lifecycle.sh`](../../scripts/booking-ticket-lifecycle.sh) for a
 working fulfill body.
 
-## What we verified in CERT (2026-06)
+## What we verified in CERT
 
 - **Entitlement: green.** `flightReshop` returns HTTP 200 on `H50H` — the
   request authenticates, authorizes, and reaches the downline shopping service.
@@ -175,14 +186,21 @@ working fulfill body.
 - **Fare rules: green.** `checkFlightTickets` on freshly issued AA tickets
   reports `isChangeable: true` with a CAT-31 provision (`source: "Category 31"`,
   `$0` change penalty on AA Main Cabin domestic). No CAT-16 fallback.
-- **Automated reissue: blocked.** Both `flightReshop` and legacy Exchange
-  Booking return "Automated reissue not active for this ticket" /
-  `AutomatedExchangesLLSRQ: WFRF ENTRY NOT AVAILABLE` — identical across 6 AA
-  routes and 2 fare classes, so it is PCC-level, not route/fare specific.
+- **Automated reissue: active (2026-06-09).** After Sabre activated automated
+  reissue on `H50H`, `flightReshop` returns priceable offers (45–50 per request
+  on AA DFW→LAX). Before activation it returned "Automated reissue not active
+  for this ticket" — identical across 6 AA routes and 2 fare classes, which is
+  how we confirmed the gap was PCC-level rather than route/fare specific.
+- **Shop → price agreement (2026-06-09).** Changing a fresh AA ticket from
+  AA1504 to AA1154 (DFW→LAX): Flight Reshop offered `Refund -52.00 USD`, and
+  Exchange Booking (quote, segment status `GK`) returned `status: Complete`
+  with PQR #02 `amountReturned: -52.00`, no change fee. The two agree.
+- **Air-book status gotcha.** Exchange Booking's default new-segment status
+  (`NN`) collides with its own HaltOnStatus list; sell new segments as `GK`.
+  See step 4.
 
-So the orchestration above is correct and the wrappers are ready; the live
-shop/price step is gated on Sabre activating automated reissue (CAT-31/33) for
-the PCC.
+Not yet exercised end-to-end: the **commit** path (step 4 with `confirm`) and
+**fulfill** (step 5) against a live reissue — only the quote path is verified.
 
 ## Environment and headers
 
