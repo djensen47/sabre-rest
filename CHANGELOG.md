@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.15.0](https://github.com/djensen47/sabre-rest/compare/v0.14.0...v0.15.0) (2026-06-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* **booking-management-v1:** Typed callers of `BookPricingDetails`, `BookPriceComparison`, and `BookTourCodeOverrides` must update.
+
+### Features
+
+* **exchange-booking-v1:** add Exchange Booking REST service + CLI command + smoke script ([#94](https://github.com/djensen47/sabre-rest/issues/94)) ([484b025](https://github.com/djensen47/sabre-rest/commit/484b025f92bc3644a1225608ac55e6c371e9164b))
+* **flight-reshop-v1:** add Flight Reshop REST service + CLI + exchange-flow guide ([#97](https://github.com/djensen47/sabre-rest/issues/97)) ([8f4a66c](https://github.com/djensen47/sabre-rest/commit/8f4a66cb795b2ecdd492ef4ed347e7fb9d433eb4))
+* **smoke:** bundled cancelBooking void/refund script + default designatePrinters (AT) for CERT ticketing ([#95](https://github.com/djensen47/sabre-rest/issues/95)) ([90407ac](https://github.com/djensen47/sabre-rest/commit/90407accfe2b4d126763a57eba42bb14b9932ef3))
+* **smoke:** post-issue check-tickets for CAT31/CAT33 eligibility + AA carrier flag ([#96](https://github.com/djensen47/sabre-rest/issues/96)) ([16b5e97](https://github.com/djensen47/sabre-rest/commit/16b5e97229a49da2d067ee1e2bda46715c27ffa9))
+* **smoke:** random traveler helper + align fulfillTickets with Sabre example ([#88](https://github.com/djensen47/sabre-rest/issues/88)) ([7f9eb2d](https://github.com/djensen47/sabre-rest/commit/7f9eb2d797140b5a35d1920e448335f70535f09f))
+
+
+### Bug Fixes
+
+* **booking-management-v1:** stabilize air booking flow end-to-end (NN, FOP, SFPD, AVS bypass) + correct flightPricing types ([#91](https://github.com/djensen47/sabre-rest/issues/91)) ([49745e8](https://github.com/djensen47/sabre-rest/commit/49745e8b96b8974866fce41cbdb8cf298293fe86))
+* **errors:** preserve body on SabreAuthenticationError + document Swagger 2.0 conversion ([#93](https://github.com/djensen47/sabre-rest/issues/93)) ([9eef23d](https://github.com/djensen47/sabre-rest/commit/9eef23d6e4a3a0bd29594f37e2c652742a19d4ab))
+* **exchange-booking-v1:** sell new segments as GK, drop NN from default halt ([#98](https://github.com/djensen47/sabre-rest/issues/98)) ([5e8a337](https://github.com/djensen47/sabre-rest/commit/5e8a337743cf0c8516ba38baad64783999025cb2))
+* **hotel-smoke:** use US billing address for CC ([#90](https://github.com/djensen47/sabre-rest/issues/90)) ([9e33062](https://github.com/djensen47/sabre-rest/commit/9e3306205e92c1d8f8132eb61965d9aaa6466c86))
+
 ## [0.14.0](https://github.com/djensen47/sabre-rest/compare/v0.13.0...v0.14.0) (2026-05-06)
 
 
