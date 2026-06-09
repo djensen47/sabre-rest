@@ -99,11 +99,12 @@ describe('toExchangeRequest', () => {
   it('builds AirBook with default HaltOnStatus and per-segment defaults', () => {
     const req = toExchangeRequest(BASE, { ...minimalInput, newSegments: [newSegment] });
     const rq = JSON.parse(req.body ?? '').ExchangeBookingRQ;
+    // NN is intentionally absent from the halt list (and the segment is sold
+    // as GK, not NN) — selling NN and halting on NN aborts the air-book step.
     expect(rq.AirBook.HaltOnStatus).toEqual([
       { Code: 'HL' },
       { Code: 'KK' },
       { Code: 'LL' },
-      { Code: 'NN' },
       { Code: 'NO' },
       { Code: 'UC' },
       { Code: 'US' },
@@ -115,7 +116,7 @@ describe('toExchangeRequest', () => {
       FlightNumber: '781',
       NumberInParty: '1',
       ResBookDesigCode: 'G',
-      Status: 'NN',
+      Status: 'GK',
       DestinationLocation: { LocationCode: 'PDX' },
       MarketingAirline: { Code: 'AS', FlightNumber: '781' },
       OriginLocation: { LocationCode: 'LAS' },
@@ -130,6 +131,15 @@ describe('toExchangeRequest', () => {
     });
     const rq = JSON.parse(req.body ?? '').ExchangeBookingRQ;
     expect(rq.AirBook.HaltOnStatus).toEqual([{ Code: 'UC' }, { Code: 'US' }]);
+  });
+
+  it('uses a caller-supplied per-segment status over the GK default', () => {
+    const req = toExchangeRequest(BASE, {
+      ...minimalInput,
+      newSegments: [{ ...newSegment, status: 'NN' }],
+    });
+    const rq = JSON.parse(req.body ?? '').ExchangeBookingRQ;
+    expect(rq.AirBook.OriginDestinationInformation.FlightSegment[0].Status).toBe('NN');
   });
 
   it('emits HaltOnTimeDiscrepancy and RedisplayReservation when supplied', () => {

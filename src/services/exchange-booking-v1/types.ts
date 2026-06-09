@@ -246,9 +246,12 @@ export interface ExchangeFlightInput {
 
   /**
    * Status codes that should halt subsequent processing if the
-   * carrier returns them after sell. When omitted, defaults to the
-   * canonical example list `['HL','KK','LL','NN','NO','UC','US']`.
-   * Pass an explicit array (including empty) to override.
+   * carrier returns them after sell. When omitted, defaults to
+   * `['HL','KK','LL','NO','UC','US']`. Note `NN` is intentionally NOT in
+   * the default list: new segments are sold passively as `GK`, and
+   * halting on `NN` would abort the air-book step on a still-pending
+   * segment (the spec's canonical example does both and is contradictory
+   * in practice). Pass an explicit array (including empty) to override.
    */
   haltOnStatus?: string[];
 
@@ -326,7 +329,11 @@ export interface ExchangeNewSegment {
    */
   numberInParty?: string;
   /**
-   * Action code used to sell. Defaults to `"NN"` (need) when omitted.
+   * Action code used to sell the new segment. Defaults to `"GK"`
+   * (passive / guaranteed) when omitted — this holds the segment
+   * immediately so the reissue prices in the same call. Avoid `"NN"`
+   * (need): it leaves the segment pending and trips the default
+   * `haltOnStatus`, aborting the air-book step.
    */
   status?: string;
 }
