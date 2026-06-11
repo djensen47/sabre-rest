@@ -167,6 +167,14 @@ describe('fromReshopResponse', () => {
                         grandTotal: '-1539.40',
                         currencyCode: 'PLN',
                       },
+                      fareComponents: [
+                        {
+                          fareBasisCode: 'QVAJZNB3',
+                          segmentDetails: [
+                            { flightRef: 'f-1', bookingClassCode: 'Q', cabinName: 'Economy' },
+                          ],
+                        },
+                      ],
                     },
                   ],
                 },
@@ -187,6 +195,13 @@ describe('fromReshopResponse', () => {
     expect(offer?.totalPriceDifference?.grandTotal).toBe('-1539.40');
     expect(offer?.items?.[0]?.fares?.[0]?.travelers?.[0]?.ticketNumber).toBe('0012972101507');
     expect(offer?.items?.[0]?.fares?.[0]?.priceDifference?.grandTotal).toBe('-1539.40');
+    const component = offer?.items?.[0]?.fares?.[0]?.fareComponents?.[0];
+    expect(component?.fareBasisCode).toBe('QVAJZNB3');
+    expect(component?.segmentDetails?.[0]).toEqual({
+      flightRef: 'f-1',
+      bookingClassCode: 'Q',
+      cabinName: 'Economy',
+    });
   });
 
   it('maps an empty response (no offers, no flights)', () => {

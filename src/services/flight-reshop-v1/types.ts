@@ -252,16 +252,46 @@ export interface FlightReshopOfferTraveler {
 }
 
 /**
+ * Booking details of one flight within a fare component. The
+ * `flightRef` points into {@link FlightReshopOutput.flights}; the
+ * booking class is what a follow-up Exchange Booking sell must use to
+ * obtain this fare.
+ */
+export interface FlightReshopFareComponentSegmentDetail {
+  /** Reference to the flight (by id) this detail applies to. */
+  flightRef?: string;
+  /** Booking inventory code (RBD) of the marketing airline (e.g. `Y`). */
+  bookingClassCode?: string;
+  /** Cabin name. May be `Unknown` on the response side. */
+  cabinName?: FlightReshopCabinName | 'Unknown';
+}
+
+/**
+ * A fare component of a fare calculated for the offer. v1 surfaces the
+ * fare basis plus the per-flight booking details needed to sell the
+ * offer's flights in a follow-up exchange; richer attributes (brand,
+ * account code, baggage refs) are not exposed yet.
+ */
+export interface FlightReshopFareComponent {
+  /** Fare basis code associated with the component (e.g. `ABCDE10`). */
+  fareBasisCode?: string;
+  /** Per-flight booking details for the flights this component covers. */
+  segmentDetails?: readonly FlightReshopFareComponentSegmentDetail[];
+}
+
+/**
  * A priced fare within an offer item, scoped to one or more travelers.
- * v1 surfaces the traveler list and the per-fare price difference;
- * the detailed fare-component breakdown is available on the raw
- * response for callers that need it.
+ * v1 surfaces the traveler list, the per-fare price difference, and the
+ * fare components carrying the booking class per flight — the pieces
+ * needed to chain an offer into Exchange Booking.
  */
 export interface FlightReshopOfferFare {
   /** Travelers this fare applies to. */
   travelers?: readonly FlightReshopOfferTraveler[];
   /** Exchange/reissue cost for the travelers in this fare. */
   priceDifference?: FlightReshopTotalPrice;
+  /** Fare components with the booking class per referenced flight. */
+  fareComponents?: readonly FlightReshopFareComponent[];
 }
 
 /** A priceable item within an offer (one or more fares). */
