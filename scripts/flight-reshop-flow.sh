@@ -10,14 +10,14 @@
 #   flight-reshop --body '{journeys, tickets, ...}'
 # and prints a short summary of the offers (or the downline error).
 #
-# What "good" looks like:
-#   - offers[] populated, each with totalPriceDifference (grandTotal +
-#     type = Add collect/Even/Refund). numberOfOffers > 0.
-# What we have actually seen in CERT on PCC H50H (2026-06):
-#   - HTTP 200 with errors[].description = "Automated reissue not active for
-#     this ticket" and NO offers. The endpoint is entitled and reachable;
-#     the ticket/PCC is not provisioned for automated reissue. This script
-#     surfaces that error verbatim so the state is obvious.
+# What "good" looks like (verified in CERT on PCC H50H since 2026-06-09,
+# when Sabre activated automated reissue):
+#   - offers[] populated (~45-50 on AA DFW->LAX), each with
+#     totalPriceDifference (grandTotal + type = Add collect/Even/Refund).
+# If instead you get HTTP 200 with errors[].description = "Automated reissue
+# not active for this ticket" and NO offers, the endpoint is entitled and
+# reachable but the ticket/PCC is not provisioned for automated reissue.
+# This script surfaces that error verbatim so the state is obvious.
 #
 # Provide either:
 #   --ticket <number>   an existing electronic ticket number (required), and
