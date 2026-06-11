@@ -31,8 +31,8 @@ SOAP `ExchangeShoppingRQ` + `AutomatedExchangesLLSRQ` composition.
 | 1 | Retrieve | Booking Management v1 `getBooking` | `get-booking` | Optional |
 | 2 | Ticket eligibility | Booking Management v1 `checkFlightTickets` | `check-tickets` | Recommended |
 | 3 | Shop / price the change | **Flight Reshop** `flightReshop` | `flight-reshop` | **Mandatory** ✓ † |
-| 4 | Commit the reissue | Exchange Booking v1.1.0 `exchangeBooking` | `exchange-booking` | **Mandatory** ✓ (quote) |
-| 5 | Issue the new ticket | Booking Management v1 `fulfillFlightTickets` | `fulfill-tickets` | **Mandatory** ‡ |
+| 4 | Commit the reissue | Exchange Booking v1.1.0 `exchangeBooking` | `exchange-booking` | **Mandatory** ✓ (quote + commit) |
+| 5 | Issue the new ticket | Booking Management v1 `fulfillFlightTickets` | `fulfill-tickets` | **Mandatory** ‡ (blocked in CERT) |
 | 6 | Verify | Booking Management v1 `getBooking` | `get-booking` | Optional |
 
 _† Flight Reshop is the REST replacement for the legacy `ExchangeShoppingRQ`. It
@@ -198,9 +198,24 @@ working fulfill body.
 - **Air-book status (handled by default).** New segments sell as `GK`; a
   pending `NN` would collide with the HaltOnStatus list and abort the air-book
   step. The library defaults to `GK` so callers don't hit this. See step 4.
-
-Not yet exercised end-to-end: the **commit** path (step 4 with `confirm`) and
-**fulfill** (step 5) against a live reissue — only the quote path is verified.
+- **Commit: verified (2026-06-10).** `scripts/flight-exchange-e2e.sh` runs the
+  whole lifecycle: issue an AA ticket, reshop it, commit the exchange with
+  `confirm` + card FOP. The commit returns `status: Complete`, stores the PQR,
+  swaps the segments (old flight cancelled, new flight on the PNR as `GK`),
+  and `amountReturned` matches the reshop offer's `grandTotal`. Three sell
+  statuses were probed: `NN` aborts the air-book server-side ("Unable to
+  perform air booking step") even with `haltOnStatus` overridden to `[]` —
+  the pending-NN halt is not configurable from the request; `SS` is rejected
+  (`EnhancedAirBookRQ: FORMAT`); `GK` is the only status that commits.
+- **Fulfill after commit: blocked by CERT, not by the library.** Issuing the
+  reissued document fails `AirTicketLLSRQ: NEED AIRLINE PNR LOCATOR` because
+  the `GK` segment never receives an airline record locator — CERT's simulated
+  carrier link doesn't confirm passive sells. Targeting the PQR via
+  `priceQuoteRecordIds` (with the `PQR_Number` "02" or the Get Booking
+  `recordId` "2") fails earlier with `PRICE_QUOTE_RECORD_NUMBER_INVALID`; that
+  qualifier addresses `PQ` records only. In production, the carrier link
+  confirms segments and assigns locators, which is exactly the piece CERT
+  omits — so the exchange **commit** is the deepest CERT-verifiable point.
 
 ## Environment and headers
 
@@ -214,5 +229,8 @@ Not yet exercised end-to-end: the **commit** path (step 4 with `confirm`) and
 - [`flight-reshop.yml`](../specifications/flight-reshop.yml) — Flight Reshop spec
 - [`exchange-booking.yml`](../specifications/exchange-booking.yml) — Exchange Booking spec
 - [`booking-management-operations.md`](../specifications/booking-management-operations.md) — getBooking / checkFlightTickets / fulfillFlightTickets / void / refund
+- `scripts/flight-exchange-e2e.sh` — full lifecycle smoke test (mint ticket →
+  reshop → commit exchange → attempt fulfill → cleanup)
 - `scripts/flight-reshop-flow.sh`, `scripts/exchange-booking-flow.sh`,
-  `scripts/booking-ticket-lifecycle.sh` — runnable smoke tests for the steps
+  `scripts/booking-ticket-lifecycle.sh` — runnable smoke tests for individual
+  steps
