@@ -207,7 +207,6 @@ CLEANUP_ATTEMPTED=0
 # Every CLI call's outbound request (via --debug-request) and response body is
 # saved under a per-run directory in .local/ (gitignored). The Authorization
 # bearer token is redacted from saved requests so the bundle is shareable.
-LOG_SEQ=0
 CURRENT_STEP="00-init"
 if [[ -d .local ]]; then
   LOG_DIR=".local/exchange-e2e-$(date +%Y%m%dT%H%M%S)-$$"
@@ -231,9 +230,13 @@ run_cli() {
     "$@" 2>"$TMP_ERR"
     return
   fi
-  LOG_SEQ=$((LOG_SEQ + 1))
+  # run_cli is typically invoked inside $(...), so a shell variable increment
+  # would not persist to the parent. Keep the sequence in a file instead.
+  local seq
+  seq=$(( $(cat "$LOG_DIR/.seq" 2>/dev/null || echo 0) + 1 ))
+  echo "$seq" >"$LOG_DIR/.seq"
   local base
-  base="$(printf '%s/%02d-%s' "$LOG_DIR" "$LOG_SEQ" "$CURRENT_STEP")"
+  base="$(printf '%s/%02d-%s' "$LOG_DIR" "$seq" "$CURRENT_STEP")"
   local rc
   # Append --debug-request so the outbound wire request is emitted to stderr
   # and captured. All trailing tokens are flags, so order is irrelevant.
