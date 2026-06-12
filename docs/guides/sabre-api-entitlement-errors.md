@@ -216,11 +216,15 @@ some PCCs *require* a designated printer, and issuance fails without one.
 > `PRINTER_NOT_ASSIGNED` is a per-PCC configuration requirement, not a bad
 > request — treat it as "your PCC needs a printer designated."
 
-> ⚠️ **Verified in CERT** — distinct from these, the reissue fulfill in
-> [`flight-exchange-flow.md`](./flight-exchange-flow.md) fails
-> `AirTicketLLSRQ: NEED AIRLINE PNR LOCATOR`. That is an **environment
-> limitation** (CERT's simulated carrier link never confirms the passive `GK`
-> segment), *not* an entitlement error — don't classify it as one.
+> ⚠️ **Verified in CERT** — `AirTicketLLSRQ: NEED AIRLINE PNR LOCATOR` can
+> surface when fulfilling a reissued ticket, but it is **not** an entitlement
+> error — don't classify it as one. It means the new segment has no airline
+> record locator, which happens when the exchange sold the segment *passively*
+> (`GK`). On the documented `NN` sell path the segment is carrier-confirmed and
+> fulfill succeeds — verified end-to-end in CERT on 2026-06-12 (see
+> [`flight-exchange-flow.md`](./flight-exchange-flow.md)). Note this proved
+> **date-dependent on `H50H`**: the identical `NN` request aborted air-book two
+> days earlier, so the resolution is server-side, not a credential/TJR lever.
 
 #### 3.6 Booking Management — Refund / Void / Check
 

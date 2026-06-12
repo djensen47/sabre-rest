@@ -208,12 +208,14 @@ tries to ask *and* confirm from live availability in one stroke.)
 | `UC` / `US` | Unable / Unable-waitlisted | Airline's reply: couldn't confirm |
 
 > ⚖️ **Sabre decision point** — this request-vs-statement distinction is the
-> entire reason the exchange flow (§3.3) is fussy about which status it sells new
-> segments as. The host's *HaltOnStatus* list refuses to end a transaction while
-> a segment is still a pending **request** (`NN` and the unsettled replies), so a
-> reissue sold as `NN` aborts; `GK` (a **statement**) reads as settled instantly
-> and lets the reissue price in one call — at the cost that no carrier locator is
-> ever assigned. See §3.3 for how that plays out.
+> entire reason the exchange flow (§3.3) is sensitive to which status it sells
+> new segments as. Selling `NN` (a **request**) asks the carrier to confirm, so
+> the new segment can earn a real airline locator and be ticketed — but it
+> depends on the carrier link settling the sell in time. Selling `GK` (a
+> **statement**) reads as settled instantly and always prices in one call, but
+> the segment never gets a carrier locator, so the reissued ticket can't be
+> issued. `NN` is the documented default; see §3.3 for the CERT history where
+> these behaved differently on different days.
 
 **Environments.** Two base hosts, and they differ by API family:
 
@@ -504,30 +506,26 @@ exchange that priced out higher than the customer agreed to.
 
 > ⚖️ **Sabre decision point — segment sell status.** New exchange segments carry
 > a `Status` code (the `NN`/`GK`/`SS` codes explained in §2 — request vs.
-> statement). **Sabre's own spec example uses `Status: "NN"`** — a pending
-> *request*. But the value you choose decides whether the exchange even commits:
+> statement). **Sabre's spec example uses `Status: "NN"`** — a pending *request*
+> asking the carrier to confirm — and `NN` is the documented, recommended
+> default. `GK` (a passive *statement*) is a tempting shortcut because it always
+> commits in one call, but the segment it creates never earns an airline record
+> locator, so the reissued ticket can't be issued. Confirm our code defaults to
+> `NN` and only uses `GK` as a deliberate, caller-chosen override.
 
-> ⚠️ **Production reality (verified in CERT, 2026-06).** Of the three plausible
-> sell statuses, **only `GK` commits**:
-> - **`NN`** (Sabre's example default) → the host's *HaltOnStatus* rejects the
->   pending segment and the air-book step aborts ("Unable to perform air booking
->   step"). This halt is **not** overridable from the request — clearing
->   `HaltOnStatus` to `[]` does not help.
-> - **`SS`** → rejected outright (`EnhancedAirBookRQ: FORMAT`).
-> - **`GK`** (passive/guaranteed) → holds the segment immediately so the reissue
->   prices in the same call. This is the only status that works.
->
-> So the spec's example value is *wrong for a real reissue.* A reviewer should
-> verify our code sells new segments as `GK` and does not "follow the example."
-
-> ⚠️ **Production reality — the CERT fulfill wall.** The exchange **commit** is
-> the deepest point verifiable in CERT. Issuing the reissued document
-> (`fulfillFlightTickets`) then fails `AirTicketLLSRQ: NEED AIRLINE PNR LOCATOR`,
-> because the `GK` segment never receives an airline record locator — CERT's
-> simulated carrier link doesn't confirm passive sells. In production the carrier
-> link confirms the segment and assigns a locator, which is exactly the piece
-> CERT omits. This is an environment limitation, not a defect in the reissue
-> logic.
+> ⚠️ **Production reality — full reissue verified, but the path is environment-
+> sensitive (CERT, 2026-06).** On 2026-06-12 the documented `NN` path completed
+> end-to-end in CERT on PCC `H50H` — commit *and* `fulfillFlightTickets` issued
+> the reissued document, on both a `$0` and a `$50.01` exchange. **Two days
+> earlier the same `NN` request aborted** at the air-book step ("Unable to
+> perform air booking step") *even with `HaltOnStatus` cleared*, and only a
+> passive `GK` sell committed — which then hit `AirTicketLLSRQ: NEED AIRLINE PNR
+> LOCATOR` at fulfill because the passive segment had no carrier locator. Nothing
+> in the request changed between those days; the variable was **server-side**
+> (reissue provisioning settling after its 2026-06-09 activation, or a CERT
+> carrier-link change). Takeaway for a reviewer: `NN` is correct and now works,
+> but exchange commit/fulfill behavior in CERT has proven date-dependent — treat
+> a green run as a snapshot, not a guarantee, and re-verify before relying on it.
 
 > 📎 **Heritage note.** Sabre still publishes the legacy SOAP exchange path
 > ([End-to-End Exchanges](https://developer.sabre.com/guide/end-to-end-exchanges-workflows/end-to-end-exchanges-workflows.html),
@@ -727,7 +725,7 @@ names/relationships; nothing is booked and no traveler input is involved.
 | **Fulfillment** | Issuing the ticket(s) against a stored fare (`fulfillFlightTickets`). |
 | **Segment status code** | Two-letter AIRIMP code on every segment; a *request* or a *status* depending on who wrote it (full table in §2). |
 | **GK** | Passive segment status — recorded as confirmed locally, no carrier message; holds a segment immediately. |
-| **NN** | "Need" — a pending *request*; trips HaltOnStatus on exchange. |
+| **NN** | "Need" — a pending *request* asking the carrier to confirm; the documented default for exchange new segments. |
 | **SS** | "Sell/Sold" — sell-and-confirm from live availability; rejected by the exchange air-book step. |
 | **HK** | "Holds Confirmed" — the settled, durable confirmed status. |
 | **MAC** | Multi-Airport City code (e.g. `NYC`). |
