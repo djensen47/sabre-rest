@@ -123,6 +123,74 @@ export interface FlightReshopJourney {
   departureTimeWindow?: FlightReshopTimeWindow;
   /** Optional arrival time-window constraint. */
   arrivalTimeWindow?: FlightReshopTimeWindow;
+  /**
+   * Segments within this journey to **keep** unchanged while the rest are
+   * reshopped (selective / partial exchange). Each retained segment is part
+   * of the journey's *unmodifiable* conditions, so returned offers preserve
+   * it and only vary the other segments. Identify a segment either by its
+   * `flightItemId` (from the original booking) or by full
+   * {@link FlightReshopRetainFlightDetails}. Maps to the OAS
+   * `journeys[].retainFlights`.
+   */
+  retainFlights?: readonly FlightReshopRetainItem[];
+}
+
+/**
+ * One segment to retain in a {@link FlightReshopJourney}. Mirrors the OAS
+ * `RetainItem` `oneOf`: supply **either** `flightItemId` **or**
+ * `flightDetails`, not both.
+ */
+export interface FlightReshopRetainItem {
+  /**
+   * The id of the flight to retain, as carried on the original booking
+   * (OAS `RetainItem.flightItemId`). Prefer this when known.
+   */
+  flightItemId?: string;
+  /**
+   * Full flight details identifying the segment to retain, when no
+   * `flightItemId` is available (OAS `RetainItem.flightDetails`).
+   */
+  flightDetails?: FlightReshopRetainFlightDetails;
+}
+
+/**
+ * Full details identifying a flight to retain (OAS `RetainFlightItem`).
+ * The required fields below mirror the spec's `required` list; the rest are
+ * optional refinements.
+ */
+export interface FlightReshopRetainFlightDetails {
+  /** Marketing-carrier flight number (1–9999). */
+  marketingFlightNumber: number;
+  /** Two-letter IATA marketing-airline code (e.g. `AA`). */
+  marketingAirlineCode: string;
+  /** Three-letter IATA origin airport code. */
+  departureAirportCode: string;
+  /** Three-letter IATA destination airport code. */
+  arrivalAirportCode: string;
+  /** Scheduled departure date, `YYYY-MM-DD` in the airport's time zone. */
+  departureDate: string;
+  /** Scheduled departure time, `HH:MM`. */
+  departureTime: string;
+  /** Scheduled arrival date, `YYYY-MM-DD` in the airport's time zone. */
+  arrivalDate: string;
+  /** Scheduled arrival time, `HH:MM`. */
+  arrivalTime: string;
+  /** Booking inventory code (RBD) of the marketing airline. */
+  bookingClassCode: string;
+  /** Operating-carrier flight number, if different from marketing. */
+  operatingFlightNumber?: number;
+  /** Two-letter IATA operating-airline code, if different from marketing. */
+  operatingAirlineCode?: string;
+  /** Vendor booking status code (e.g. `HK`). */
+  flightStatusCode?: string;
+  /** Branded-fare code associated with the flight (e.g. `ECOFLEX`). */
+  brandCode?: string;
+  /**
+   * If `true`, the API does not modify the segment's booking class. Per the
+   * OAS, when set `true` it must be `true` for every retained flight in the
+   * same journey.
+   */
+  keepBookingClass?: boolean;
 }
 
 /**

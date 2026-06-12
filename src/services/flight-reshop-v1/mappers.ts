@@ -16,6 +16,7 @@ import type {
   FlightReshopOfferItem,
   FlightReshopOfferTraveler,
   FlightReshopOutput,
+  FlightReshopRetainItem,
   FlightReshopTicket,
   FlightReshopTimeWindow,
   FlightReshopTotalPrice,
@@ -107,7 +108,52 @@ function buildJourney(j: FlightReshopJourney): ReshopRequest['journeys'][number]
   if (j.arrivalTimeWindow !== undefined) {
     out.arrivalTimeWindow = buildTimeWindow(j.arrivalTimeWindow);
   }
+  if (j.retainFlights && j.retainFlights.length > 0) {
+    out.retainFlights = j.retainFlights.map(buildRetainItem);
+  }
   return out;
+}
+
+type WireRetainItem = NonNullable<
+  NonNullable<ReshopRequest['journeys'][number]['retainFlights']>
+>[number];
+
+/**
+ * Maps one {@link FlightReshopRetainItem} to the wire `RetainItem` `oneOf`.
+ * Emits the `flightItemId` variant when an id is given, otherwise the
+ * `flightDetails` variant. `flightItemId` takes precedence when both are set.
+ */
+function buildRetainItem(item: FlightReshopRetainItem): WireRetainItem {
+  if (item.flightItemId !== undefined) {
+    return { flightItemId: item.flightItemId };
+  }
+  if (item.flightDetails !== undefined) {
+    const d = item.flightDetails;
+    const details: NonNullable<
+      Extract<WireRetainItem, { flightDetails?: unknown }>['flightDetails']
+    > = {
+      marketingFlightNumber: d.marketingFlightNumber,
+      marketingAirlineCode: d.marketingAirlineCode,
+      departureAirportCode: d.departureAirportCode,
+      arrivalAirportCode: d.arrivalAirportCode,
+      departureDate: d.departureDate,
+      departureTime: d.departureTime,
+      arrivalDate: d.arrivalDate,
+      arrivalTime: d.arrivalTime,
+      bookingClassCode: d.bookingClassCode,
+    };
+    if (d.operatingFlightNumber !== undefined)
+      details.operatingFlightNumber = d.operatingFlightNumber;
+    if (d.operatingAirlineCode !== undefined) details.operatingAirlineCode = d.operatingAirlineCode;
+    if (d.flightStatusCode !== undefined) details.flightStatusCode = d.flightStatusCode;
+    if (d.brandCode !== undefined) details.brandCode = d.brandCode;
+    if (d.keepBookingClass !== undefined) details.keepBookingClass = d.keepBookingClass;
+    return { flightDetails: details };
+  }
+  // The OAS `RetainItem` oneOf requires exactly one variant. A retain item
+  // with neither identifier is a caller error — fail loudly rather than send
+  // a meaningless segment.
+  throw new TypeError('retainFlights item requires either flightItemId or flightDetails');
 }
 
 function buildTicket(t: FlightReshopTicket): NonNullable<ReshopRequest['tickets']>[number] {
