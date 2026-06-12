@@ -74,6 +74,12 @@
 #                                 and SS is rejected (EnhancedAirBookRQ:
 #                                 FORMAT). GK commits cleanly; see the
 #                                 step-9 diagnostic for where GK then blocks.
+#   --fulfill-delay <seconds>     Wait between the exchange commit and the
+#                                 reissue fulfill attempt (default: 15). The
+#                                 carrier-link confirmation that would put an
+#                                 airline locator on the segment is
+#                                 asynchronous, so an instant fulfill never
+#                                 gives it a chance to arrive.
 #   --no-cleanup                  Leave the PNR/tickets in place (debugging)
 #   --base-url <url>              Override SABRE_BASE_URL
 #   -h, --help                    Show this help
@@ -101,11 +107,12 @@ CARD_CVV="123"
 CARD_EXPIRY="2027-12"
 CARD_TYPE="VI"
 SELL_STATUS="GK"
+FULFILL_DELAY=15
 NO_CLEANUP=0
 BASE_URL=""
 
 usage() {
-  sed -n '2,69p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,85p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -126,6 +133,7 @@ while [[ $# -gt 0 ]]; do
     --card-expiry) CARD_EXPIRY="${2:-}"; shift 2 ;;
     --card-type) CARD_TYPE="${2:-}"; shift 2 ;;
     --sell-status) SELL_STATUS="${2:-}"; shift 2 ;;
+    --fulfill-delay) FULFILL_DELAY="${2:-}"; shift 2 ;;
     --no-cleanup) NO_CLEANUP=1; shift ;;
     --base-url) BASE_URL="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -526,6 +534,10 @@ echo "new ticket: ${NEW_TICKET:-<none found>}"
 FULFILL_RESULT="skipped (commit already ticketed)"
 if [[ -z "$NEW_TICKET" ]]; then
   step 9 "fulfill-tickets — attempt to issue the reissued document"
+  if [[ "$FULFILL_DELAY" -gt 0 ]]; then
+    echo "waiting ${FULFILL_DELAY}s before fulfill (carrier-link confirmation is asynchronous)"
+    sleep "$FULFILL_DELAY"
+  fi
   # A plain fulfill (no qualifiers) is the variant that reaches the actual
   # ticketing step. Targeting the PQR via priceQuoteRecordIds (with either
   # the PQR_Number "02" or the Get Booking recordId "2") is rejected
@@ -565,23 +577,30 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-step 10 "void-tickets (release the financial documents)"
-if ! VOID_OUT=$(run_cli $CLI void-tickets "${BASE_URL_FLAG[@]}" --confirmation-id "$CONFIRMATION_ID"); then
-  cat "$TMP_ERR" >&2
-  fail "void-tickets"
-fi
-echo "voidedTickets: $(echo "$VOID_OUT" | jq -r '.voidedTickets | length // 0')"
-TICKETED=0
+if [[ "$NO_CLEANUP" == "1" ]]; then
+  step 10 "void-tickets — SKIPPED (--no-cleanup)"
+  step 11 "cancel-booking — SKIPPED (--no-cleanup)"
+  CLEANUP_ATTEMPTED=1
+  echo "PNR $CONFIRMATION_ID and its ticket(s) are LIVE — void/cancel manually when done."
+else
+  step 10 "void-tickets (release the financial documents)"
+  if ! VOID_OUT=$(run_cli $CLI void-tickets "${BASE_URL_FLAG[@]}" --confirmation-id "$CONFIRMATION_ID"); then
+    cat "$TMP_ERR" >&2
+    fail "void-tickets"
+  fi
+  echo "voidedTickets: $(echo "$VOID_OUT" | jq -r '.voidedTickets | length // 0')"
+  TICKETED=0
 
-# ---------------------------------------------------------------------------
-step 11 "cancel-booking (cancelAll)"
-if ! CANCEL_OUT=$(run_cli $CLI cancel-booking "${BASE_URL_FLAG[@]}" \
-    --confirmation-id "$CONFIRMATION_ID" --cancel-all); then
-  cat "$TMP_ERR" >&2
-  fail "cancel-booking"
+  # -------------------------------------------------------------------------
+  step 11 "cancel-booking (cancelAll)"
+  if ! CANCEL_OUT=$(run_cli $CLI cancel-booking "${BASE_URL_FLAG[@]}" \
+      --confirmation-id "$CONFIRMATION_ID" --cancel-all); then
+    cat "$TMP_ERR" >&2
+    fail "cancel-booking"
+  fi
+  CLEANUP_ATTEMPTED=1
+  echo "cancelled."
 fi
-CLEANUP_ATTEMPTED=1
-echo "cancelled."
 
 # ---------------------------------------------------------------------------
 echo ""
