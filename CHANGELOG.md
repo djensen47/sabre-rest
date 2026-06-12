@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.16.0](https://github.com/djensen47/sabre-rest/compare/v0.15.0...v0.16.0) (2026-06-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* **exchange-booking-v1:** default new-segment sell to documented NN; full reissue verified end-to-end ([#102](https://github.com/djensen47/sabre-rest/issues/102))
+
+### Features
+
+* **exchange-booking-v1:** default new-segment sell to documented NN; full reissue verified end-to-end ([#102](https://github.com/djensen47/sabre-rest/issues/102)) ([51cfe19](https://github.com/djensen47/sabre-rest/commit/51cfe19a2bc19018de3704906eb4b1d5db9d6f62))
+* full exchange e2e smoke test (commit + fulfill probe) ([#99](https://github.com/djensen47/sabre-rest/issues/99)) ([ccdf187](https://github.com/djensen47/sabre-rest/commit/ccdf1878b40a917231a03daec72c49391a45b1d2))
+
 ## [0.15.0](https://github.com/djensen47/sabre-rest/compare/v0.14.0...v0.15.0) (2026-06-09)
 
 
