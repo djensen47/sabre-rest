@@ -94,6 +94,11 @@
 #                                 airline locator on the segment is
 #                                 asynchronous, so an instant fulfill never
 #                                 gives it a chance to arrive.
+#   --require-price-difference    Only select reshop offers with a non-zero
+#                                 price difference (an actual add-collect or
+#                                 refund), choosing the largest. Use to test
+#                                 the money path; without it, even ($0)
+#                                 exchanges are eligible and often chosen.
 #   --no-cleanup                  Leave the PNR/tickets in place (debugging)
 #   --base-url <url>              Override SABRE_BASE_URL
 #   -h, --help                    Show this help
@@ -124,9 +129,10 @@ SELL_STATUS="NN"
 FULFILL_DELAY=15
 NO_CLEANUP=0
 BASE_URL=""
+REQUIRE_PRICE_DIFF=0
 
 usage() {
-  sed -n '2,99p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,104p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -148,6 +154,7 @@ while [[ $# -gt 0 ]]; do
     --card-type) CARD_TYPE="${2:-}"; shift 2 ;;
     --sell-status) SELL_STATUS="${2:-}"; shift 2 ;;
     --fulfill-delay) FULFILL_DELAY="${2:-}"; shift 2 ;;
+    --require-price-difference) REQUIRE_PRICE_DIFF=1; shift ;;
     --no-cleanup) NO_CLEANUP=1; shift ;;
     --base-url) BASE_URL="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -478,7 +485,8 @@ fi
 
 # ---------------------------------------------------------------------------
 step 6 "select offer (different flight, single segment, priceable, CAT-31 preferred)"
-CHOSEN=$(echo "$RESHOP_OUT" | jq --arg origFlight "$FLIGHT_NUM" '
+CHOSEN=$(echo "$RESHOP_OUT" | jq \
+  --arg origFlight "$FLIGHT_NUM" --argjson requireDiff "$REQUIRE_PRICE_DIFF" '
   (.flights // []) as $flights
   | (.journeys // []) as $journeys
   | [ (.offers // [])[]
@@ -493,6 +501,9 @@ CHOSEN=$(echo "$RESHOP_OUT" | jq --arg origFlight "$FLIGHT_NUM" '
       | ([ $o.items[0].fares[0].fareComponents[]?.segmentDetails[]?
            | select(.flightRef == $fref) ] | first) as $sd
       | select($sd.bookingClassCode != null)
+      # When --require-price-difference is set, keep only offers whose
+      # grandTotal is a non-zero amount (an actual add-collect or refund).
+      | select($requireDiff == 0 or ((.totalPriceDifference.grandTotal | tonumber) != 0))
       | {
           offerId: $o.id,
           isPriceGuaranteed: ($o.isPriceGuaranteed // false),
@@ -508,10 +519,18 @@ CHOSEN=$(echo "$RESHOP_OUT" | jq --arg origFlight "$FLIGHT_NUM" '
           bookingClass: $sd.bookingClassCode
         }
     ]
-  | sort_by(if .isPriceGuaranteed then 0 else 1 end)
+  # Prefer price-guaranteed; within that, prefer the largest absolute delta so
+  # a --require-price-difference run lands on a meaningful add-collect.
+  | sort_by([ (if .isPriceGuaranteed then 0 else 1 end),
+              (- (.grandTotal | tonumber | fabs)) ])
   | first // empty')
 if [[ -z "$CHOSEN" ]]; then
-  echo "error: no offer survived selection (different flight + single segment + priced + booking class)" >&2
+  if [[ "$REQUIRE_PRICE_DIFF" == "1" ]]; then
+    echo "error: no offer with a non-zero price difference survived selection" >&2
+    echo "       (try a different --new-date or route; all reshop offers may be even exchanges)" >&2
+  else
+    echo "error: no offer survived selection (different flight + single segment + priced + booking class)" >&2
+  fi
   fail "offer selection"
 fi
 echo "$CHOSEN" | jq -r '"chosen offer: \(.offerId)
