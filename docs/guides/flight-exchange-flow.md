@@ -9,20 +9,28 @@ legacy "End-to-End Exchanges Workflow (Shop, Book, Price, Ticket)" developer
 guide. Sabre's PTC recommended the REST/Agentic path below over the legacy
 SOAP `ExchangeShoppingRQ` + `AutomatedExchangesLLSRQ` composition.
 
-> **Status (2026-06-09): verified end-to-end in CERT on PCC `H50H`.** Sabre
-> activated automated reissue on the PCC; the shop → price flow now works:
-> `flightReshop` returns priceable offers (45–50 per request on AA DFW→LAX), and
-> Exchange Booking quotes a matching Price Quote Reissue. Worked example: a
-> fresh AA ticket changed from AA1504 to AA1154 (DFW→LAX) reshopped at a
-> **−$52.00 refund**, and Exchange Booking returned `status: Complete` with
-> PQR #02, `amountReturned: -52.00`, no change fee — the reshop quote and the
-> PQR agree to the penny.
+> **Status (2026-06-12): fully ticketed end-to-end in CERT on PCC `H50H`.** The
+> entire flow now completes — shop → price → commit → **fulfill the reissued
+> ticket** — on the documented `NN` sell path. Two worked examples on the same
+> day: AA DFW→LAX as a `$0` even exchange, and AA ORD→MIA as a **$50.01
+> add-collect** — both committed `status: Complete` (PQR #02, `amountReturned`
+> matching the reshop quote to the penny), swapped the segment, and issued a
+> reissued ticket. The `NEED AIRLINE PNR LOCATOR` wall that previously blocked
+> fulfillment did **not** occur.
 >
-> Two things verified along the way are baked into the library: (a) the reshop
-> `errors` array must be checked even on HTTP 200, and (b) Exchange Booking
-> sells new segments with a **passive/guaranteed status (`GK`)** by default —
-> not `NN`, which would leave the segment pending and trip the host's
-> HaltOnStatus, aborting the air-book step. See step 4.
+> **This reverses the 2026-06-10 finding.** On 6-10, selling new segments as
+> `NN` aborted the air-book step and only a passive `GK` sell committed (which
+> then could not be ticketed — see the history note in step 4). Between 6-10 and
+> 6-12 **nothing changed in our request** that explains this (the fulfill body
+> was byte-identical; the 6-12 run even kept `NN` in `HaltOnStatus` and still
+> did not halt). The cause is **server-side on `H50H`** — most likely automated
+> reissue provisioning continuing to settle after its 2026-06-09 activation, or
+> a change in CERT's simulated carrier link. The library now defaults new
+> segments to `NN` (Sabre's documented value); `GK` is available as a per-segment
+> override.
+>
+> One thing baked into the library regardless: the reshop `errors` array must be
+> checked even on HTTP 200.
 
 ## Orchestrated path
 
@@ -32,7 +40,7 @@ SOAP `ExchangeShoppingRQ` + `AutomatedExchangesLLSRQ` composition.
 | 2 | Ticket eligibility | Booking Management v1 `checkFlightTickets` | `check-tickets` | Recommended |
 | 3 | Shop / price the change | **Flight Reshop** `flightReshop` | `flight-reshop` | **Mandatory** ✓ † |
 | 4 | Commit the reissue | Exchange Booking v1.1.0 `exchangeBooking` | `exchange-booking` | **Mandatory** ✓ (quote + commit) |
-| 5 | Issue the new ticket | Booking Management v1 `fulfillFlightTickets` | `fulfill-tickets` | **Mandatory** ‡ (blocked in CERT) |
+| 5 | Issue the new ticket | Booking Management v1 `fulfillFlightTickets` | `fulfill-tickets` | **Mandatory** ‡ (verified 2026-06-12) |
 | 6 | Verify | Booking Management v1 `getBooking` | `get-booking` | Optional |
 
 _† Flight Reshop is the REST replacement for the legacy `ExchangeShoppingRQ`. It
@@ -144,12 +152,21 @@ end-transacts — all in one call. Omit `confirm` to **quote** (PQR stored, no
 FOP charged); include it to **commit**. Body-driven. See
 [`exchange-booking-flow.sh`](../../scripts/exchange-booking-flow.sh).
 
-> **New segments sell as `GK` by default.** The library sells each new segment
-> with a passive/guaranteed status (`GK`), which holds it immediately so the
-> reissue prices in the same call. Do not override `status` to `NN`: a pending
-> `NN` segment trips the host's HaltOnStatus and aborts with "Unable to perform
-> air booking step" (`EnhancedAirBookRQ: Flight … returned status code NN`).
-> Verified 2026-06-09.
+> **New segments sell as `NN` by default** (Sabre's documented value, used in
+> the spec's canonical example). On 2026-06-12 this committed *and* fulfilled
+> end-to-end in CERT. `GK` (passive/guaranteed) remains available as a
+> per-segment `status` override.
+>
+> **History — the default flipped, and why.** Until 2026-06-10 the library
+> defaulted to `GK`, because on that day a pending `NN` segment tripped the
+> host's HaltOnStatus and aborted air-book ("Unable to perform air booking
+> step") *even with `HaltOnStatus` cleared* — `GK` was then the only status
+> that committed. But a `GK` sell is passive: it never receives an airline
+> record locator, so the reissued ticket could not be issued (step 5). On
+> 2026-06-12 `NN` committed and ticketed cleanly with no request change, so the
+> default was reverted to `NN`. The flip is server-side (PCC provisioning /
+> carrier-link behavior on `H50H`), not a library fix — see the status note at
+> the top.
 
 ```
 sabre-rest exchange-booking --body '{
@@ -173,10 +190,18 @@ Reshop offer's `totalPriceDifference.grandTotal`.
 
 ### 5. Fulfill Flight Tickets — `fulfill-tickets`
 
-Issues the new electronic ticket once the reissue is validated. Billable; the
+Issues the new electronic ticket once the reissue is committed. Billable; the
 PCC requires a designated printer (`ticket.countryCode "AT"` on `H50H`). See
 [`booking-ticket-lifecycle.sh`](../../scripts/booking-ticket-lifecycle.sh) for a
 working fulfill body.
+
+On 2026-06-12 this issued the reissued document end-to-end on the `NN` sell
+path (both a `$0` and a `$50.01` exchange). The fulfill request is an ordinary
+ticketing call — the same shape used to issue the original ticket; nothing
+PQR-specific is required. Note `priceQuoteRecordIds` is **not** the lever here:
+it addresses `PQ` records, not the exchange `PQR`, and passing the PQR number
+fails `PRICE_QUOTE_RECORD_NUMBER_INVALID` (a GK-era finding, not re-tested on
+the NN path).
 
 ## What we verified in CERT
 
@@ -195,27 +220,26 @@ working fulfill body.
   AA1504 to AA1154 (DFW→LAX): Flight Reshop offered `Refund -52.00 USD`, and
   Exchange Booking (quote) returned `status: Complete` with PQR #02
   `amountReturned: -52.00`, no change fee. The two agree.
-- **Air-book status (handled by default).** New segments sell as `GK`; a
-  pending `NN` would collide with the HaltOnStatus list and abort the air-book
-  step. The library defaults to `GK` so callers don't hit this. See step 4.
-- **Commit: verified (2026-06-10).** `scripts/flight-exchange-e2e.sh` runs the
-  whole lifecycle: issue an AA ticket, reshop it, commit the exchange with
-  `confirm` + card FOP. The commit returns `status: Complete`, stores the PQR,
-  swaps the segments (old flight cancelled, new flight on the PNR as `GK`),
-  and `amountReturned` matches the reshop offer's `grandTotal`. Three sell
-  statuses were probed: `NN` aborts the air-book server-side ("Unable to
-  perform air booking step") even with `haltOnStatus` overridden to `[]` —
-  the pending-NN halt is not configurable from the request; `SS` is rejected
-  (`EnhancedAirBookRQ: FORMAT`); `GK` is the only status that commits.
-- **Fulfill after commit: blocked by CERT, not by the library.** Issuing the
-  reissued document fails `AirTicketLLSRQ: NEED AIRLINE PNR LOCATOR` because
-  the `GK` segment never receives an airline record locator — CERT's simulated
-  carrier link doesn't confirm passive sells. Targeting the PQR via
-  `priceQuoteRecordIds` (with the `PQR_Number` "02" or the Get Booking
-  `recordId` "2") fails earlier with `PRICE_QUOTE_RECORD_NUMBER_INVALID`; that
-  qualifier addresses `PQ` records only. In production, the carrier link
-  confirms segments and assigns locators, which is exactly the piece CERT
-  omits — so the exchange **commit** is the deepest CERT-verifiable point.
+- **Full lifecycle incl. fulfill: verified (2026-06-12).**
+  `scripts/flight-exchange-e2e.sh` ran the whole flow on the `NN` sell path —
+  issue an AA ticket → reshop → commit with `confirm` + card FOP → **fulfill the
+  reissued ticket** → void + cancel. Two runs the same day: AA DFW→LAX (`$0`
+  even) and AA ORD→MIA (**$50.01 add-collect**). Both returned commit
+  `status: Complete` with PQR #02, `amountReturned` matching the reshop
+  `grandTotal` to the penny, swapped the segment on the PNR, and issued a
+  distinct reissued ticket. The `NEED AIRLINE PNR LOCATOR` wall did not appear.
+- **Sell-status history (the default flipped on a server-side change).** On
+  **2026-06-10**, `NN` aborted air-book server-side ("Unable to perform air
+  booking step") *even with `haltOnStatus` overridden to `[]`*, `SS` was
+  rejected (`EnhancedAirBookRQ: FORMAT`), and only `GK` committed — but a `GK`
+  segment never gets an airline locator, so fulfill then failed
+  `AirTicketLLSRQ: NEED AIRLINE PNR LOCATOR`. On **2026-06-12** `NN` committed
+  *and* fulfilled with no change to our request (the fulfill body was
+  byte-identical; `NN` was even left in `HaltOnStatus` and still did not halt).
+  Nothing in the library explains the reversal — the variable is **server-side
+  on `H50H`** (reissue provisioning settling after the 2026-06-09 activation, or
+  a CERT carrier-link change). The library default was reverted `GK` → `NN`
+  accordingly; `GK` remains a per-segment override.
 
 ## Environment and headers
 

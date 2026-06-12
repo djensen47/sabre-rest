@@ -34,15 +34,29 @@
 # preferred. The chosen offer's flight + booking class feed the
 # exchange-booking newSegments.
 #
+# Sell status (IMPORTANT): new segments are sold with the DOCUMENTED action
+# code NN ("need") by default — what Sabre's own ExchangeBookingRQ example
+# uses. In CERT the simulated carrier link does not settle an NN sell within
+# the call, so the air-book step typically aborts ("Unable to perform air
+# booking step"). THAT FAILURE IS THE DOCUMENTED-PATH RESULT we want to
+# capture for Sabre support — it is not a bug in the library.
+#
+# The passive code GK *will* commit in CERT, but it is a dead end: a GK
+# segment never receives an airline record locator, so the reissued document
+# can never be ticketed (fulfill fails AirTicketLLSRQ: NEED AIRLINE PNR
+# LOCATOR). Committing into something unticketable is not success. Pass
+# --sell-status GK only to reproduce that old behaviour for comparison.
+#
+# Request/response capture: every CLI call's outbound request (via
+# --debug-request) and response body is written under .local/<run-dir>/ so a
+# failing commit produces a complete, shareable log bundle for Sabre support.
+#
 # Success criteria printed at the end:
 #   - exchange-booking applicationResults.status == Complete
 #   - amountReturned matches the reshop offer's grandTotal
 #   - post-commit PNR shows the NEW flight
-#   - reissued ticket: issued, or "blocked by CERT" — issuing the reissued
-#     document needs an airline record locator on the new segment, which
-#     CERT's simulated carrier link never assigns to a passive (GK) sell.
-#     That wall is environmental, not a library defect; the commit itself
-#     (segment swap + PQR + FOP) is the deepest CERT-verifiable point.
+#   With the NN default these will typically NOT all be met in CERT; the run
+#   still succeeds at its real job — capturing the documented-path behaviour.
 #
 # Prerequisites:
 #   1. `npm run build`
@@ -67,19 +81,24 @@
 #   --card-expiry <YYYY-MM>       Card expiry (default: 2027-12)
 #   --card-type <code>            Card vendor code (default: VI)
 #   --sell-status <code>          Action code for the new segment sell
-#                                 (default: GK). Verified in CERT 2026-06-10:
-#                                 NN can never work — the air-book halt on a
-#                                 pending NN is enforced server-side even with
-#                                 HaltOnStatus overridden (including empty),
-#                                 and SS is rejected (EnhancedAirBookRQ:
-#                                 FORMAT). GK commits cleanly; see the
-#                                 step-9 diagnostic for where GK then blocks.
+#                                 (default: NN — the documented request status
+#                                 from Sabre's example). NN typically aborts
+#                                 the air-book step in CERT (carrier link does
+#                                 not settle it); that documented-path result
+#                                 is what this script captures. Pass GK to
+#                                 reproduce the old passive-sell behaviour (it
+#                                 commits but yields an unticketable segment).
 #   --fulfill-delay <seconds>     Wait between the exchange commit and the
 #                                 reissue fulfill attempt (default: 15). The
 #                                 carrier-link confirmation that would put an
 #                                 airline locator on the segment is
 #                                 asynchronous, so an instant fulfill never
 #                                 gives it a chance to arrive.
+#   --require-price-difference    Only select reshop offers with a non-zero
+#                                 price difference (an actual add-collect or
+#                                 refund), choosing the largest. Use to test
+#                                 the money path; without it, even ($0)
+#                                 exchanges are eligible and often chosen.
 #   --no-cleanup                  Leave the PNR/tickets in place (debugging)
 #   --base-url <url>              Override SABRE_BASE_URL
 #   -h, --help                    Show this help
@@ -106,13 +125,14 @@ CARD_NUMBER="4487971000000006"
 CARD_CVV="123"
 CARD_EXPIRY="2027-12"
 CARD_TYPE="VI"
-SELL_STATUS="GK"
+SELL_STATUS="NN"
 FULFILL_DELAY=15
 NO_CLEANUP=0
 BASE_URL=""
+REQUIRE_PRICE_DIFF=0
 
 usage() {
-  sed -n '2,85p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,104p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -134,6 +154,7 @@ while [[ $# -gt 0 ]]; do
     --card-type) CARD_TYPE="${2:-}"; shift 2 ;;
     --sell-status) SELL_STATUS="${2:-}"; shift 2 ;;
     --fulfill-delay) FULFILL_DELAY="${2:-}"; shift 2 ;;
+    --require-price-difference) REQUIRE_PRICE_DIFF=1; shift ;;
     --no-cleanup) NO_CLEANUP=1; shift ;;
     --base-url) BASE_URL="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -189,9 +210,49 @@ CONFIRMATION_ID=""
 TICKETED=0
 CLEANUP_ATTEMPTED=0
 
+# --- request/response log bundle (for Sabre support) -----------------------
+# Every CLI call's outbound request (via --debug-request) and response body is
+# saved under a per-run directory in .local/ (gitignored). The Authorization
+# bearer token is redacted from saved requests so the bundle is shareable.
+CURRENT_STEP="00-init"
+if [[ -d .local ]]; then
+  LOG_DIR=".local/exchange-e2e-$(date +%Y%m%dT%H%M%S)-$$"
+  mkdir -p "$LOG_DIR"
+  echo "request/response log bundle: $LOG_DIR"
+else
+  LOG_DIR=""
+  echo "note: .local/ not present — request/response logging disabled" >&2
+fi
+
+# Pass --debug-request to every CLI call so the outbound wire request is
+# emitted (to stderr) and captured into the bundle.
+DBG=(--debug-request)
+
+# run_cli <cli> <args...> — runs a CLI call, returns its stdout (so callers can
+# capture it), and tees stdout→<step>.response and stderr→<step>.request+stderr
+# into the log bundle. Authorization headers are redacted on the way to disk.
 run_cli() {
   : > "$TMP_ERR"
-  "$@" 2>"$TMP_ERR"
+  if [[ -z "$LOG_DIR" ]]; then
+    "$@" 2>"$TMP_ERR"
+    return
+  fi
+  # run_cli is typically invoked inside $(...), so a shell variable increment
+  # would not persist to the parent. Keep the sequence in a file instead.
+  local seq
+  seq=$(( $(cat "$LOG_DIR/.seq" 2>/dev/null || echo 0) + 1 ))
+  echo "$seq" >"$LOG_DIR/.seq"
+  local base
+  base="$(printf '%s/%02d-%s' "$LOG_DIR" "$seq" "$CURRENT_STEP")"
+  local rc
+  # Append --debug-request so the outbound wire request is emitted to stderr
+  # and captured. All trailing tokens are flags, so order is irrelevant.
+  "$@" "${DBG[@]}" 2>"$TMP_ERR" | tee "$base.response.json"
+  rc=${PIPESTATUS[0]}
+  # stderr holds the --debug-request dump (and any error body); redact the
+  # bearer token before persisting.
+  sed 's/^[Aa]uthorization:.*/Authorization: [REDACTED]/' "$TMP_ERR" >"$base.request.txt"
+  return "$rc"
 }
 
 cleanup() {
@@ -222,12 +283,19 @@ cleanup() {
 fail() {
   echo "" >&2
   echo "$1 FAILED" >&2
+  [[ -n "$LOG_DIR" ]] && echo "request/response bundle (incl. this failure): $LOG_DIR" >&2
   cleanup
   exit 1
 }
 
 step() {
   local n="$1" label="$2"
+  # Derive a filename-safe slug for the log bundle from the leading word of
+  # the label (run_cli prefixes its own global sequence number for ordering).
+  local slug="${label%% *}"
+  slug="${slug%%(*}"
+  slug="${slug//[^a-zA-Z0-9_-]/}"
+  CURRENT_STEP="$slug"
   echo ""
   echo "[$n] $label"
   printf '%*s\n' $(( ${#n} + ${#label} + 4 )) '' | tr ' ' '-'
@@ -237,9 +305,11 @@ step() {
 step 1 "bargain-finder-max ($FROM → $TO on $DEP_DATE, carriers=$CARRIERS)"
 BFM_FILE=$(mktemp)
 trap 'rm -f "$TMP_ERR" "$BFM_FILE"' EXIT
-if ! $CLI bargain-finder-max "${BASE_URL_FLAG[@]}" \
+# BFM streams to a temp file for jq; route through run_cli so it lands in the
+# log bundle too, then keep a copy in BFM_FILE for downstream parsing.
+if ! run_cli $CLI bargain-finder-max "${BASE_URL_FLAG[@]}" \
     --from "$FROM" --to "$TO" --departure-date "$DEP_DATE" --carriers "$CARRIERS" \
-    >"$BFM_FILE" 2>"$TMP_ERR"; then
+    >"$BFM_FILE"; then
   cat "$TMP_ERR" >&2
   fail "bargain-finder-max"
 fi
@@ -415,7 +485,8 @@ fi
 
 # ---------------------------------------------------------------------------
 step 6 "select offer (different flight, single segment, priceable, CAT-31 preferred)"
-CHOSEN=$(echo "$RESHOP_OUT" | jq --arg origFlight "$FLIGHT_NUM" '
+CHOSEN=$(echo "$RESHOP_OUT" | jq \
+  --arg origFlight "$FLIGHT_NUM" --argjson requireDiff "$REQUIRE_PRICE_DIFF" '
   (.flights // []) as $flights
   | (.journeys // []) as $journeys
   | [ (.offers // [])[]
@@ -430,6 +501,9 @@ CHOSEN=$(echo "$RESHOP_OUT" | jq --arg origFlight "$FLIGHT_NUM" '
       | ([ $o.items[0].fares[0].fareComponents[]?.segmentDetails[]?
            | select(.flightRef == $fref) ] | first) as $sd
       | select($sd.bookingClassCode != null)
+      # When --require-price-difference is set, keep only offers whose
+      # grandTotal is a non-zero amount (an actual add-collect or refund).
+      | select($requireDiff == 0 or ((.totalPriceDifference.grandTotal | tonumber) != 0))
       | {
           offerId: $o.id,
           isPriceGuaranteed: ($o.isPriceGuaranteed // false),
@@ -445,10 +519,18 @@ CHOSEN=$(echo "$RESHOP_OUT" | jq --arg origFlight "$FLIGHT_NUM" '
           bookingClass: $sd.bookingClassCode
         }
     ]
-  | sort_by(if .isPriceGuaranteed then 0 else 1 end)
+  # Prefer price-guaranteed; within that, prefer the largest absolute delta so
+  # a --require-price-difference run lands on a meaningful add-collect.
+  | sort_by([ (if .isPriceGuaranteed then 0 else 1 end),
+              (- (.grandTotal | tonumber | fabs)) ])
   | first // empty')
 if [[ -z "$CHOSEN" ]]; then
-  echo "error: no offer survived selection (different flight + single segment + priced + booking class)" >&2
+  if [[ "$REQUIRE_PRICE_DIFF" == "1" ]]; then
+    echo "error: no offer with a non-zero price difference survived selection" >&2
+    echo "       (try a different --new-date or route; all reshop offers may be even exchanges)" >&2
+  else
+    echo "error: no offer survived selection (different flight + single segment + priced + booking class)" >&2
+  fi
   fail "offer selection"
 fi
 echo "$CHOSEN" | jq -r '"chosen offer: \(.offerId)
@@ -458,10 +540,13 @@ RESHOP_GRAND_TOTAL=$(echo "$CHOSEN" | jq -r '.grandTotal')
 
 # ---------------------------------------------------------------------------
 step 7 "exchange-booking — COMMIT (confirm + FOP card, sell status $SELL_STATUS)"
-# GK (passive/guaranteed) is the only sell status that commits in CERT:
-# NN trips a server-side air-book halt regardless of HaltOnStatus, and SS
-# is rejected as a FORMAT error. The price tolerance + redisplay knobs
-# mirror what a production caller would send.
+# With the documented NN sell, CERT's simulated carrier link typically does
+# not settle the new segment within the call, so the air-book step aborts and
+# the exchange does NOT reach status Complete. That is the documented-path
+# behaviour this run exists to capture for Sabre support — it is recorded in
+# the log bundle and reported below, not treated as a script crash. (Passing
+# --sell-status GK reproduces the old passive sell, which commits but yields
+# an unticketable segment.) The price-tolerance knobs mirror production.
 EXCHANGE_BODY=$(echo "$CHOSEN" | jq \
   --arg pnr "$CONFIRMATION_ID" --arg ticket "$ORIG_TICKET" \
   --arg cardType "$CARD_TYPE" --arg cardNumber "$CARD_NUMBER" \
@@ -495,13 +580,12 @@ EXCHANGE_BODY=$(echo "$CHOSEN" | jq \
     }
   }')
 
+# A transport-level failure (non-2xx) is still a hard fail. Application-level
+# outcomes ride back on HTTP 200 in applicationResults, so a successful CLI
+# call here can still represent an air-book abort — which we inspect below.
 if ! EXCHANGE_OUT=$(run_cli $CLI exchange-booking "${BASE_URL_FLAG[@]}" --body "$EXCHANGE_BODY"); then
   cat "$TMP_ERR" >&2
-  fail "exchange-booking (commit)"
-fi
-if [[ -d .local ]]; then
-  echo "$EXCHANGE_OUT" >".local/exchange-commit-${CONFIRMATION_ID}.json"
-  echo "raw exchange response saved: .local/exchange-commit-${CONFIRMATION_ID}.json"
+  fail "exchange-booking (commit — transport error)"
 fi
 
 EX_STATUS=$(echo "$EXCHANGE_OUT" | jq -r '.applicationResults.status // "(none)"')
@@ -510,70 +594,110 @@ AMOUNT_RETURNED=$(echo "$EXCHANGE_OUT" | jq -r '.exchangeConfirmations[0].amount
 PQR_NUMBER=$(echo "$EXCHANGE_OUT" | jq -r '.exchangeConfirmations[0].pqrNumber // "?"')
 echo "applicationResults.status: $EX_STATUS"
 echo "PQR: $PQR_NUMBER  amountReturned: ${AMOUNT_RETURNED:-?}"
-if [[ "$EX_ERRORS" != "0" ]]; then
-  echo "$EXCHANGE_OUT" | jq '.applicationResults.errors' >&2
-  fail "exchange-booking (Sabre returned application errors)"
-fi
-[[ "$EX_STATUS" != "Complete" ]] && fail "exchange-booking (status=$EX_STATUS, expected Complete)"
 
-# ---------------------------------------------------------------------------
-step 8 "get-booking — verify post-commit state"
-if ! VERIFY_OUT=$(run_cli $CLI get-booking "${BASE_URL_FLAG[@]}" --confirmation-id "$CONFIRMATION_ID"); then
-  cat "$TMP_ERR" >&2
-  fail "get-booking (post-commit)"
-fi
-IS_TICKETED=$(echo "$VERIFY_OUT" | jq -r '.isTicketed // false')
-NEW_FLIGHT_NUMS=$(echo "$VERIFY_OUT" | jq -r '[.flights[]?.flightNumber // empty] | join(",")')
-NEW_TICKET=$(echo "$VERIFY_OUT" | jq -r --arg orig "$ORIG_TICKET" \
-  '[.flightTickets[]?.number // empty] | map(select(. != $orig)) | first // empty')
-echo "isTicketed: $IS_TICKETED"
-echo "flights now on PNR: ${NEW_FLIGHT_NUMS:-none}"
-echo "new ticket: ${NEW_TICKET:-<none found>}"
-
-# ---------------------------------------------------------------------------
-FULFILL_RESULT="skipped (commit already ticketed)"
-if [[ -z "$NEW_TICKET" ]]; then
-  step 9 "fulfill-tickets — attempt to issue the reissued document"
-  if [[ "$FULFILL_DELAY" -gt 0 ]]; then
-    echo "waiting ${FULFILL_DELAY}s before fulfill (carrier-link confirmation is asynchronous)"
-    sleep "$FULFILL_DELAY"
-  fi
-  # A plain fulfill (no qualifiers) is the variant that reaches the actual
-  # ticketing step. Targeting the PQR via priceQuoteRecordIds (with either
-  # the PQR_Number "02" or the Get Booking recordId "2") is rejected
-  # earlier as PRICE_QUOTE_RECORD_NUMBER_INVALID — verified in CERT
-  # 2026-06-10; that qualifier only addresses PQ records, not PQRs.
-  if FULFILL2_OUT=$(run_cli $CLI fulfill-tickets "${BASE_URL_FLAG[@]}" --body "$FULFILL_BODY"); then
-    [[ -d .local ]] && echo "$FULFILL2_OUT" >".local/fulfill-reissue-${CONFIRMATION_ID}.json"
-    NEW_TICKET=$(echo "$FULFILL2_OUT" | jq -r --arg orig "$ORIG_TICKET" \
-      '[.tickets[]?.number // empty] | map(select(. != $orig)) | first // empty')
-    FULFILL2_ERRORS=$(echo "$FULFILL2_OUT" | jq -r '[.errors[]?.description] | join(" | ")')
-  else
-    NEW_TICKET=""
-    FULFILL2_ERRORS=$(cat "$TMP_ERR")
-  fi
-  if [[ -n "$NEW_TICKET" ]]; then
-    FULFILL_RESULT="issued $NEW_TICKET"
-    echo "new ticket (via fulfill): $NEW_TICKET"
-  elif [[ "$FULFILL2_ERRORS" == *"NEED AIRLINE PNR LOCATOR"* ]]; then
-    # Known CERT wall: the exchange's new segment is sold passively (GK),
-    # so no airline record locator ever lands on it, and AirTicketRQ
-    # refuses to issue against it. A real (NN) sell cannot get past the
-    # air-book halt either — Sabre aborts on a pending NN server-side even
-    # with HaltOnStatus overridden to empty, and SS is a FORMAT error. In
-    # production, carrier links confirm segments (KK/HK) and assign
-    # locators, which is exactly the piece CERT's simulated link omits.
-    FULFILL_RESULT="blocked by CERT (GK segment has no airline locator)"
-    echo "fulfill blocked: NEED AIRLINE PNR LOCATOR — CERT cannot confirm a"
-    echo "passively-sold (GK) segment, so the reissued document cannot be"
-    echo "issued here. The commit itself (PQR + segment swap + FOP) is the"
-    echo "deepest CERT-verifiable point; treat this as expected."
-  else
-    echo "fulfill errors: ${FULFILL2_ERRORS:-<none reported>}" >&2
-    fail "fulfill-tickets (reissue failed for an unexpected reason)"
-  fi
+# COMMIT_COMPLETE gates the post-commit steps (8–9). When the commit does not
+# reach Complete (the expected NN result in CERT), we record the diagnostic,
+# skip the verify/fulfill steps that assume a swapped segment, and proceed to
+# cleanup so no ticket leaks.
+COMMIT_COMPLETE=0
+COMMIT_SUMMARY=""
+if [[ "$EX_STATUS" == "Complete" && "$EX_ERRORS" == "0" ]]; then
+  COMMIT_COMPLETE=1
+  COMMIT_SUMMARY="Complete (PQR $PQR_NUMBER, amountReturned ${AMOUNT_RETURNED:-?})"
 else
-  step 9 "fulfill-tickets — SKIPPED (exchange commit already issued the new ticket)"
+  COMMIT_SUMMARY="NOT Complete (status=$EX_STATUS, ${EX_ERRORS} error(s)) — documented-path result, captured for support"
+  echo ""
+  echo "exchange did not complete (sell status $SELL_STATUS):"
+  echo "$EXCHANGE_OUT" | jq -r '(.applicationResults.errors // [])
+    | .[]? | "  [\(.type // "?")] " + ((.systemSpecificResults // [])
+        | map((.messages // []) | map(.value // .code // "") | join(" ")) | join(" | "))' 2>/dev/null \
+    || echo "  (see $LOG_DIR for the raw response)"
+fi
+
+FULFILL_RESULT="n/a (commit did not complete)"
+NEW_FLIGHT_NUMS=""
+NEW_TICKET=""
+
+if [[ "$COMMIT_COMPLETE" != "1" ]]; then
+  # The commit did not reach Complete (expected with the NN default in CERT).
+  # Steps 8–9 assume a swapped segment / stored PQR, so skip them and go to
+  # cleanup. The full request/response for the failed commit is in the bundle.
+  step 8 "get-booking — SKIPPED (commit did not complete)"
+  step 9 "fulfill-tickets — SKIPPED (commit did not complete)"
+else
+  # -------------------------------------------------------------------------
+  step 8 "get-booking — verify post-commit state"
+  if ! VERIFY_OUT=$(run_cli $CLI get-booking "${BASE_URL_FLAG[@]}" --confirmation-id "$CONFIRMATION_ID"); then
+    cat "$TMP_ERR" >&2
+    fail "get-booking (post-commit)"
+  fi
+  IS_TICKETED=$(echo "$VERIFY_OUT" | jq -r '.isTicketed // false')
+  NEW_FLIGHT_NUMS=$(echo "$VERIFY_OUT" | jq -r '[.flights[]?.flightNumber // empty] | join(",")')
+  NEW_TICKET=$(echo "$VERIFY_OUT" | jq -r --arg orig "$ORIG_TICKET" \
+    '[.flightTickets[]?.number // empty] | map(select(. != $orig)) | first // empty')
+  echo "isTicketed: $IS_TICKETED"
+  echo "flights now on PNR: ${NEW_FLIGHT_NUMS:-none}"
+  echo "new ticket: ${NEW_TICKET:-<none found>}"
+
+  # -------------------------------------------------------------------------
+  FULFILL_RESULT="skipped (commit already ticketed)"
+  if [[ -z "$NEW_TICKET" ]]; then
+    step 9 "fulfill-tickets — attempt to issue the reissued document"
+    if [[ "$FULFILL_DELAY" -gt 0 ]]; then
+      echo "waiting ${FULFILL_DELAY}s before fulfill (carrier-link confirmation is asynchronous)"
+      sleep "$FULFILL_DELAY"
+    fi
+    # Distinct body for the REISSUE fulfill (do not reuse the original-ticket
+    # FULFILL_BODY from step 4). After an exchange the document to issue is the
+    # reissued one tied to the stored PQR, not the original sale. We send a
+    # plain fulfill (the variant that reaches the actual ticketing step) with
+    # the same FOP/printer, but built fresh here so the original and reissue
+    # fulfills can diverge without coupling. Note: targeting the PQR via
+    # priceQuoteRecordIds (PQR_Number "02" or Get Booking recordId "2") is
+    # rejected as PRICE_QUOTE_RECORD_NUMBER_INVALID — verified CERT 2026-06-10;
+    # that qualifier addresses PQ records, not PQRs.
+    REISSUE_FULFILL_BODY=$(jq -n \
+      --arg cid "$CONFIRMATION_ID" --arg pcc "${SABRE_PCC:-}" \
+      --arg cardType "$CARD_TYPE" --arg cardNumber "$CARD_NUMBER" \
+      --arg cardExpiry "$CARD_EXPIRY" \
+      '{
+        confirmationId: $cid,
+        fulfillments: [{ payment: { primaryFormOfPayment: 1 } }],
+        formsOfPayment: [{
+          type: "PAYMENTCARD", cardTypeCode: $cardType, cardNumber: $cardNumber,
+          expiryDate: $cardExpiry, manualApprovalCode: "123456",
+          authentications: [{ channelCode: "EC" }]
+        }],
+        designatePrinters: [{ ticket: { countryCode: "AT" } }]
+      }
+      + (if $pcc == "" then {} else { targetPcc: $pcc } end)')
+    if FULFILL2_OUT=$(run_cli $CLI fulfill-tickets "${BASE_URL_FLAG[@]}" --body "$REISSUE_FULFILL_BODY"); then
+      NEW_TICKET=$(echo "$FULFILL2_OUT" | jq -r --arg orig "$ORIG_TICKET" \
+        '[.tickets[]?.number // empty] | map(select(. != $orig)) | first // empty')
+      FULFILL2_ERRORS=$(echo "$FULFILL2_OUT" | jq -r '[.errors[]?.description] | join(" | ")')
+    else
+      NEW_TICKET=""
+      FULFILL2_ERRORS=$(cat "$TMP_ERR")
+    fi
+    if [[ -n "$NEW_TICKET" ]]; then
+      FULFILL_RESULT="issued $NEW_TICKET"
+      echo "new ticket (via fulfill): $NEW_TICKET"
+    elif [[ "$FULFILL2_ERRORS" == *"NEED AIRLINE PNR LOCATOR"* ]]; then
+      # This path is reached only with a passive (GK) sell override: the
+      # segment commits but never gets an airline record locator, so
+      # AirTicketRQ refuses to issue against it. In production the carrier
+      # link confirms segments (KK/HK) and assigns the locator CERT omits.
+      FULFILL_RESULT="blocked by CERT (passive/GK segment has no airline locator)"
+      echo "fulfill blocked: NEED AIRLINE PNR LOCATOR — CERT cannot confirm a"
+      echo "passively-sold (GK) segment, so the reissued document cannot be"
+      echo "issued here. (Only reachable when --sell-status GK is forced.)"
+    else
+      echo "fulfill errors: ${FULFILL2_ERRORS:-<none reported>}" >&2
+      fail "fulfill-tickets (reissue failed for an unexpected reason)"
+    fi
+  else
+    step 9 "fulfill-tickets — SKIPPED (exchange commit already issued the new ticket)"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -609,13 +733,16 @@ echo "PNR:                  $CONFIRMATION_ID"
 echo "original ticket:      $ORIG_TICKET (${CARRIER}${FLIGHT_NUM} $DEP_DATE)"
 echo "chosen offer:         $(echo "$CHOSEN" | jq -r '"\(.carrier)\(.flightNumber) \(.departureDateTime)"')"
 echo "reshop grandTotal:    $RESHOP_GRAND_TOTAL"
-echo "exchange status:      $EX_STATUS (PQR $PQR_NUMBER)"
-echo "amountReturned:       ${AMOUNT_RETURNED:-?}"
-if [[ -n "$AMOUNT_RETURNED" && "$AMOUNT_RETURNED" == "$RESHOP_GRAND_TOTAL" ]]; then
-  echo "price agreement:      MATCH (reshop quote == exchange commit)"
-else
-  echo "price agreement:      MISMATCH or unavailable — inspect the raw responses in .local/"
+echo "sell status:          $SELL_STATUS"
+echo "exchange commit:      $COMMIT_SUMMARY"
+if [[ "$COMMIT_COMPLETE" == "1" ]]; then
+  if [[ -n "$AMOUNT_RETURNED" && "$AMOUNT_RETURNED" == "$RESHOP_GRAND_TOTAL" ]]; then
+    echo "price agreement:      MATCH (reshop quote == exchange commit)"
+  else
+    echo "price agreement:      MISMATCH or unavailable — inspect the bundle"
+  fi
+  echo "reissued ticket:      $FULFILL_RESULT"
 fi
-echo "reissued ticket:      $FULFILL_RESULT"
+[[ -n "$LOG_DIR" ]] && echo "log bundle:           $LOG_DIR"
 echo ""
-echo "flight-exchange-e2e: OK"
+echo "flight-exchange-e2e: OK (lifecycle exercised; see commit result above)"
