@@ -248,6 +248,8 @@ export type {
   FlightReshopCabinName,
   FlightReshopChargeType,
   FlightReshopDistributionModel,
+  FlightReshopFareComponent,
+  FlightReshopFareComponentSegmentDetail,
   FlightReshopFlight,
   FlightReshopInput,
   FlightReshopJourney,

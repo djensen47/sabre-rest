@@ -3,6 +3,8 @@ import type { components } from '../../generated/flight-reshop.js';
 import { ensureTrailingSlash } from '../../http/ensure-trailing-slash.js';
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type {
+  FlightReshopFareComponent,
+  FlightReshopFareComponentSegmentDetail,
   FlightReshopFlight,
   FlightReshopInput,
   FlightReshopJourney,
@@ -203,12 +205,30 @@ function mapTraveler(
   return out;
 }
 
+function mapSegmentDetail(
+  d: components['schemas']['FareComponentSegmentDetail'],
+): FlightReshopFareComponentSegmentDetail {
+  const out: FlightReshopFareComponentSegmentDetail = {};
+  if (d.flightRef !== undefined) out.flightRef = d.flightRef;
+  if (d.bookingClassCode !== undefined) out.bookingClassCode = d.bookingClassCode;
+  if (d.cabinName !== undefined) out.cabinName = d.cabinName;
+  return out;
+}
+
+function mapFareComponent(c: components['schemas']['FareComponent']): FlightReshopFareComponent {
+  const out: FlightReshopFareComponent = {};
+  if (c.fareBasisCode !== undefined) out.fareBasisCode = c.fareBasisCode;
+  if (c.segmentDetails !== undefined) out.segmentDetails = c.segmentDetails.map(mapSegmentDetail);
+  return out;
+}
+
 function mapFare(
   f: NonNullable<ReshopResponse['offers']>[number]['items'][number]['fares'][number],
 ): FlightReshopOfferFare {
   const out: FlightReshopOfferFare = {};
   if (f.travelers !== undefined) out.travelers = f.travelers.map(mapTraveler);
   if (f.priceDifference !== undefined) out.priceDifference = mapExchangeCharge(f.priceDifference);
+  if (f.fareComponents !== undefined) out.fareComponents = f.fareComponents.map(mapFareComponent);
   return out;
 }
 

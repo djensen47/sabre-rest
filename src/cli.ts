@@ -29,5 +29,7 @@ try {
   }
 }
 
-const exitCode = await run(process.argv.slice(2), process.env);
-process.exit(exitCode);
+// Set the exit code rather than calling process.exit(): exit() terminates
+// before piped stdout flushes, truncating large JSON responses mid-document
+// when the CLI runs inside a command substitution.
+process.exitCode = await run(process.argv.slice(2), process.env);

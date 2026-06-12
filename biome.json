@@ -7,7 +7,8 @@
       "src/generated/**",
       "CHANGELOG.md",
       ".claude/**",
-      ".playwright-mcp/**"
+      ".playwright-mcp/**",
+      ".local/**"
     ]
   },
   "formatter": {
