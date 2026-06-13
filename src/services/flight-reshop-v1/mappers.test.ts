@@ -142,6 +142,8 @@ describe('toReshopRequest', () => {
                   arrivalTime: '11:40',
                   bookingClassCode: 'Y',
                   keepBookingClass: true,
+                  creationDate: '2026-09-01',
+                  creationTime: '14:30',
                 },
               },
             ],
@@ -162,6 +164,8 @@ describe('toReshopRequest', () => {
           arrivalTime: '11:40',
           bookingClassCode: 'Y',
           keepBookingClass: true,
+          creationDate: '2026-09-01',
+          creationTime: '14:30',
         },
       },
     ]);

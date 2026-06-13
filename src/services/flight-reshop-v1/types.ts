@@ -149,14 +149,31 @@ export interface FlightReshopRetainItem {
   /**
    * Full flight details identifying the segment to retain, when no
    * `flightItemId` is available (OAS `RetainItem.flightDetails`).
+   *
+   * Prefer `flightItemId` when you have it: the live API enforces *more*
+   * required fields on the `flightDetails` path than the OAS `required` list
+   * declares (see {@link FlightReshopRetainFlightDetails}). Verified in CERT
+   * via `scripts/flight-exchange-retain-e2e.sh`, which retains by
+   * `flightItemId`.
    */
   flightDetails?: FlightReshopRetainFlightDetails;
 }
 
 /**
  * Full details identifying a flight to retain (OAS `RetainFlightItem`).
- * The required fields below mirror the spec's `required` list; the rest are
- * optional refinements.
+ *
+ * **Spec-vs-reality:** the OAS marks `operatingAirlineCode`,
+ * `flightStatusCode`, `creationDate`, and `creationTime` as *optional*, but
+ * the live Flight Reshop API rejects a `flightDetails` retain that omits them
+ * with `MANDATORY_DATA_MISSING` ("retained flight details require:
+ * [operatingAirlineCode, flightStatusCode, creationDate and creationTime]").
+ * They are typed optional here to mirror the OAS, but supply all four in
+ * practice. The `creation*` values are when the segment was booked/stored —
+ * NOT a value our Booking Management `getBooking` surfaces today, so sourcing
+ * them is on the caller. Given that, prefer retaining by
+ * {@link FlightReshopRetainItem.flightItemId} (the `flightItemId` *is* on
+ * `getBooking`), which sidesteps this path entirely. This is why the e2e
+ * smoke test (`scripts/flight-exchange-retain-e2e.sh`) retains by id.
  */
 export interface FlightReshopRetainFlightDetails {
   /** Marketing-carrier flight number (1–9999). */
@@ -191,6 +208,18 @@ export interface FlightReshopRetainFlightDetails {
    * same journey.
    */
   keepBookingClass?: boolean;
+  /**
+   * Date the flight was booked and stored in the booking, `YYYY-MM-DD`. OAS
+   * optional but enforced by the live API on this path — see the interface
+   * doc comment.
+   */
+  creationDate?: string;
+  /**
+   * Time the flight was booked and stored in the booking, `HH:MM`. OAS
+   * optional but enforced by the live API on this path — see the interface
+   * doc comment.
+   */
+  creationTime?: string;
 }
 
 /**

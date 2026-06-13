@@ -148,6 +148,8 @@ function buildRetainItem(item: FlightReshopRetainItem): WireRetainItem {
     if (d.flightStatusCode !== undefined) details.flightStatusCode = d.flightStatusCode;
     if (d.brandCode !== undefined) details.brandCode = d.brandCode;
     if (d.keepBookingClass !== undefined) details.keepBookingClass = d.keepBookingClass;
+    if (d.creationDate !== undefined) details.creationDate = d.creationDate;
+    if (d.creationTime !== undefined) details.creationTime = d.creationTime;
     return { flightDetails: details };
   }
   // The OAS `RetainItem` oneOf requires exactly one variant. A retain item
