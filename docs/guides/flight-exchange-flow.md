@@ -136,13 +136,84 @@ sabre-rest flight-reshop --body '{
 
 Optional body fields: `bookingId` (PNR), `targetPcc`, `cabinName`
 (`Economy` … `First`), `distributionModel` (`ATPCO` / `NDC`), per-journey
-`departureTimeWindow` / `arrivalTimeWindow`. See
-[`flight-reshop.yml`](../specifications/flight-reshop.yml) for the full surface;
-v1 of this library exposes the focused slice above (see the `types.ts` header
-for what is deferred).
+`departureTimeWindow` / `arrivalTimeWindow`, and per-journey `retainFlights`
+(below). See [`flight-reshop.yml`](../specifications/flight-reshop.yml) for the
+full surface; v1 of this library exposes the focused slice above (see the
+`types.ts` header for what is deferred).
 
 `scripts/flight-reshop-flow.sh` drives this step end-to-end and prints the
 offers (or the downline error) — see that script for a ready-to-run example.
+
+#### Selective change — `retainFlights`
+
+To change only part of a trip, pin the parts to keep with `retainFlights`.
+Important: **`retainFlights` retains a whole journey (a leg / direction), not a
+single segment of a connection.** The canonical case is a round trip — retain
+the outbound journey, reshop the return.
+
+**This adds a mandatory `getBooking` call before the reshop.** Unlike a plain
+reshop (which needs only a ticket number), a retained reshop must describe the
+flight(s) to keep, and that description comes from the booking. So selective
+change is a two-call sequence:
+
+```
+getBooking ──► retain inputs (itemId / flight details + creation*) ──► flightReshop (retainFlights)
+```
+
+**Step A — `getBooking`** (Booking Management) to harvest the retain inputs:
+
+```
+sabre-rest get-booking --confirmation-id ONOXSB
+```
+
+From the response you need, for the flight you intend to keep, **either** its
+`flights[].itemId` **or** the full identity. Both retain forms also require
+`bookingId` on the reshop request.
+
+| Reshop `retainFlights` field | Source in `getBooking` |
+| --- | --- |
+| `flightItemId` | `flights[].itemId` |
+| `flightDetails.marketingAirlineCode` / `marketingFlightNumber` | `flights[].airlineCode` / `flightNumber` |
+| `flightDetails.operatingAirlineCode` | `flights[].operatingAirlineCode` |
+| `flightDetails.departureAirportCode` / `arrivalAirportCode` | `flights[].fromAirportCode` / `toAirportCode` |
+| `flightDetails.departureDate` / `departureTime` | `flights[].departureDate` / `departureTime` (`HH:MM`) |
+| `flightDetails.arrivalDate` / `arrivalTime` | `flights[].arrivalDate` / `arrivalTime` (`HH:MM`) |
+| `flightDetails.bookingClassCode` | `flights[].bookingClass` |
+| `flightDetails.flightStatusCode` | `flights[].flightStatusCode` |
+| `flightDetails.creationDate` / `creationTime` | **booking-level** `creationDetails.creationDate` / `creationTime` |
+
+> ⚠️ Two non-obvious points, both verified in CERT (2026-06-12):
+> 1. The `flightDetails` path requires `operatingAirlineCode`,
+>    `flightStatusCode`, `creationDate`, and `creationTime` even though the OAS
+>    marks them *optional* — omitting any yields `MANDATORY_DATA_MISSING`.
+> 2. There is **no per-flight creation field** in `getBooking`; the
+>    **booking-level** `creationDetails.creationDate` / `creationTime` are
+>    accepted for the per-flight `flightDetails.creation*`.
+
+**Step B — `flightReshop`** with the retained journey (here, by `flightItemId`):
+
+```
+sabre-rest flight-reshop --body '{
+  "journeys": [
+    { "departureLocation": { "cityCode": "DFW" },
+      "arrivalLocation":   { "cityCode": "LAX" },
+      "departureDate": "2026-07-15",
+      "retainFlights": [ { "flightItemId": "14" } ] },
+    { "departureLocation": { "cityCode": "LAX" },
+      "arrivalLocation":   { "cityCode": "DFW" },
+      "departureDate": "2026-07-23" }
+  ],
+  "tickets": [{ "number": "0017360597321" }],
+  "bookingId": "ONOXSB"
+}'
+```
+
+`flightItemId` is preferred — a single value, no creation-field handling.
+
+Verified in CERT 2026-06-12 (`scripts/flight-exchange-retain-e2e.sh`,
+`--retain-by`): a DFW⇄LAX round trip retaining the outbound returned offers
+that **all preserved the pinned flight** — 50/50 by `flightItemId`, 45/45 by
+`flightDetails`.
 
 ### 4. Exchange Booking — `exchange-booking`
 
@@ -255,6 +326,9 @@ the NN path).
 - [`booking-management-operations.md`](../specifications/booking-management-operations.md) — getBooking / checkFlightTickets / fulfillFlightTickets / void / refund
 - `scripts/flight-exchange-e2e.sh` — full lifecycle smoke test (mint ticket →
   reshop → commit exchange → attempt fulfill → cleanup)
+- `scripts/flight-exchange-retain-e2e.sh` — selective-change smoke test (book a
+  round trip → reshop retaining the outbound journey via `flightItemId` →
+  assert every offer keeps the pinned flight → cleanup)
 - `scripts/flight-reshop-flow.sh`, `scripts/exchange-booking-flow.sh`,
   `scripts/booking-ticket-lifecycle.sh` — runnable smoke tests for individual
   steps

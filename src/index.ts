@@ -262,6 +262,8 @@ export type {
   FlightReshopOfferSource,
   FlightReshopOfferTraveler,
   FlightReshopOutput,
+  FlightReshopRetainFlightDetails,
+  FlightReshopRetainItem,
   FlightReshopTicket,
   FlightReshopTimeWindow,
   FlightReshopTotalPrice,

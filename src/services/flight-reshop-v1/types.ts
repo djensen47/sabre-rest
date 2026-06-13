@@ -123,6 +123,103 @@ export interface FlightReshopJourney {
   departureTimeWindow?: FlightReshopTimeWindow;
   /** Optional arrival time-window constraint. */
   arrivalTimeWindow?: FlightReshopTimeWindow;
+  /**
+   * Segments within this journey to **keep** unchanged while the rest are
+   * reshopped (selective / partial exchange). Each retained segment is part
+   * of the journey's *unmodifiable* conditions, so returned offers preserve
+   * it and only vary the other segments. Identify a segment either by its
+   * `flightItemId` (from the original booking) or by full
+   * {@link FlightReshopRetainFlightDetails}. Maps to the OAS
+   * `journeys[].retainFlights`.
+   */
+  retainFlights?: readonly FlightReshopRetainItem[];
+}
+
+/**
+ * One segment to retain in a {@link FlightReshopJourney}. Mirrors the OAS
+ * `RetainItem` `oneOf`: supply **either** `flightItemId` **or**
+ * `flightDetails`, not both.
+ */
+export interface FlightReshopRetainItem {
+  /**
+   * The id of the flight to retain, as carried on the original booking
+   * (OAS `RetainItem.flightItemId`). Prefer this when known.
+   */
+  flightItemId?: string;
+  /**
+   * Full flight details identifying the segment to retain, when no
+   * `flightItemId` is available (OAS `RetainItem.flightDetails`).
+   *
+   * Prefer `flightItemId` when you have it — it's a single value and avoids
+   * the extra fields the live API enforces on this path beyond the OAS
+   * `required` list (see {@link FlightReshopRetainFlightDetails}). Both paths
+   * are verified in CERT via `scripts/flight-exchange-retain-e2e.sh`.
+   */
+  flightDetails?: FlightReshopRetainFlightDetails;
+}
+
+/**
+ * Full details identifying a flight to retain (OAS `RetainFlightItem`).
+ *
+ * **Spec-vs-reality:** the OAS marks `operatingAirlineCode`,
+ * `flightStatusCode`, `creationDate`, and `creationTime` as *optional*, but
+ * the live Flight Reshop API rejects a `flightDetails` retain that omits them
+ * with `MANDATORY_DATA_MISSING` ("retained flight details require:
+ * [operatingAirlineCode, flightStatusCode, creationDate and creationTime]").
+ * They are typed optional here to mirror the OAS, but supply all four in
+ * practice. All four are sourced from Booking Management `getBooking`: the
+ * flight identity / `operatingAirlineCode` / `flightStatusCode` from the
+ * matching `flights[]` entry, and `creationDate` / `creationTime` from the
+ * booking-level `creationDetails` (there is no per-flight creation field;
+ * the booking-level values are accepted — verified in CERT 2026-06-12). Both
+ * this path and the simpler {@link FlightReshopRetainItem.flightItemId} path
+ * are exercised by `scripts/flight-exchange-retain-e2e.sh` (`--retain-by`).
+ */
+export interface FlightReshopRetainFlightDetails {
+  /** Marketing-carrier flight number (1–9999). */
+  marketingFlightNumber: number;
+  /** Two-letter IATA marketing-airline code (e.g. `AA`). */
+  marketingAirlineCode: string;
+  /** Three-letter IATA origin airport code. */
+  departureAirportCode: string;
+  /** Three-letter IATA destination airport code. */
+  arrivalAirportCode: string;
+  /** Scheduled departure date, `YYYY-MM-DD` in the airport's time zone. */
+  departureDate: string;
+  /** Scheduled departure time, `HH:MM`. */
+  departureTime: string;
+  /** Scheduled arrival date, `YYYY-MM-DD` in the airport's time zone. */
+  arrivalDate: string;
+  /** Scheduled arrival time, `HH:MM`. */
+  arrivalTime: string;
+  /** Booking inventory code (RBD) of the marketing airline. */
+  bookingClassCode: string;
+  /** Operating-carrier flight number, if different from marketing. */
+  operatingFlightNumber?: number;
+  /** Two-letter IATA operating-airline code, if different from marketing. */
+  operatingAirlineCode?: string;
+  /** Vendor booking status code (e.g. `HK`). */
+  flightStatusCode?: string;
+  /** Branded-fare code associated with the flight (e.g. `ECOFLEX`). */
+  brandCode?: string;
+  /**
+   * If `true`, the API does not modify the segment's booking class. Per the
+   * OAS, when set `true` it must be `true` for every retained flight in the
+   * same journey.
+   */
+  keepBookingClass?: boolean;
+  /**
+   * Date the flight was booked and stored in the booking, `YYYY-MM-DD`. OAS
+   * optional but enforced by the live API on this path — see the interface
+   * doc comment.
+   */
+  creationDate?: string;
+  /**
+   * Time the flight was booked and stored in the booking, `HH:MM`. OAS
+   * optional but enforced by the live API on this path — see the interface
+   * doc comment.
+   */
+  creationTime?: string;
 }
 
 /**

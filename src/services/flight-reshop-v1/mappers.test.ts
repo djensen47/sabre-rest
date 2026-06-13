@@ -6,14 +6,14 @@ import type { FlightReshopInput } from './types.js';
 
 const BASE = 'https://api.cert.platform.sabre.com';
 
+const baseJourney = {
+  departureLocation: { cityCode: 'DFW' },
+  arrivalLocation: { cityCode: 'LAX' },
+  departureDate: '2026-09-26',
+} as const;
+
 const minimalInput: FlightReshopInput = {
-  journeys: [
-    {
-      departureLocation: { cityCode: 'DFW' },
-      arrivalLocation: { cityCode: 'LAX' },
-      departureDate: '2026-09-26',
-    },
-  ],
+  journeys: [baseJourney],
   tickets: [{ number: '0012972101507' }],
 };
 
@@ -84,6 +84,7 @@ describe('toReshopRequest', () => {
     expect(body.targetPcc).toBeUndefined();
     expect(body.fare).toBeUndefined();
     expect(body.source).toBeUndefined();
+    expect(body.journeys[0].retainFlights).toBeUndefined();
   });
 
   it('emits bookingId, targetPcc, cabin (with spec defaults), and distributionModel when supplied', () => {
@@ -111,6 +112,100 @@ describe('toReshopRequest', () => {
       travelerIndex: 1,
       overrideCheckedInTicketCoupons: false,
     });
+  });
+
+  it('emits retainFlights by flightItemId', () => {
+    const body = JSON.parse(
+      toReshopRequest(BASE, {
+        journeys: [{ ...baseJourney, retainFlights: [{ flightItemId: '12' }] }],
+      }).body ?? '',
+    );
+    expect(body.journeys[0].retainFlights).toEqual([{ flightItemId: '12' }]);
+  });
+
+  it('emits retainFlights by full flightDetails (required + optional fields)', () => {
+    const body = JSON.parse(
+      toReshopRequest(BASE, {
+        journeys: [
+          {
+            ...baseJourney,
+            retainFlights: [
+              {
+                flightDetails: {
+                  marketingFlightNumber: 123,
+                  marketingAirlineCode: 'AA',
+                  departureAirportCode: 'DFW',
+                  arrivalAirportCode: 'ORD',
+                  departureDate: '2026-09-26',
+                  departureTime: '09:15',
+                  arrivalDate: '2026-09-26',
+                  arrivalTime: '11:40',
+                  bookingClassCode: 'Y',
+                  keepBookingClass: true,
+                  creationDate: '2026-09-01',
+                  creationTime: '14:30',
+                },
+              },
+            ],
+          },
+        ],
+      }).body ?? '',
+    );
+    expect(body.journeys[0].retainFlights).toEqual([
+      {
+        flightDetails: {
+          marketingFlightNumber: 123,
+          marketingAirlineCode: 'AA',
+          departureAirportCode: 'DFW',
+          arrivalAirportCode: 'ORD',
+          departureDate: '2026-09-26',
+          departureTime: '09:15',
+          arrivalDate: '2026-09-26',
+          arrivalTime: '11:40',
+          bookingClassCode: 'Y',
+          keepBookingClass: true,
+          creationDate: '2026-09-01',
+          creationTime: '14:30',
+        },
+      },
+    ]);
+  });
+
+  it('prefers flightItemId over flightDetails when both are supplied', () => {
+    const body = JSON.parse(
+      toReshopRequest(BASE, {
+        journeys: [
+          {
+            ...baseJourney,
+            retainFlights: [
+              {
+                flightItemId: '7',
+                flightDetails: {
+                  marketingFlightNumber: 123,
+                  marketingAirlineCode: 'AA',
+                  departureAirportCode: 'DFW',
+                  arrivalAirportCode: 'ORD',
+                  departureDate: '2026-09-26',
+                  departureTime: '09:15',
+                  arrivalDate: '2026-09-26',
+                  arrivalTime: '11:40',
+                  bookingClassCode: 'Y',
+                },
+              },
+            ],
+          },
+        ],
+      }).body ?? '',
+    );
+    expect(body.journeys[0].retainFlights).toEqual([{ flightItemId: '7' }]);
+  });
+
+  it('throws when a retainFlights item has neither flightItemId nor flightDetails', () => {
+    expect(() =>
+      toReshopRequest(BASE, {
+        journeys: [{ ...baseJourney, retainFlights: [{}] }],
+      }),
+    ).toThrow(/flightItemId or flightDetails/);
   });
 });
 
