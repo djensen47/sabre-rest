@@ -150,11 +150,10 @@ export interface FlightReshopRetainItem {
    * Full flight details identifying the segment to retain, when no
    * `flightItemId` is available (OAS `RetainItem.flightDetails`).
    *
-   * Prefer `flightItemId` when you have it: the live API enforces *more*
-   * required fields on the `flightDetails` path than the OAS `required` list
-   * declares (see {@link FlightReshopRetainFlightDetails}). Verified in CERT
-   * via `scripts/flight-exchange-retain-e2e.sh`, which retains by
-   * `flightItemId`.
+   * Prefer `flightItemId` when you have it — it's a single value and avoids
+   * the extra fields the live API enforces on this path beyond the OAS
+   * `required` list (see {@link FlightReshopRetainFlightDetails}). Both paths
+   * are verified in CERT via `scripts/flight-exchange-retain-e2e.sh`.
    */
   flightDetails?: FlightReshopRetainFlightDetails;
 }
@@ -168,12 +167,13 @@ export interface FlightReshopRetainItem {
  * with `MANDATORY_DATA_MISSING` ("retained flight details require:
  * [operatingAirlineCode, flightStatusCode, creationDate and creationTime]").
  * They are typed optional here to mirror the OAS, but supply all four in
- * practice. The `creation*` values are when the segment was booked/stored —
- * NOT a value our Booking Management `getBooking` surfaces today, so sourcing
- * them is on the caller. Given that, prefer retaining by
- * {@link FlightReshopRetainItem.flightItemId} (the `flightItemId` *is* on
- * `getBooking`), which sidesteps this path entirely. This is why the e2e
- * smoke test (`scripts/flight-exchange-retain-e2e.sh`) retains by id.
+ * practice. All four are sourced from Booking Management `getBooking`: the
+ * flight identity / `operatingAirlineCode` / `flightStatusCode` from the
+ * matching `flights[]` entry, and `creationDate` / `creationTime` from the
+ * booking-level `creationDetails` (there is no per-flight creation field;
+ * the booking-level values are accepted — verified in CERT 2026-06-12). Both
+ * this path and the simpler {@link FlightReshopRetainItem.flightItemId} path
+ * are exercised by `scripts/flight-exchange-retain-e2e.sh` (`--retain-by`).
  */
 export interface FlightReshopRetainFlightDetails {
   /** Marketing-carrier flight number (1–9999). */

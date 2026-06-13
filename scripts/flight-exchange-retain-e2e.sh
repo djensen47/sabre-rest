@@ -59,6 +59,12 @@
 #   --card-cvv <code>             Card security code (default: 123)
 #   --card-expiry <YYYY-MM>       Card expiry (default: 2027-12)
 #   --card-type <code>            Card vendor code (default: VI)
+#   --retain-by <flightItemId|flightDetails>
+#                                 How to identify the retained outbound flight
+#                                 (default: flightItemId). `flightDetails` is
+#                                 built from get-booking + booking-level
+#                                 creationDate/creationTime and exercises the
+#                                 OAS-optional-but-API-required field set.
 #   --no-cleanup                  Leave the PNR/tickets in place (debugging)
 #   --base-url <url>              Override SABRE_BASE_URL
 #   -h, --help                    Show this help
@@ -85,11 +91,12 @@ CARD_NUMBER="4487971000000006"
 CARD_CVV="123"
 CARD_EXPIRY="2027-12"
 CARD_TYPE="VI"
+RETAIN_BY="flightItemId"
 NO_CLEANUP=0
 BASE_URL=""
 
 usage() {
-  sed -n '2,64p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,70p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -109,6 +116,7 @@ while [[ $# -gt 0 ]]; do
     --card-cvv) CARD_CVV="${2:-}"; shift 2 ;;
     --card-expiry) CARD_EXPIRY="${2:-}"; shift 2 ;;
     --card-type) CARD_TYPE="${2:-}"; shift 2 ;;
+    --retain-by) RETAIN_BY="${2:-}"; shift 2 ;;
     --no-cleanup) NO_CLEANUP=1; shift ;;
     --base-url) BASE_URL="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -136,6 +144,10 @@ if (( ${#missing[@]} > 0 )); then
   exit 2
 fi
 NEW_RET_DATE="${NEW_RET_DATE:-$RET_DATE}"
+if [[ "$RETAIN_BY" != "flightItemId" && "$RETAIN_BY" != "flightDetails" ]]; then
+  echo "error: --retain-by must be 'flightItemId' or 'flightDetails' (got '$RETAIN_BY')" >&2
+  exit 2
+fi
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "error: 'jq' is required on PATH" >&2
@@ -381,36 +393,75 @@ TICKETED=1
 echo "original ticket: $ORIG_TICKET"
 
 # ---------------------------------------------------------------------------
-step 4 "get-booking — read the outbound flight's itemId (retain key)"
+step 4 "get-booking — read the outbound flight (retain key: $RETAIN_BY)"
 if ! VERIFY_OUT=$(run_cli $CLI get-booking "${BASE_URL_FLAG[@]}" --confirmation-id "$CONFIRMATION_ID"); then
   cat "$TMP_ERR" >&2
   fail "get-booking"
 fi
-OUT_ITEM=$(echo "$VERIFY_OUT" | jq -r --arg c "$OUT_CARRIER" --argjson fn "$OUT_FLIGHT" \
-  '[ .flights[]? | select(.airlineCode == $c and (.flightNumber == $fn)) | .itemId ] | first // empty')
-echo "outbound itemId (${OUT_CARRIER}${OUT_FLIGHT}): ${OUT_ITEM:-?}"
-if [[ -z "$OUT_ITEM" ]]; then
-  echo "error: could not resolve the outbound flightItemId from get-booking" >&2
-  fail "get-booking (missing outbound itemId)"
+# The full outbound flight object from the booking, matched by carrier+number.
+OUT_FLT=$(echo "$VERIFY_OUT" | jq -c --arg c "$OUT_CARRIER" --argjson fn "$OUT_FLIGHT" \
+  '[ .flights[]? | select(.airlineCode == $c and (.flightNumber == $fn)) ] | first // empty')
+if [[ -z "$OUT_FLT" || "$OUT_FLT" == "null" ]]; then
+  echo "error: could not find the outbound flight in get-booking" >&2
+  fail "get-booking (outbound flight not found)"
+fi
+OUT_ITEM=$(echo "$OUT_FLT" | jq -r '.itemId // empty')
+# Booking-level creation date/time — the only creation values get-booking
+# exposes (there is no per-flight creation field). The flightDetails retain
+# path requires creationDate/creationTime, so we probe whether the booking-
+# level values satisfy the per-flight requirement.
+CREATE_DATE=$(echo "$VERIFY_OUT" | jq -r '.creationDetails.creationDate // empty')
+CREATE_TIME=$(echo "$VERIFY_OUT" | jq -r '.creationDetails.creationTime // empty')
+echo "outbound: itemId=${OUT_ITEM:-?}  bookingCreated=${CREATE_DATE:-?} ${CREATE_TIME:-?}"
+
+# Build the retain item per --retain-by.
+if [[ "$RETAIN_BY" == "flightItemId" ]]; then
+  if [[ -z "$OUT_ITEM" ]]; then
+    echo "error: get-booking did not expose an itemId for the outbound flight" >&2
+    fail "get-booking (missing outbound itemId)"
+  fi
+  RETAIN_ITEM=$(jq -n --arg item "$OUT_ITEM" '{ flightItemId: $item }')
+else
+  # flightDetails: assemble from the booked flight + booking-level creation.
+  if [[ -z "$CREATE_DATE" || -z "$CREATE_TIME" ]]; then
+    echo "error: booking-level creationDate/creationTime missing — cannot build flightDetails retain" >&2
+    fail "get-booking (missing creation date/time)"
+  fi
+  RETAIN_ITEM=$(echo "$OUT_FLT" | jq \
+    --arg cd "$CREATE_DATE" --arg ct "$CREATE_TIME" '{
+      flightDetails: {
+        marketingFlightNumber: .flightNumber,
+        marketingAirlineCode: .airlineCode,
+        operatingAirlineCode: (.operatingAirlineCode // .airlineCode),
+        departureAirportCode: .fromAirportCode,
+        arrivalAirportCode: .toAirportCode,
+        departureDate: .departureDate,
+        departureTime: (.departureTime | .[0:5]),
+        arrivalDate: .arrivalDate,
+        arrivalTime: (.arrivalTime | .[0:5]),
+        bookingClassCode: .bookingClass,
+        flightStatusCode: .flightStatusCode,
+        creationDate: $cd,
+        creationTime: $ct
+      } }')
 fi
 
 # ---------------------------------------------------------------------------
-step 5 "flight-reshop — retain outbound ${OUT_CARRIER}${OUT_FLIGHT} (itemId $OUT_ITEM), reshop return on $NEW_RET_DATE"
-# Two journeys: journey[0] is the outbound, retained by flightItemId; journey[1]
-# is the return, reshopped on the (possibly new) return date. retainFlights by
-# flightItemId requires bookingId in the request.
+step 5 "flight-reshop — retain outbound ${OUT_CARRIER}${OUT_FLIGHT} (by $RETAIN_BY), reshop return on $NEW_RET_DATE"
+# Two journeys: journey[0] is the outbound, retained; journey[1] is the return,
+# reshopped on the (possibly new) return date. Retaining requires bookingId.
 RESHOP_BODY=$(jq -n \
   --arg from "$FROM" --arg to "$TO" \
   --arg depDate "$DEP_DATE" --arg retDate "$NEW_RET_DATE" \
   --arg ticket "$ORIG_TICKET" --arg bookingId "$CONFIRMATION_ID" \
-  --arg item "$OUT_ITEM" \
+  --argjson retain "$RETAIN_ITEM" \
   '{
     journeys: [
       {
         departureLocation: { cityCode: $from },
         arrivalLocation: { cityCode: $to },
         departureDate: $depDate,
-        retainFlights: [ { flightItemId: $item } ]
+        retainFlights: [ $retain ]
       },
       {
         departureLocation: { cityCode: $to },
@@ -499,7 +550,7 @@ echo "================ RETAIN E2E SUMMARY ================"
 echo "PNR:                  $CONFIRMATION_ID"
 echo "original ticket:      $ORIG_TICKET"
 echo "round trip:           ${OUT_CARRIER}${OUT_FLIGHT} ${FROM}→${TO} + ${RET_CARRIER}${RET_FLIGHT} ${TO}→${FROM}"
-echo "pinned (retained):    ${OUT_CARRIER}${OUT_FLIGHT} outbound (itemId $OUT_ITEM)"
+echo "pinned (retained):    ${OUT_CARRIER}${OUT_FLIGHT} outbound (by $RETAIN_BY)"
 echo "reshopped journey:    ${TO}→${FROM} on $NEW_RET_DATE"
 echo "reshop offers:        $OFFER_COUNT"
 echo "retain assertion:     $RETAIN_RESULT"

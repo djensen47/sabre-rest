@@ -168,21 +168,23 @@ sabre-rest flight-reshop --body '{
 ```
 
 A retained flight is identified either by **`flightItemId`** or by full
-**`flightDetails`**. Prefer `flightItemId`:
+**`flightDetails`** — both work; retaining **requires `bookingId`** in the
+request either way.
 
-- It is the simple, robust path. The id comes from Booking Management
-  `getBooking` (`flights[].itemId`). Retaining by id **requires `bookingId`**
-  in the reshop request.
-- The `flightDetails` path is brittle: the live API rejects it unless you also
-  send `operatingAirlineCode`, `flightStatusCode`, `creationDate`, and
-  `creationTime` — fields the OAS marks *optional* (`MANDATORY_DATA_MISSING`
-  otherwise). `creationDate`/`creationTime` are not surfaced by `getBooking`
-  today, so the id path is the one you can fully populate.
+- **`flightItemId`** (preferred): a single value, from Booking Management
+  `getBooking` (`flights[].itemId`).
+- **`flightDetails`**: the full flight identity. The live API enforces four
+  fields the OAS marks *optional* — `operatingAirlineCode`, `flightStatusCode`,
+  `creationDate`, and `creationTime` (`MANDATORY_DATA_MISSING` otherwise). All
+  four come from `getBooking`: identity/codes from the matching `flights[]`
+  entry, and `creationDate`/`creationTime` from the **booking-level**
+  `creationDetails` (there's no per-flight creation field — the booking-level
+  values are accepted).
 
-Verified in CERT 2026-06-12 (`scripts/flight-exchange-retain-e2e.sh`): a
-DFW⇄LAX round trip retaining the outbound by `flightItemId` returned 50 offers,
-**all 50 preserving the pinned outbound flight** while offering alternative
-returns.
+Verified in CERT 2026-06-12 (`scripts/flight-exchange-retain-e2e.sh`,
+`--retain-by`): a DFW⇄LAX round trip retaining the outbound returned offers
+that **all preserved the pinned flight** — 50/50 by `flightItemId`, 45/45 by
+`flightDetails`.
 
 ### 4. Exchange Booking — `exchange-booking`
 
