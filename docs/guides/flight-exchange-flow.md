@@ -149,7 +149,48 @@ offers (or the downline error) — see that script for a ready-to-run example.
 To change only part of a trip, pin the parts to keep with `retainFlights`.
 Important: **`retainFlights` retains a whole journey (a leg / direction), not a
 single segment of a connection.** The canonical case is a round trip — retain
-the outbound journey, reshop the return:
+the outbound journey, reshop the return.
+
+**This adds a mandatory `getBooking` call before the reshop.** Unlike a plain
+reshop (which needs only a ticket number), a retained reshop must describe the
+flight(s) to keep, and that description comes from the booking. So selective
+change is a two-call sequence:
+
+```
+getBooking ──► retain inputs (itemId / flight details + creation*) ──► flightReshop (retainFlights)
+```
+
+**Step A — `getBooking`** (Booking Management) to harvest the retain inputs:
+
+```
+sabre-rest get-booking --confirmation-id ONOXSB
+```
+
+From the response you need, for the flight you intend to keep, **either** its
+`flights[].itemId` **or** the full identity. Both retain forms also require
+`bookingId` on the reshop request.
+
+| Reshop `retainFlights` field | Source in `getBooking` |
+| --- | --- |
+| `flightItemId` | `flights[].itemId` |
+| `flightDetails.marketingAirlineCode` / `marketingFlightNumber` | `flights[].airlineCode` / `flightNumber` |
+| `flightDetails.operatingAirlineCode` | `flights[].operatingAirlineCode` |
+| `flightDetails.departureAirportCode` / `arrivalAirportCode` | `flights[].fromAirportCode` / `toAirportCode` |
+| `flightDetails.departureDate` / `departureTime` | `flights[].departureDate` / `departureTime` (`HH:MM`) |
+| `flightDetails.arrivalDate` / `arrivalTime` | `flights[].arrivalDate` / `arrivalTime` (`HH:MM`) |
+| `flightDetails.bookingClassCode` | `flights[].bookingClass` |
+| `flightDetails.flightStatusCode` | `flights[].flightStatusCode` |
+| `flightDetails.creationDate` / `creationTime` | **booking-level** `creationDetails.creationDate` / `creationTime` |
+
+> ⚠️ Two non-obvious points, both verified in CERT (2026-06-12):
+> 1. The `flightDetails` path requires `operatingAirlineCode`,
+>    `flightStatusCode`, `creationDate`, and `creationTime` even though the OAS
+>    marks them *optional* — omitting any yields `MANDATORY_DATA_MISSING`.
+> 2. There is **no per-flight creation field** in `getBooking`; the
+>    **booking-level** `creationDetails.creationDate` / `creationTime` are
+>    accepted for the per-flight `flightDetails.creation*`.
+
+**Step B — `flightReshop`** with the retained journey (here, by `flightItemId`):
 
 ```
 sabre-rest flight-reshop --body '{
@@ -167,19 +208,7 @@ sabre-rest flight-reshop --body '{
 }'
 ```
 
-A retained flight is identified either by **`flightItemId`** or by full
-**`flightDetails`** — both work; retaining **requires `bookingId`** in the
-request either way.
-
-- **`flightItemId`** (preferred): a single value, from Booking Management
-  `getBooking` (`flights[].itemId`).
-- **`flightDetails`**: the full flight identity. The live API enforces four
-  fields the OAS marks *optional* — `operatingAirlineCode`, `flightStatusCode`,
-  `creationDate`, and `creationTime` (`MANDATORY_DATA_MISSING` otherwise). All
-  four come from `getBooking`: identity/codes from the matching `flights[]`
-  entry, and `creationDate`/`creationTime` from the **booking-level**
-  `creationDetails` (there's no per-flight creation field — the booking-level
-  values are accepted).
+`flightItemId` is preferred — a single value, no creation-field handling.
 
 Verified in CERT 2026-06-12 (`scripts/flight-exchange-retain-e2e.sh`,
 `--retain-by`): a DFW⇄LAX round trip retaining the outbound returned offers
