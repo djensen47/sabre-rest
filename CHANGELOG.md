@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/djensen47/sabre-rest/compare/v0.16.0...v0.17.0) (2026-06-13)
+
+
+### Features
+
+* **flight-reshop-v1:** expose journeys[].retainFlights (selective per-segment exchange) ([#103](https://github.com/djensen47/sabre-rest/issues/103)) ([e3ec1b9](https://github.com/djensen47/sabre-rest/commit/e3ec1b95e4e341409f4e42c9f8b93230911d7885))
+
 ## [0.16.0](https://github.com/djensen47/sabre-rest/compare/v0.15.0...v0.16.0) (2026-06-12)
 
 
