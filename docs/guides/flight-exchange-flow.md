@@ -215,6 +215,52 @@ Verified in CERT 2026-06-12 (`scripts/flight-exchange-retain-e2e.sh`,
 that **all preserved the pinned flight** — 50/50 by `flightItemId`, 45/45 by
 `flightDetails`.
 
+#### Step C — commit ONLY the changed journey
+
+`retainFlights` shapes the **shop** only. It does **not** carry into the
+commit — Exchange Booking (step 4) is driven entirely by its own
+`cancelSegments` / `newSegments`. So a selective change has two rules at commit
+time, and getting either wrong changes both journeys (or fails to price):
+
+1. **Act on the changed flights only.** Each flight in a reshop offer carries
+   `isBookingRequired`: `true` = changed (rebook it), `false` = matches the
+   existing booking (keep it, do not touch it). Build `newSegments` from the
+   `isBookingRequired: true` flights only, and `cancelSegments` from just the
+   reservation segment numbers they replace. Cancelling all segments / selling
+   every offer flight is the "can only change if I change both" bug.
+2. **Send `bargainFinder` (Rebook).** Without it the host rejects the offer's
+   booking class with `AutomatedExchangesLLSRQ: LOWER FARE APPLIES - REBOOK
+   <class>` and no PQR is created — the class a reshop offer carries is **not**
+   always the repriceable class. `bargainFinder` lets the host rebook into the
+   correct fare itself.
+
+```
+sabre-rest exchange-booking --body '{
+  "pnrLocator": "ONOXSB",
+  "originalTicketNumber": "0017360597321",
+  "receivedFrom": "AGENT",
+  "cancelSegments": [2],          // the RETURN only — outbound (segment 1) is retained
+  "newSegments": [{ /* only the isBookingRequired:true return flight */
+    "origin": "ONT", "destination": "DFW",
+    "departureDateTime": "2026-07-23T23:59:00", "arrivalDateTime": "2026-07-24T05:30:00",
+    "marketingCarrier": "AA", "flightNumber": "3006", "bookingClass": "Q", "status": "NN" }],
+  "bargainFinder": true,
+  "priceTolerance": { "amountSpecified": 0,
+    "acceptableIncrease": { "amount": 1000, "haltOnNonAcceptablePrice": true } },
+  "confirm": { "formOfPayment": { "type": "card", "vendorCode": "VI",
+    "number": "...", "expireDate": "2027-12" } }
+}'
+```
+
+Reservation segment numbers (`cancelSegments`) come from `getBooking` — the
+1-based position of each flight among `flights[]` (outbound = 1, return = 2 on
+a simple round trip).
+
+Verified in CERT 2026-06-15 (`scripts/flight-exchange-onejourney-commit-e2e.sh`):
+a DFW⇄LAX round trip, changing **only** the return — commit `Complete`,
+post-commit PNR keeps the outbound and swaps the return, reissued ticket
+issued.
+
 ### 4. Exchange Booking — `exchange-booking`
 
 Commits the reissue: cancels old segments, sells the new ones, prices the
@@ -329,6 +375,9 @@ the NN path).
 - `scripts/flight-exchange-retain-e2e.sh` — selective-change smoke test (book a
   round trip → reshop retaining the outbound journey via `flightItemId` →
   assert every offer keeps the pinned flight → cleanup)
+- `scripts/flight-exchange-onejourney-commit-e2e.sh` — selective-change **commit**
+  smoke test (change only the return → commit cancelling just that segment with
+  `bargainFinder` → assert the outbound survives → fulfill → cleanup)
 - `scripts/flight-reshop-flow.sh`, `scripts/exchange-booking-flow.sh`,
   `scripts/booking-ticket-lifecycle.sh` — runnable smoke tests for individual
   steps
