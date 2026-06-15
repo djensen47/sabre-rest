@@ -1,27 +1,36 @@
 #!/usr/bin/env bash
 # flight-exchange-onejourney-commit-e2e.sh — ONE-JOURNEY change, COMMITTED.
 #
-# Books a round trip, tickets it, then changes ONLY the return journey and
-# COMMITS the exchange — leaving the outbound untouched. This is the gap the
-# other tests left open: flight-exchange-retain-e2e.sh proves selective change
-# can be *shopped*; flight-exchange-e2e.sh *commits* but only a single-journey
-# one-way. Nothing committed a change to one direction of a multi-journey trip.
+# Books a round trip, tickets it, then changes one (or both) journeys and
+# COMMITS the exchange, asserting the kept journey survives. `--change`
+# selects which journey moves:
+#   return   — keep outbound, change return  (chronologically safe; default)
+#   outbound — keep return,   change outbound (exposes the out-of-order case —
+#              the new outbound is appended AFTER the retained return, so the
+#              PNR can fail ticketing with "CHK DATE/TIME CONTINUITY OF FLTS"
+#              unless the PCC's Automatic Segment Arrange TJR flag is enabled)
+#   both     — change both journeys (no retainFlights)
+#
+# This is the gap the other tests left: flight-exchange-retain-e2e.sh shops a
+# selective change; flight-exchange-e2e.sh commits but only a single-journey
+# one-way. Neither committed a change to one direction of a round trip — and
+# neither covered the outbound-only ordering hazard.
 #
 # Why it matters: retainFlights only influences the SHOP. The COMMIT (Exchange
 # Booking) is driven by its own cancelSegments / newSegments. To change one
 # journey you must cancel + sell ONLY the changed flights — the offer flags
 # each flight `isBookingRequired` (true = changed, false = keep). A commit that
 # ignores that flag cancels/rebooks everything → "you can only change if you
-# change both journeys." This test asserts the outbound survives the commit.
+# change both journeys." This test asserts the kept journey survives the commit.
 #
 #   1. bargain-finder-max      shop a round trip (2 legs, 1 segment each)
 #   2. create-booking          book the round-trip PNR (both directions)
 #   3. fulfill-tickets         issue the ORIGINAL ticket (billable)
-#   4. get-booking             read segment numbers + outbound itemId
-#   5. flight-reshop           reshop retaining the outbound (return changes)
-#   6. select offer            pick an offer whose ONLY changed flight is the return
-#   7. exchange-booking        COMMIT: cancel the return segment, sell the new return
-#   8. get-booking             ASSERT outbound unchanged + return swapped
+#   4. get-booking             read segment numbers + the kept flight's itemId
+#   5. flight-reshop           reshop retaining the kept journey
+#   6. select offer            pick an offer that changes only the chosen journey
+#   7. exchange-booking        COMMIT: cancel the changed segment(s), sell the new flight(s)
+#   8. get-booking             ASSERT kept journey unchanged + changed journey swapped
 #   9. fulfill-tickets         issue the reissued ticket (if needed)
 #  10. void-tickets            release the financial document(s)
 #  11. cancel-booking          tear the PNR down
@@ -48,8 +57,24 @@
 #   --to <iata>                   Destination IATA (required)
 #   --departure-date <YYYY-MM-DD> Outbound date (required)
 #   --return-date <YYYY-MM-DD>    Original return date (required)
-#   --new-return-date <YYYY-MM-DD>  Reshop target for the return (default: +1 day
-#                                 is NOT assumed; defaults to --return-date)
+#   --change <return|outbound|both>  Which journey to change (default: return)
+#   --new-departure-date <YYYY-MM-DD>  Reshop target for the outbound
+#                                 (default: --departure-date). Used when
+#                                 --change is outbound or both.
+#   --new-return-date <YYYY-MM-DD>  Reshop target for the return
+#                                 (default: --return-date). Used when --change
+#                                 is return or both.
+#   --commit-strategy <full|minimal>  How to build the exchange commit
+#                                 (default: full).
+#                                 full    = cancel ALL segments + re-sell the
+#                                           whole itinerary in chronological
+#                                           order (works today, no entitlement).
+#                                 minimal = cancel only the changed segment(s) +
+#                                           sell only the new flight(s); leaner,
+#                                           but appends out of order and fails
+#                                           ticketing (CHK DATE/TIME CONTINUITY)
+#                                           unless the PCC has the Automatic
+#                                           Segment Arrange TJR flag enabled.
 #   --carriers <list>             BFM carrier preference (default: AA)
 #   --sell-status <code>          New-segment sell status (default: NN)
 #   --given-name/--surname/--phone/--email/--seed   Traveler identity
@@ -73,7 +98,10 @@ FROM=""
 TO=""
 DEP_DATE=""
 RET_DATE=""
+NEW_DEP_DATE=""
 NEW_RET_DATE=""
+CHANGE="return"
+COMMIT_STRATEGY="full"
 CARRIERS="AA"
 SELL_STATUS="NN"
 GIVEN_NAME=""
@@ -90,7 +118,7 @@ NO_CLEANUP=0
 BASE_URL=""
 
 usage() {
-  sed -n '2,63p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,88p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -99,7 +127,10 @@ while [[ $# -gt 0 ]]; do
     --to) TO="${2:-}"; shift 2 ;;
     --departure-date) DEP_DATE="${2:-}"; shift 2 ;;
     --return-date) RET_DATE="${2:-}"; shift 2 ;;
+    --new-departure-date) NEW_DEP_DATE="${2:-}"; shift 2 ;;
     --new-return-date) NEW_RET_DATE="${2:-}"; shift 2 ;;
+    --change) CHANGE="${2:-}"; shift 2 ;;
+    --commit-strategy) COMMIT_STRATEGY="${2:-}"; shift 2 ;;
     --carriers) CARRIERS="${2:-}"; shift 2 ;;
     --sell-status) SELL_STATUS="${2:-}"; shift 2 ;;
     --given-name) GIVEN_NAME="${2:-}"; shift 2 ;;
@@ -138,7 +169,16 @@ if (( ${#missing[@]} > 0 )); then
   usage >&2
   exit 2
 fi
+NEW_DEP_DATE="${NEW_DEP_DATE:-$DEP_DATE}"
 NEW_RET_DATE="${NEW_RET_DATE:-$RET_DATE}"
+case "$CHANGE" in
+  outbound|return|both) ;;
+  *) echo "error: --change must be 'outbound', 'return', or 'both' (got '$CHANGE')" >&2; exit 2 ;;
+esac
+case "$COMMIT_STRATEGY" in
+  full|minimal) ;;
+  *) echo "error: --commit-strategy must be 'full' or 'minimal' (got '$COMMIT_STRATEGY')" >&2; exit 2 ;;
+esac
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "error: 'jq' is required on PATH" >&2
@@ -379,42 +419,72 @@ TICKETED=1
 echo "original ticket: $ORIG_TICKET"
 
 # ---------------------------------------------------------------------------
-step 4 "get-booking — read segment numbers + outbound itemId"
+# Map --change to which journey is KEPT (retained in reshop) vs CHANGED. The
+# retained journey is pinned by flightItemId; the changed journey is reshopped
+# on its (possibly new) date and committed.
+#   change=return   → keep outbound, change return   (chronological-safe)
+#   change=outbound → keep return,   change outbound  (the out-of-order case)
+#   change=both     → change both journeys (no retainFlights)
+if [[ "$CHANGE" == "return" ]]; then
+  KEEP_C="$OUT_CARRIER"; KEEP_FN="$OUT_FLIGHT"
+  CHG_C="$RET_CARRIER";  CHG_FN="$RET_FLIGHT"
+elif [[ "$CHANGE" == "outbound" ]]; then
+  KEEP_C="$RET_CARRIER"; KEEP_FN="$RET_FLIGHT"
+  CHG_C="$OUT_CARRIER";  CHG_FN="$OUT_FLIGHT"
+fi
+
+step 4 "get-booking — read segment numbers + retained-flight itemId"
 if ! VERIFY_OUT=$(run_cli $CLI get-booking "${BASE_URL_FLAG[@]}" --confirmation-id "$CONFIRMATION_ID"); then
   cat "$TMP_ERR" >&2
   fail "get-booking"
 fi
-# Outbound itemId, for the retainFlights pin in the reshop.
-OUT_ITEM=$(echo "$VERIFY_OUT" | jq -r --arg c "$OUT_CARRIER" --argjson fn "$OUT_FLIGHT" \
-  '[ .flights[]? | select(.airlineCode == $c and (.flightNumber == $fn)) | .itemId ] | first // empty')
-# The return's reservation segment number (1-based position of the return
-# flight among the booked flights). cancelSegments uses these positions.
-RET_SEG_NO=$(echo "$VERIFY_OUT" | jq -r --arg c "$RET_CARRIER" --argjson fn "$RET_FLIGHT" \
+# Reservation segment number = 1-based position of a flight among .flights[].
+seg_no() { echo "$VERIFY_OUT" | jq -r --arg c "$1" --argjson fn "$2" \
   '[ .flights[] | .airlineCode + ((.flightNumber|tostring)) ]
-   | index(($c + ($fn|tostring))) // empty | if . == null then "" else . + 1 end')
-echo "outbound itemId=${OUT_ITEM:-?}   return reservation segment #=${RET_SEG_NO:-?}"
-if [[ -z "$OUT_ITEM" || -z "$RET_SEG_NO" ]]; then
-  echo "error: could not resolve outbound itemId and/or return segment number from get-booking" >&2
-  fail "get-booking (segment resolution)"
+   | index(($c + ($fn|tostring))) // empty | if . == null then "" else . + 1 end'; }
+item_id() { echo "$VERIFY_OUT" | jq -r --arg c "$1" --argjson fn "$2" \
+  '[ .flights[]? | select(.airlineCode == $c and (.flightNumber == $fn)) | .itemId ] | first // empty'; }
+
+if [[ "$CHANGE" == "both" ]]; then
+  OUT_SEG_NO=$(seg_no "$OUT_CARRIER" "$OUT_FLIGHT")
+  RET_SEG_NO=$(seg_no "$RET_CARRIER" "$RET_FLIGHT")
+  echo "segment numbers: outbound=#${OUT_SEG_NO:-?}  return=#${RET_SEG_NO:-?}  (changing BOTH)"
+  if [[ -z "$OUT_SEG_NO" || -z "$RET_SEG_NO" ]]; then
+    echo "error: could not resolve both segment numbers" >&2; fail "get-booking (segment resolution)"; fi
+else
+  KEEP_ITEM=$(item_id "$KEEP_C" "$KEEP_FN")
+  CHG_SEG_NO=$(seg_no "$CHG_C" "$CHG_FN")
+  echo "retain ${KEEP_C}${KEEP_FN} (itemId ${KEEP_ITEM:-?})   change ${CHG_C}${CHG_FN} (segment #${CHG_SEG_NO:-?})"
+  if [[ -z "$KEEP_ITEM" || -z "$CHG_SEG_NO" ]]; then
+    echo "error: could not resolve retained itemId and/or changed segment number" >&2
+    fail "get-booking (segment resolution)"; fi
 fi
 
 # ---------------------------------------------------------------------------
-step 5 "flight-reshop — retain outbound ${OUT_CARRIER}${OUT_FLIGHT}, reshop return on $NEW_RET_DATE"
+step 5 "flight-reshop — change=$CHANGE"
+# Build the two journeys. The kept journey carries retainFlights (by itemId);
+# the changed journey is reshopped on its new date. For change=both, neither is
+# retained. Outbound journey is FROM→TO; return journey is TO→FROM.
 RESHOP_BODY=$(jq -n \
   --arg from "$FROM" --arg to "$TO" \
-  --arg depDate "$DEP_DATE" --arg retDate "$NEW_RET_DATE" \
+  --arg depDate "$NEW_DEP_DATE" --arg retDate "$NEW_RET_DATE" \
   --arg ticket "$ORIG_TICKET" --arg bookingId "$CONFIRMATION_ID" \
-  --arg item "$OUT_ITEM" \
-  '{
-    journeys: [
-      { departureLocation: { cityCode: $from }, arrivalLocation: { cityCode: $to },
-        departureDate: $depDate, retainFlights: [ { flightItemId: $item } ] },
-      { departureLocation: { cityCode: $to }, arrivalLocation: { cityCode: $from },
-        departureDate: $retDate }
-    ],
-    tickets: [{ number: $ticket }],
-    bookingId: $bookingId
-  }')
+  --arg change "$CHANGE" --arg keepItem "${KEEP_ITEM:-}" \
+  --arg origDep "$DEP_DATE" --arg origRet "$RET_DATE" \
+  '
+  ({ departureLocation: { cityCode: $from }, arrivalLocation: { cityCode: $to } }
+    + (if $change == "outbound" then { departureDate: $depDate }
+       else { departureDate: $origDep, retainFlights: [ { flightItemId: $keepItem } ] } end)) as $outJ
+  | ({ departureLocation: { cityCode: $to }, arrivalLocation: { cityCode: $from } }
+    + (if $change == "return" then { departureDate: $retDate }
+       else { departureDate: $origRet, retainFlights: [ { flightItemId: $keepItem } ] } end)) as $retJ
+  | ({ departureLocation: { cityCode: $from }, arrivalLocation: { cityCode: $to }, departureDate: $depDate }) as $outJBoth
+  | ({ departureLocation: { cityCode: $to }, arrivalLocation: { cityCode: $from }, departureDate: $retDate }) as $retJBoth
+  | {
+      journeys: (if $change == "both" then [ $outJBoth, $retJBoth ] else [ $outJ, $retJ ] end),
+      tickets: [{ number: $ticket }],
+      bookingId: $bookingId
+    }')
 
 if ! RESHOP_OUT=$(run_cli $CLI flight-reshop "${BASE_URL_FLAG[@]}" --body "$RESHOP_BODY"); then
   cat "$TMP_ERR" >&2
@@ -428,73 +498,91 @@ if [[ "${OFFER_COUNT:-0}" -eq 0 ]] 2>/dev/null; then
 fi
 
 # ---------------------------------------------------------------------------
-step 6 "select offer — exactly one changed flight (the return), outbound retained"
-# Walk each offer's flights (via journeyRefs → flightRefs). A valid one-journey
-# change has the outbound flagged isBookingRequired=false and exactly one flight
-# with isBookingRequired=true (the new return). Pull that changed flight + its
-# booking class for the commit's newSegments.
+step 6 "select offer — change=$CHANGE (capture the FULL itinerary, kept + changed)"
+# Per Sabre's canonical exchangeBooking example, the commit cancels ALL existing
+# segments and re-sells the WHOLE itinerary in order — including retained flights.
+# retainFlights only shapes the shop; it does NOT mean "omit that flight from the
+# sell". So we capture every flight in the offer (regardless of isBookingRequired),
+# with its booking class, and validate it changed the journey we asked for.
+EXPECT_CHANGED=2; [[ "$CHANGE" == "both" ]] && EXPECT_CHANGED=2 || EXPECT_CHANGED=1
 CHOSEN=$(echo "$RESHOP_OUT" | jq \
-  --arg oc "$OUT_CARRIER" --argjson ofn "$OUT_FLIGHT" '
-  (.flights // []) as $flights
-  | (.journeys // []) as $journeys
-  | [ (.offers // [])[]
-      | . as $o
+  --argjson expectChanged "$EXPECT_CHANGED" '
+  (.flights // []) as $flights | (.journeys // []) as $journeys
+  | [ (.offers // [])[] | . as $o
       | [ ($o.journeyRefs // [])[] | . as $jref
           | ($journeys[] | select(.id == $jref) | .flightRefs // [])[] | . as $fref
           | ($flights[] | select(.id == $fref)) ] as $of
       | ([ $of[] | select(.isBookingRequired == true) ]) as $changed
-      | ([ $of[] | select(.isBookingRequired == false
-            and .marketingAirlineCode == $oc and (.marketingFlightNumber == $ofn)) ]) as $keptOut
-      | select(($changed | length) == 1 and ($keptOut | length) == 1)
-      | $changed[0] as $new
-      | ([ $o.items[0].fares[]?.fareComponents[]?.segmentDetails[]?
-           | select(.flightRef == $new.id) ] | first) as $sd
-      | select($sd.bookingClassCode != null)
-      | {
-          offerId: $o.id,
-          grandTotal: $o.totalPriceDifference.grandTotal,
+      | select(($changed | length) == $expectChanged)
+      # Build a sell entry for EVERY flight in the offer; resolve booking class
+      # from the fare segmentDetails (guard against a null class below).
+      | [ $of[] | . as $fl
+          | ([ $o.items[0].fares[]?.fareComponents[]?.segmentDetails[]?
+               | select(.flightRef == $fl.id) ] | first) as $sd
+          | { carrier: $fl.marketingAirlineCode, flightNumber: ($fl.marketingFlightNumber|tostring),
+              origin: $fl.departureAirportCode, destination: $fl.arrivalAirportCode,
+              departureDateTime: "\($fl.departureDate)T\($fl.departureTime):00",
+              arrivalDateTime: "\($fl.arrivalDate)T\($fl.arrivalTime):00",
+              bookingClass: $sd.bookingClassCode,
+              isBookingRequired: $fl.isBookingRequired } ] as $segs
+      | select([ $segs[] | select(.bookingClass == null) ] | length == 0)
+      | { offerId: $o.id, grandTotal: $o.totalPriceDifference.grandTotal,
           chargeType: $o.totalPriceDifference.type,
-          carrier: $new.marketingAirlineCode,
-          flightNumber: ($new.marketingFlightNumber | tostring),
-          origin: $new.departureAirportCode,
-          destination: $new.arrivalAirportCode,
-          departureDateTime: "\($new.departureDate)T\($new.departureTime):00",
-          arrivalDateTime: "\($new.arrivalDate)T\($new.arrivalTime):00",
-          bookingClass: $sd.bookingClassCode
-        }
-    ]
-  | first // empty')
+          # All flights, sorted chronologically by departure — the order the
+          # commit must sell them in to avoid CHK DATE/TIME CONTINUITY.
+          segments: ($segs | sort_by(.departureDateTime)) }
+    ] | first // empty')
 if [[ -z "$CHOSEN" ]]; then
-  echo "error: no offer changed exactly the return while retaining the outbound" >&2
+  echo "error: no offer matched the change=$CHANGE selection criteria" >&2
   fail "offer selection"
 fi
-echo "$CHOSEN" | jq -r '"chosen offer: \(.offerId)
-  new return:  \(.carrier)\(.flightNumber) \(.origin)→\(.destination) \(.departureDateTime) class=\(.bookingClass)
-  price delta: \(.chargeType) \(.grandTotal)"'
+echo "$CHOSEN" | jq -r '"chosen offer: \(.offerId)  (\(.chargeType) \(.grandTotal))",
+  (.segments[] | "  sell: \(.carrier)\(.flightNumber) \(.origin)→\(.destination) \(.departureDateTime) class=\(.bookingClass) \(if .isBookingRequired then "(new)" else "(retained)" end)")'
 
 # ---------------------------------------------------------------------------
-step 7 "exchange-booking — COMMIT: cancel ONLY return segment $RET_SEG_NO, sell the new return"
+# Two commit strategies (--commit-strategy):
+#   full    — cancel ALL booked segments, re-sell the WHOLE offer itinerary in
+#             chronological order (retained + changed). Matches Sabre's canonical
+#             example; works today with no extra entitlement. DEFAULT.
+#   minimal — cancel ONLY the changed segment(s), sell ONLY the new flight(s).
+#             Leaner, but the new segment is appended (not inserted), so the PNR
+#             can go out of chronological order → ticketing fails CHK DATE/TIME
+#             CONTINUITY unless the PCC's Automatic Segment Arrange TJR flag is
+#             enabled. Kept here to demonstrate the entitlement gap.
+if [[ "$COMMIT_STRATEGY" == "full" ]]; then
+  CANCEL_JSON=$(echo "$VERIFY_OUT" | jq -c '[ range(1; (.flights | length) + 1) ]')
+  SELL_FILTER='.segments'   # all flights, already chronologically sorted
+else
+  if [[ "$CHANGE" == "both" ]]; then
+    CANCEL_JSON="[$OUT_SEG_NO,$RET_SEG_NO]"
+  else
+    CANCEL_JSON="[$CHG_SEG_NO]"
+  fi
+  SELL_FILTER='[ .segments[] | select(.isBookingRequired) ]'   # changed flights only
+fi
+
+step 7 "exchange-booking — COMMIT [$COMMIT_STRATEGY]: cancel $CANCEL_JSON, sell $([ "$COMMIT_STRATEGY" = full ] && echo 'full itinerary' || echo 'changed only')"
 EXCHANGE_BODY=$(echo "$CHOSEN" | jq \
   --arg pnr "$CONFIRMATION_ID" --arg ticket "$ORIG_TICKET" \
-  --argjson retSeg "$RET_SEG_NO" --arg sellStatus "$SELL_STATUS" \
+  --argjson cancel "$CANCEL_JSON" --arg sellStatus "$SELL_STATUS" \
   --arg cardType "$CARD_TYPE" --arg cardNumber "$CARD_NUMBER" --arg cardExpiry "$CARD_EXPIRY" \
-  '{
-    pnrLocator: $pnr,
-    originalTicketNumber: $ticket,
-    receivedFrom: "E2E ONEJRNY",
-    cancelSegments: [ $retSeg ],
-    newSegments: [{
+  "{
+    pnrLocator: \$pnr,
+    originalTicketNumber: \$ticket,
+    receivedFrom: \"E2E ONEJRNY\",
+    cancelSegments: \$cancel,
+    newSegments: [ ($SELL_FILTER)[] | {
       origin: .origin, destination: .destination,
       departureDateTime: .departureDateTime, arrivalDateTime: .arrivalDateTime,
       marketingCarrier: .carrier, flightNumber: .flightNumber,
-      bookingClass: .bookingClass, status: $sellStatus
-    }],
+      bookingClass: .bookingClass, status: \$sellStatus
+    } ],
     bargainFinder: true,
     priceTolerance: { amountSpecified: 0,
       acceptableIncrease: { amount: 1000, haltOnNonAcceptablePrice: true } },
     confirm: { formOfPayment: {
-      type: "card", vendorCode: $cardType, number: $cardNumber, expireDate: $cardExpiry } }
-  }')
+      type: \"card\", vendorCode: \$cardType, number: \$cardNumber, expireDate: \$cardExpiry } }
+  }")
 
 if ! EXCHANGE_OUT=$(run_cli $CLI exchange-booking "${BASE_URL_FLAG[@]}" --body "$EXCHANGE_BODY"); then
   cat "$TMP_ERR" >&2
@@ -508,38 +596,48 @@ COMMIT_COMPLETE=0
 if [[ "$EX_STATUS" == "Complete" && "$EX_ERRORS" == "0" ]]; then
   COMMIT_COMPLETE=1
 else
-  echo "$EXCHANGE_OUT" | jq -r '(.applicationResults.errors // [])[]? | "  [\(.type // "?")]"' >&2
-  echo "commit did not reach Complete (sell status $SELL_STATUS) — see $LOG_DIR" >&2
+  echo "$EXCHANGE_OUT" | jq -r '(.applicationResults.errors // [])[]?.systemSpecificResults[]?.messages[]? | "  \(.code // "?"): \(.value // "")"' >&2
+  echo "commit did not reach Complete (change=$CHANGE, sell status $SELL_STATUS) — see $LOG_DIR" >&2
 fi
 
 # ---------------------------------------------------------------------------
-step 8 "get-booking — ASSERT outbound unchanged, return swapped"
+step 8 "get-booking — ASSERT only the changed journey moved"
 ASSERT_RESULT="n/a (commit not complete)"
 if [[ "$COMMIT_COMPLETE" == "1" ]]; then
   if ! POST_OUT=$(run_cli $CLI get-booking "${BASE_URL_FLAG[@]}" --confirmation-id "$CONFIRMATION_ID"); then
     cat "$TMP_ERR" >&2
     fail "get-booking (post-commit)"
   fi
-  # Outbound flight must still be present and unchanged; the original return
-  # flight must be gone; the new return flight must be present.
-  OUT_STILL=$(echo "$POST_OUT" | jq -r --arg c "$OUT_CARRIER" --argjson fn "$OUT_FLIGHT" \
-    '[ .flights[]? | select(.airlineCode == $c and (.flightNumber == $fn)) ] | length')
-  OLD_RET_GONE=$(echo "$POST_OUT" | jq -r --arg c "$RET_CARRIER" --argjson fn "$RET_FLIGHT" \
-    '[ .flights[]? | select(.airlineCode == $c and (.flightNumber == $fn)) ] | length')
-  NEW_RET_FN=$(echo "$CHOSEN" | jq -r '.flightNumber')
-  NEW_RET_THERE=$(echo "$POST_OUT" | jq -r --argjson fn "$NEW_RET_FN" \
-    '[ .flights[]? | select(.flightNumber == $fn) ] | length')
   echo "post-commit flights: $(echo "$POST_OUT" | jq -rc '[.flights[]?.flightNumber]')"
-  echo "  outbound ${OUT_CARRIER}${OUT_FLIGHT} present: $([[ "$OUT_STILL" -ge 1 ]] && echo yes || echo NO)"
-  echo "  original return ${RET_CARRIER}${RET_FLIGHT} gone: $([[ "$OLD_RET_GONE" -eq 0 ]] && echo yes || echo NO)"
-  echo "  new return ${NEW_RET_FN} present: $([[ "$NEW_RET_THERE" -ge 1 ]] && echo yes || echo NO)"
-  if [[ "$OUT_STILL" -ge 1 && "$OLD_RET_GONE" -eq 0 && "$NEW_RET_THERE" -ge 1 ]]; then
-    echo "PASS: only the return changed; outbound retained"
-    ASSERT_RESULT="PASS (outbound kept, return swapped)"
+  present() { echo "$POST_OUT" | jq -r --arg c "$1" --argjson fn "$2" \
+    '[ .flights[]? | select(.airlineCode == $c and (.flightNumber == $fn)) ] | length'; }
+  ASSERT_OK=1
+  if [[ "$CHANGE" == "both" ]]; then
+    # Both originals gone; both new (isBookingRequired) flights present.
+    [[ "$(present "$OUT_CARRIER" "$OUT_FLIGHT")" -eq 0 ]] || ASSERT_OK=0
+    [[ "$(present "$RET_CARRIER" "$RET_FLIGHT")" -eq 0 ]] || ASSERT_OK=0
+    for fn in $(echo "$CHOSEN" | jq -r '.segments[] | select(.isBookingRequired) | .flightNumber'); do
+      [[ "$(echo "$POST_OUT" | jq -r --argjson fn "$fn" '[.flights[]?|select(.flightNumber==$fn)]|length')" -ge 1 ]] || ASSERT_OK=0
+    done
+    [[ "$ASSERT_OK" == "1" ]] && ASSERT_RESULT="PASS (both journeys changed)"
   else
-    echo "FAIL: itinerary not in the expected one-journey-change state" >&2
+    # Kept flight still present; changed original gone; new changed flight present.
+    KEPT_THERE=$(present "$KEEP_C" "$KEEP_FN")
+    CHG_GONE=$(present "$CHG_C" "$CHG_FN")
+    NEW_FN=$(echo "$CHOSEN" | jq -r '.segments[] | select(.isBookingRequired) | .flightNumber' | head -1)
+    NEW_THERE=$(echo "$POST_OUT" | jq -r --argjson fn "$NEW_FN" '[.flights[]?|select(.flightNumber==$fn)]|length')
+    echo "  kept ${KEEP_C}${KEEP_FN} present: $([[ "$KEPT_THERE" -ge 1 ]] && echo yes || echo NO)"
+    echo "  changed ${CHG_C}${CHG_FN} gone:   $([[ "$CHG_GONE" -eq 0 ]] && echo yes || echo NO)"
+    echo "  new ${NEW_FN} present:            $([[ "$NEW_THERE" -ge 1 ]] && echo yes || echo NO)"
+    [[ "$KEPT_THERE" -ge 1 && "$CHG_GONE" -eq 0 && "$NEW_THERE" -ge 1 ]] || ASSERT_OK=0
+    [[ "$ASSERT_OK" == "1" ]] && ASSERT_RESULT="PASS (kept ${KEEP_C}${KEEP_FN}, changed $CHANGE)"
+  fi
+  if [[ "$ASSERT_OK" == "1" ]]; then
+    echo "PASS: itinerary in the expected change=$CHANGE state"
+  else
+    echo "FAIL: itinerary not in the expected change=$CHANGE state" >&2
     ASSERT_RESULT="FAIL"
-    fail "one-journey-change assertion"
+    fail "change=$CHANGE assertion"
   fi
 else
   step 8 "get-booking — SKIPPED (commit not complete)"
@@ -605,10 +703,11 @@ echo "================ ONE-JOURNEY COMMIT SUMMARY ================"
 echo "PNR:                  $CONFIRMATION_ID"
 echo "original ticket:      $ORIG_TICKET"
 echo "round trip:           ${OUT_CARRIER}${OUT_FLIGHT} ${FROM}→${TO} + ${RET_CARRIER}${RET_FLIGHT} ${TO}→${FROM}"
-echo "changed journey:      return only (cancel segment #$RET_SEG_NO)"
+echo "changed journey:      $CHANGE"
+echo "commit strategy:      $COMMIT_STRATEGY"
 echo "exchange commit:      $EX_STATUS (PQR $PQR_NUMBER)"
 echo "itinerary assertion:  $ASSERT_RESULT"
-echo "reissued ticket:      ${NEW_TICKET:-n/a}"
+echo "reissued ticket:      ${NEW_TICKET:-n/a (not ticketed)}"
 [[ -n "$LOG_DIR" ]] && echo "log bundle:           $LOG_DIR"
 echo ""
 echo "flight-exchange-onejourney-commit-e2e: OK"

@@ -215,35 +215,50 @@ Verified in CERT 2026-06-12 (`scripts/flight-exchange-retain-e2e.sh`,
 that **all preserved the pinned flight** — 50/50 by `flightItemId`, 45/45 by
 `flightDetails`.
 
-#### Step C — commit ONLY the changed journey
+#### Step C — commit the change
 
 `retainFlights` shapes the **shop** only. It does **not** carry into the
 commit — Exchange Booking (step 4) is driven entirely by its own
-`cancelSegments` / `newSegments`. So a selective change has two rules at commit
-time, and getting either wrong changes both journeys (or fails to price):
+`cancelSegments` / `newSegments`. Two rules govern a correct commit:
 
-1. **Act on the changed flights only.** Each flight in a reshop offer carries
-   `isBookingRequired`: `true` = changed (rebook it), `false` = matches the
-   existing booking (keep it, do not touch it). Build `newSegments` from the
-   `isBookingRequired: true` flights only, and `cancelSegments` from just the
-   reservation segment numbers they replace. Cancelling all segments / selling
-   every offer flight is the "can only change if I change both" bug.
+1. **Rebuild the whole itinerary, in chronological order.** Set
+   `cancelSegments` to **all** current reservation segments and `newSegments`
+   to the **entire** offer itinerary — every flight, retained *and* changed —
+   sorted by departure date/time. This matches Sabre's canonical
+   `ExchangeBookingRQ` example (it cancels `[1,2,3,4]` and re-sells the full
+   trip). Re-sell the retained flights too; `isBookingRequired: false` means
+   "unchanged", not "omit from the commit".
 2. **Send `bargainFinder` (Rebook).** Without it the host rejects the offer's
    booking class with `AutomatedExchangesLLSRQ: LOWER FARE APPLIES - REBOOK
    <class>` and no PQR is created — the class a reshop offer carries is **not**
    always the repriceable class. `bargainFinder` lets the host rebook into the
    correct fare itself.
 
+> ⚠️ **Why "rebuild the whole itinerary" and not "swap only the changed leg".**
+> The lean approach — cancel only the changed segment and sell only the new
+> flight — *appends* the new segment rather than inserting it at the cancelled
+> slot. When the **outbound** is the changed leg, this leaves the reservation
+> out of chronological order (return dated before outbound), and ticketing then
+> fails with `AirTicketLLSRQ: FLT CHK DATE/TIME CONTINUITY OF FLTS` — the commit
+> succeeds but no ticket can be issued. Cancelling all + re-selling in date
+> order avoids this. (The lean approach only works if the PCC has the
+> **Automatic Segment Arrange** TJR flag enabled, which auto-sorts segments
+> after the sell; without that entitlement, use the full rebuild.)
+
 ```
 sabre-rest exchange-booking --body '{
   "pnrLocator": "ONOXSB",
   "originalTicketNumber": "0017360597321",
   "receivedFrom": "AGENT",
-  "cancelSegments": [2],          // the RETURN only — outbound (segment 1) is retained
-  "newSegments": [{ /* only the isBookingRequired:true return flight */
-    "origin": "ONT", "destination": "DFW",
-    "departureDateTime": "2026-07-23T23:59:00", "arrivalDateTime": "2026-07-24T05:30:00",
-    "marketingCarrier": "AA", "flightNumber": "3006", "bookingClass": "Q", "status": "NN" }],
+  "cancelSegments": [1, 2],         // ALL current segments
+  "newSegments": [                   // the WHOLE itinerary, in departure order
+    { "origin": "DFW", "destination": "ONT",
+      "departureDateTime": "2026-07-16T12:20:00", "arrivalDateTime": "2026-07-16T13:22:00",
+      "marketingCarrier": "AA", "flightNumber": "2239", "bookingClass": "Q", "status": "NN" },
+    { "origin": "LAX", "destination": "DFW",   // retained flight, re-sold
+      "departureDateTime": "2026-07-22T18:45:00", "arrivalDateTime": "2026-07-22T23:53:00",
+      "marketingCarrier": "AA", "flightNumber": "1669", "bookingClass": "N", "status": "NN" }
+  ],
   "bargainFinder": true,
   "priceTolerance": { "amountSpecified": 0,
     "acceptableIncrease": { "amount": 1000, "haltOnNonAcceptablePrice": true } },
@@ -252,14 +267,16 @@ sabre-rest exchange-booking --body '{
 }'
 ```
 
-Reservation segment numbers (`cancelSegments`) come from `getBooking` — the
-1-based position of each flight among `flights[]` (outbound = 1, return = 2 on
-a simple round trip).
+The reservation segment numbers for `cancelSegments` and the full flight detail
+for re-selling each segment both come from `getBooking` — segment numbers are
+the 1-based position among `flights[]`; re-sell every flight in the offer,
+ordered by `departureDateTime`.
 
-Verified in CERT 2026-06-15 (`scripts/flight-exchange-onejourney-commit-e2e.sh`):
-a DFW⇄LAX round trip, changing **only** the return — commit `Complete`,
-post-commit PNR keeps the outbound and swaps the return, reissued ticket
-issued.
+Verified in CERT 2026-06-15 (`scripts/flight-exchange-onejourney-commit-e2e.sh`,
+`--commit-strategy`): a DFW⇄LAX round trip changing **only the outbound** —
+the full rebuild commits and **tickets cleanly**, while the lean
+("cancel only the changed segment") path commits but fails ticketing with
+`CHK DATE/TIME CONTINUITY`.
 
 ### 4. Exchange Booking — `exchange-booking`
 
@@ -376,8 +393,11 @@ the NN path).
   round trip → reshop retaining the outbound journey via `flightItemId` →
   assert every offer keeps the pinned flight → cleanup)
 - `scripts/flight-exchange-onejourney-commit-e2e.sh` — selective-change **commit**
-  smoke test (change only the return → commit cancelling just that segment with
-  `bargainFinder` → assert the outbound survives → fulfill → cleanup)
+  smoke test: book a round trip, change one journey (`--change
+  outbound|return|both`) and commit it (`--commit-strategy full|minimal`),
+  assert the kept journey survives, then fulfill + cleanup. Demonstrates that
+  the full rebuild tickets cleanly while the lean path hits
+  `CHK DATE/TIME CONTINUITY`
 - `scripts/flight-reshop-flow.sh`, `scripts/exchange-booking-flow.sh`,
   `scripts/booking-ticket-lifecycle.sh` — runnable smoke tests for individual
   steps
