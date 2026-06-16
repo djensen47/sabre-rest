@@ -99,15 +99,13 @@ describe('toExchangeRequest', () => {
   it('builds AirBook with default HaltOnStatus and per-segment defaults', () => {
     const req = toExchangeRequest(BASE, { ...minimalInput, newSegments: [newSegment] });
     const rq = JSON.parse(req.body ?? '').ExchangeBookingRQ;
-    // Defaults match Sabre's canonical example verbatim: sell NN and halt on
-    // the NN-inclusive list. (A prior iteration sold GK and dropped NN to force
-    // a CERT commit; that produced an unticketable passive segment, so we
-    // reverted to the documented contract.)
+    // Sell NN, but NN is intentionally NOT in the halt list: a freshly-sold NN
+    // segment would otherwise trip the halt and abort the air-book step. Sell
+    // status stays NN (ticketable); the halt list just omits NN.
     expect(rq.AirBook.HaltOnStatus).toEqual([
       { Code: 'HL' },
       { Code: 'KK' },
       { Code: 'LL' },
-      { Code: 'NN' },
       { Code: 'NO' },
       { Code: 'UC' },
       { Code: 'US' },

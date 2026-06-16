@@ -42,35 +42,32 @@ const DEFAULT_NAME_NUMBER = '1.1';
 
 /**
  * Default `HaltOnStatus` codes — codes that should halt the sell+price
- * flow if the carrier returns them post-sell. This matches Sabre's
- * canonical `ExchangeBookingRQ` example verbatim (including `NN`).
+ * flow if the carrier returns them post-sell.
  *
- * History: a prior iteration dropped `NN` from this list and sold new
- * segments passively as `GK` (see {@link DEFAULT_SEGMENT_STATUS}) so the
- * exchange would commit in CERT. That deviates from the documented
- * contract: `GK` is a passive sell that never earns an airline record
- * locator, so the reissued document cannot be ticketed (CERT fails the
- * fulfill with `AirTicketLLSRQ: NEED AIRLINE PNR LOCATOR`). We have
- * reverted to the spec's documented configuration — sell `NN`, halt on
- * the spec's list — so the library sends what Sabre documents. Callers
- * can still override via `haltOnStatus` (including an empty array).
+ * `NN` is intentionally **excluded**. New segments are sold as `NN`
+ * ("need"; see {@link DEFAULT_SEGMENT_STATUS}), and the carrier does not
+ * always settle that to a confirmed status within the exchange call — so a
+ * freshly-sold segment is itself `NN` at the halt check. Including `NN` in
+ * the halt list therefore makes the exchange abort on its own just-sold
+ * segment (`EnhancedAirBookRQ: Flight … returned status code NN` →
+ * `HALT_ON_STATUS_RECEIVED` → "Unable to perform air booking step"). Sabre's
+ * canonical example lists `NN` here *and* sells `NN`, which is internally
+ * contradictory; we drop `NN` so the sell isn't treated as a failure.
+ * `HL`/`UC`/`US`/`NO` etc. remain genuine hard-stop conditions. Callers can
+ * override via `haltOnStatus` (including an empty array).
  */
-const DEFAULT_HALT_ON_STATUS: readonly string[] = ['HL', 'KK', 'LL', 'NN', 'NO', 'UC', 'US'];
+const DEFAULT_HALT_ON_STATUS: readonly string[] = ['HL', 'KK', 'LL', 'NO', 'UC', 'US'];
 
 /**
  * Default per-segment sell status when the caller omits `status`.
  *
  * `NN` ("need") is the documented request status and the value Sabre's
  * canonical example uses — the agent asks the carrier to confirm the new
- * segment. This is the correct, spec-faithful default.
- *
- * Note the trade-off this restores: in CERT the simulated carrier link
- * never settles the `NN` sell within the call, so the air-book step can
- * abort ("Unable to perform air booking step"). That is the documented
- * reality of the exchange path in CERT, not a library defect. The
- * passive alternative `GK` will commit but produces a segment with no
- * airline locator that cannot be ticketed — a dead end, not a fix.
- * Pass `status` per segment to override (e.g. `GK` for a passive sell).
+ * segment, which lets the reissued ticket be issued. This is the correct
+ * default. It only commits cleanly when `NN` is **not** in the halt list
+ * (see {@link DEFAULT_HALT_ON_STATUS}); otherwise the just-sold `NN`
+ * segment trips the halt and the air-book step aborts.
+ * Pass `status` per segment to override.
  */
 const DEFAULT_SEGMENT_STATUS = 'NN';
 
