@@ -566,6 +566,8 @@ EXCHANGE_BODY=$(echo "$CHOSEN" | jq \
       bookingClass: .bookingClass,
       status: $sellStatus
     }],
+    bargainFinder: true,
+    autoRedirect: true,
     priceTolerance: {
       amountSpecified: 0,
       acceptableIncrease: { amount: 500, haltOnNonAcceptablePrice: true }

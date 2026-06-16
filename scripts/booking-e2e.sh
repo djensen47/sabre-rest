@@ -151,7 +151,7 @@ step 1 "bargain-finder-max ($FROM → $TO on $DEP_DATE)"
 BFM_FILE=$(mktemp)
 trap 'rm -f "$TMP_ERR" "$BFM_FILE"' EXIT
 if ! $CLI bargain-finder-max "${BASE_URL_FLAG[@]}" \
-    --from "$FROM" --to "$TO" --departure-date "$DEP_DATE" \
+    --from "$FROM" --to "$TO" --departure-date "$DEP_DATE" --non-stop \
     >"$BFM_FILE" 2>"$TMP_ERR"; then
   cat "$TMP_ERR" >&2
   fail "bargain-finder-max"
