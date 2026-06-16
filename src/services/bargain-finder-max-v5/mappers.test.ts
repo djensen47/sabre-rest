@@ -611,7 +611,12 @@ describe('fareOffers', () => {
                                   endAirport: 'LHR',
                                   segments: [
                                     {
-                                      segment: { bookingCode: 'T', cabinCode: 'Y', mealCode: 'B' },
+                                      segment: {
+                                        bookingCode: 'T',
+                                        cabinCode: 'Y',
+                                        mealCode: 'B',
+                                        seatsAvailable: 9,
+                                      },
                                     },
                                   ],
                                 },
@@ -619,7 +624,15 @@ describe('fareOffers', () => {
                                   ref: 11,
                                   beginAirport: 'LHR',
                                   endAirport: 'JFK',
-                                  segments: [{ segment: { bookingCode: 'T', cabinCode: 'Y' } }],
+                                  segments: [
+                                    {
+                                      segment: {
+                                        bookingCode: 'T',
+                                        cabinCode: 'Y',
+                                        seatsAvailable: 0,
+                                      },
+                                    },
+                                  ],
                                 },
                               ],
                               baggageInformation: [
@@ -674,7 +687,7 @@ describe('fareOffers', () => {
           farePassengerType: 'ADT',
           beginAirport: 'JFK',
           endAirport: 'LHR',
-          segments: [{ bookingCode: 'T', cabinCode: 'Y', mealCode: 'B' }],
+          segments: [{ bookingCode: 'T', cabinCode: 'Y', mealCode: 'B', seatsAvailable: 9 }],
         },
         {
           fareBasisCode: 'TLEE4M',
@@ -683,7 +696,7 @@ describe('fareOffers', () => {
           farePassengerType: 'ADT',
           beginAirport: 'LHR',
           endAirport: 'JFK',
-          segments: [{ bookingCode: 'T', cabinCode: 'Y' }],
+          segments: [{ bookingCode: 'T', cabinCode: 'Y', seatsAvailable: 0 }],
         },
       ],
       baggageAllowances: [

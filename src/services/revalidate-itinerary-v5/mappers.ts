@@ -385,6 +385,7 @@ function buildFareComponentSegment(
   if (seg.bookingCode !== undefined) out.bookingCode = seg.bookingCode;
   if (seg.cabinCode !== undefined) out.cabinCode = seg.cabinCode;
   if (seg.mealCode !== undefined) out.mealCode = seg.mealCode;
+  if (typeof seg.seatsAvailable === 'number') out.seatsAvailable = seg.seatsAvailable;
   return out;
 }
 
