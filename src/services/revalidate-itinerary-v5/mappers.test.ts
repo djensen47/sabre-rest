@@ -296,7 +296,11 @@ describe('fromRevalidateResponse', () => {
                               ref: 1,
                               beginAirport: 'JFK',
                               endAirport: 'LHR',
-                              segments: [{ segment: { bookingCode: 'Y', cabinCode: 'Y' } }],
+                              segments: [
+                                {
+                                  segment: { bookingCode: 'Y', cabinCode: 'Y', seatsAvailable: 0 },
+                                },
+                              ],
                             },
                           ],
                           baggageInformation: [
@@ -387,7 +391,7 @@ describe('fromRevalidateResponse', () => {
     expect(fc?.governingCarrier).toBe('BA');
     expect(fc?.beginAirport).toBe('JFK');
     expect(fc?.endAirport).toBe('LHR');
-    expect(fc?.segments).toEqual([{ bookingCode: 'Y', cabinCode: 'Y' }]);
+    expect(fc?.segments).toEqual([{ bookingCode: 'Y', cabinCode: 'Y', seatsAvailable: 0 }]);
 
     // Baggage
     expect(pf?.baggageAllowances).toHaveLength(1);

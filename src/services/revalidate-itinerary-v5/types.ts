@@ -359,6 +359,18 @@ export interface FareComponentSegment {
   cabinCode?: string;
   /** Meal code, when populated. */
   mealCode?: string;
+  /**
+   * Number of seats Sabre reports as available to sell in this segment's
+   * booking class ({@link bookingCode}), when populated. This is the same
+   * per-RBD inventory count shown after each class on a classic Sabre
+   * availability display (e.g. `Y9`, `B9`, `M0`): a value of `0` means the
+   * class is closed — no inventory — even though the class is listed.
+   *
+   * Absent when Sabre did not report a count for the segment. Note this is
+   * the count Sabre returned at revalidation time; it is not a guarantee the
+   * seats are still sellable when the booking is attempted.
+   */
+  seatsAvailable?: number;
 }
 
 /** Baggage allowance attached to a priced passenger. */
