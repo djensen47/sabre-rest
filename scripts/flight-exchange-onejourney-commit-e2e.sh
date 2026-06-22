@@ -505,8 +505,17 @@ step 6 "select offer — change=$CHANGE (capture the FULL itinerary, kept + chan
 # sell". So we capture every flight in the offer (regardless of isBookingRequired),
 # with its booking class, and validate it changed the journey we asked for.
 EXPECT_CHANGED=2; [[ "$CHANGE" == "both" ]] && EXPECT_CHANGED=2 || EXPECT_CHANGED=1
+# Flight numbers of the ORIGINAL flights being replaced — the chosen offer's
+# new flight(s) must differ from these, otherwise the swap is a no-op and the
+# itinerary assertion can't tell old from new.
+if [[ "$CHANGE" == "both" ]]; then
+  ORIG_CHANGED_FNS="[$OUT_FLIGHT,$RET_FLIGHT]"
+else
+  ORIG_CHANGED_FNS="[$CHG_FN]"
+fi
 CHOSEN=$(echo "$RESHOP_OUT" | jq \
-  --argjson expectChanged "$EXPECT_CHANGED" '
+  --argjson expectChanged "$EXPECT_CHANGED" \
+  --argjson origChangedFns "$ORIG_CHANGED_FNS" '
   (.flights // []) as $flights | (.journeys // []) as $journeys
   | [ (.offers // [])[] | . as $o
       | [ ($o.journeyRefs // [])[] | . as $jref
@@ -514,6 +523,9 @@ CHOSEN=$(echo "$RESHOP_OUT" | jq \
           | ($flights[] | select(.id == $fref)) ] as $of
       | ([ $of[] | select(.isBookingRequired == true) ]) as $changed
       | select(($changed | length) == $expectChanged)
+      # Every changed flight must be a DIFFERENT flight number than the original
+      # it replaces — reject offers that "change" to the same flight.
+      | select([ $changed[] | select(.marketingFlightNumber as $fn | $origChangedFns | index($fn)) ] | length == 0)
       # Build a sell entry for EVERY flight in the offer; resolve booking class
       # from the fare segmentDetails (guard against a null class below).
       | [ $of[] | . as $fl

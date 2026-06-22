@@ -30,16 +30,26 @@
 # Offer selection (step 6): offers are filtered to single-journey,
 # single-flight options on a DIFFERENT flight number than the original,
 # carrying a totalPriceDifference and a bookingClassCode (from the
-# fareComponents segment details). Price-guaranteed (CAT-31) offers are
-# preferred. The chosen offer's flight + booking class feed the
-# exchange-booking newSegments.
+# fareComponents segment details). The survivors are RANKED (price-guaranteed
+# CAT-31 first; then the original ticket's booking class, which demonstrably
+# held inventory; then by largest absolute price delta) into an ordered list
+# of candidates — not a single pick. The chosen candidate's flight + booking
+# class feed the exchange-booking newSegments.
 #
-# Sell status (IMPORTANT): new segments are sold with the DOCUMENTED action
-# code NN ("need") by default — what Sabre's own ExchangeBookingRQ example
-# uses. In CERT the simulated carrier link does not settle an NN sell within
-# the call, so the air-book step typically aborts ("Unable to perform air
-# booking step"). THAT FAILURE IS THE DOCUMENTED-PATH RESULT we want to
-# capture for Sabre support — it is not a bug in the library.
+# Sell status + retry (IMPORTANT): new segments are sold with the DOCUMENTED
+# action code NN ("need") — what Sabre's own ExchangeBookingRQ example uses.
+# When the carrier does not settle an NN sell within the call, the segment
+# stays NN and the air-book step aborts ("Unable to perform air booking step"
+# / EnhancedAirBookRQ: Flight … returned status code NN). In CERT this happens
+# when the candidate's booking class has no sellable inventory (thin discount
+# buckets, especially late in the day). That is a property of the CHOSEN
+# CLASS, not a fixed wall: a different candidate in a class that still has
+# inventory confirms and commits. So instead of giving up on the first NN,
+# this script walks the ranked candidate list and RETRIES the commit on the
+# next candidate when one comes back with an air-book/NN abort (up to
+# --max-exchange-attempts). A genuine hard error (e.g. price tolerance) stops
+# the loop. Reshop carries no seat-count signal, so trying-then-reacting is
+# the only way to discover which class is sellable.
 #
 # The passive code GK *will* commit in CERT, but it is a dead end: a GK
 # segment never receives an airline record locator, so the reissued document
@@ -53,10 +63,12 @@
 #
 # Success criteria printed at the end:
 #   - exchange-booking applicationResults.status == Complete
-#   - amountReturned matches the reshop offer's grandTotal
+#   - amountReturned matches the chosen offer's grandTotal
 #   - post-commit PNR shows the NEW flight
-#   With the NN default these will typically NOT all be met in CERT; the run
-#   still succeeds at its real job — capturing the documented-path behaviour.
+#   The retry loop walks candidates until one commits Complete. If every
+#   candidate aborts at air-book (no sellable class found within
+#   --max-exchange-attempts), the run reports the last attempt's
+#   documented-path result and still produces a full log bundle for support.
 #
 # Prerequisites:
 #   1. `npm run build`
@@ -94,11 +106,22 @@
 #                                 airline locator on the segment is
 #                                 asynchronous, so an instant fulfill never
 #                                 gives it a chance to arrive.
+#   --max-exchange-attempts <n>   Maximum number of ranked candidates to try
+#                                 committing before giving up (default: 6).
+#                                 Each air-book/NN abort advances to the next
+#                                 candidate; a hard error stops immediately.
+#   --force-class <code>          Diagnostic: keep only reshop offers in this
+#                                 booking class (e.g. V) so one class can be
+#                                 tested in isolation. Use to check whether a
+#                                 specific class actually commits or aborts on
+#                                 a given route/date, rather than letting the
+#                                 ranking pick. Combine with
+#                                 --max-exchange-attempts to bound the probes.
 #   --require-price-difference    Only select reshop offers with a non-zero
 #                                 price difference (an actual add-collect or
-#                                 refund), choosing the largest. Use to test
-#                                 the money path; without it, even ($0)
-#                                 exchanges are eligible and often chosen.
+#                                 refund), ranking the largest first. Use to
+#                                 test the money path; without it, even ($0)
+#                                 exchanges are eligible candidates too.
 #   --no-cleanup                  Leave the PNR/tickets in place (debugging)
 #   --base-url <url>              Override SABRE_BASE_URL
 #   -h, --help                    Show this help
@@ -127,12 +150,14 @@ CARD_EXPIRY="2027-12"
 CARD_TYPE="VI"
 SELL_STATUS="NN"
 FULFILL_DELAY=15
+MAX_EXCHANGE_ATTEMPTS=6
+FORCE_CLASS=""
 NO_CLEANUP=0
 BASE_URL=""
 REQUIRE_PRICE_DIFF=0
 
 usage() {
-  sed -n '2,104p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,127p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -154,6 +179,8 @@ while [[ $# -gt 0 ]]; do
     --card-type) CARD_TYPE="${2:-}"; shift 2 ;;
     --sell-status) SELL_STATUS="${2:-}"; shift 2 ;;
     --fulfill-delay) FULFILL_DELAY="${2:-}"; shift 2 ;;
+    --max-exchange-attempts) MAX_EXCHANGE_ATTEMPTS="${2:-}"; shift 2 ;;
+    --force-class) FORCE_CLASS="${2:-}"; shift 2 ;;
     --require-price-difference) REQUIRE_PRICE_DIFF=1; shift ;;
     --no-cleanup) NO_CLEANUP=1; shift ;;
     --base-url) BASE_URL="${2:-}"; shift 2 ;;
@@ -484,9 +511,14 @@ if [[ -d .local ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-step 6 "select offer (different flight, single segment, priceable, CAT-31 preferred)"
-CHOSEN=$(echo "$RESHOP_OUT" | jq \
-  --arg origFlight "$FLIGHT_NUM" --argjson requireDiff "$REQUIRE_PRICE_DIFF" '
+step 6 "rank candidates (CAT-31 first, then original class, then largest delta)"
+# Build a RANKED LIST of eligible offers, not a single pick. Step 7 walks this
+# list and retries the commit on the next candidate when one aborts at the
+# air-book step (the symptom of a booking class with no sellable inventory).
+CANDIDATES=$(echo "$RESHOP_OUT" | jq -c \
+  --arg origFlight "$FLIGHT_NUM" --arg origClass "$BOOKING_CLASS" \
+  --arg forceClass "$FORCE_CLASS" \
+  --argjson requireDiff "$REQUIRE_PRICE_DIFF" '
   (.flights // []) as $flights
   | (.journeys // []) as $journeys
   | [ (.offers // [])[]
@@ -501,6 +533,10 @@ CHOSEN=$(echo "$RESHOP_OUT" | jq \
       | ([ $o.items[0].fares[0].fareComponents[]?.segmentDetails[]?
            | select(.flightRef == $fref) ] | first) as $sd
       | select($sd.bookingClassCode != null)
+      # Diagnostic: when --force-class is set, keep ONLY offers in that booking
+      # class so a single class can be tested in isolation (e.g. reproduce the
+      # afternoon "class V aborts" scenario, or pin the control class S).
+      | select($forceClass == "" or $sd.bookingClassCode == $forceClass)
       # When --require-price-difference is set, keep only offers whose
       # grandTotal is a non-zero amount (an actual add-collect or refund).
       | select($requireDiff == 0 or ((.totalPriceDifference.grandTotal | tonumber) != 0))
@@ -519,13 +555,19 @@ CHOSEN=$(echo "$RESHOP_OUT" | jq \
           bookingClass: $sd.bookingClassCode
         }
     ]
-  # Prefer price-guaranteed; within that, prefer the largest absolute delta so
-  # a --require-price-difference run lands on a meaningful add-collect.
+  # Rank: price-guaranteed (CAT-31) first; then offers in the ORIGINAL ticket
+  # class (it demonstrably held inventory, so it is the most likely to settle
+  # an NN sell); then largest absolute delta so a --require-price-difference
+  # run still lands on a meaningful add-collect.
   | sort_by([ (if .isPriceGuaranteed then 0 else 1 end),
-              (- (.grandTotal | tonumber | fabs)) ])
-  | first // empty')
-if [[ -z "$CHOSEN" ]]; then
-  if [[ "$REQUIRE_PRICE_DIFF" == "1" ]]; then
+              (if .bookingClass == $origClass then 0 else 1 end),
+              (- (.grandTotal | tonumber | fabs)) ])')
+CAND_COUNT=$(echo "$CANDIDATES" | jq 'length')
+if [[ "${CAND_COUNT:-0}" -eq 0 ]] 2>/dev/null; then
+  if [[ -n "$FORCE_CLASS" ]]; then
+    echo "error: no offer in forced class '$FORCE_CLASS' survived selection" >&2
+    echo "       (reshop returned no different-flight offer in that class for this route/date)" >&2
+  elif [[ "$REQUIRE_PRICE_DIFF" == "1" ]]; then
     echo "error: no offer with a non-zero price difference survived selection" >&2
     echo "       (try a different --new-date or route; all reshop offers may be even exchanges)" >&2
   else
@@ -533,87 +575,132 @@ if [[ -z "$CHOSEN" ]]; then
   fi
   fail "offer selection"
 fi
-echo "$CHOSEN" | jq -r '"chosen offer: \(.offerId)
-  new flight:     \(.carrier)\(.flightNumber) \(.origin)→\(.destination) \(.departureDateTime) class=\(.bookingClass)
-  price delta:    \(.chargeType) \(.grandTotal) \(.currency)  priceGuaranteed=\(.isPriceGuaranteed)"'
-RESHOP_GRAND_TOTAL=$(echo "$CHOSEN" | jq -r '.grandTotal')
+echo "eligible candidates: $CAND_COUNT${FORCE_CLASS:+ (forced to class $FORCE_CLASS)} (will try up to $MAX_EXCHANGE_ATTEMPTS)"
+echo "$CANDIDATES" | jq -r 'to_entries | .[] | "  [\(.key)] \(.value.carrier)\(.value.flightNumber) \(.value.departureDateTime) class=\(.value.bookingClass)  delta=\(.value.chargeType) \(.value.grandTotal) \(.value.currency)  priceGuar=\(.value.isPriceGuaranteed)"'
 
 # ---------------------------------------------------------------------------
-step 7 "exchange-booking — COMMIT (confirm + FOP card, sell status $SELL_STATUS)"
-# With the documented NN sell, CERT's simulated carrier link typically does
-# not settle the new segment within the call, so the air-book step aborts and
-# the exchange does NOT reach status Complete. That is the documented-path
-# behaviour this run exists to capture for Sabre support — it is recorded in
-# the log bundle and reported below, not treated as a script crash. (Passing
-# --sell-status GK reproduces the old passive sell, which commits but yields
-# an unticketable segment.) The price-tolerance knobs mirror production.
-EXCHANGE_BODY=$(echo "$CHOSEN" | jq \
-  --arg pnr "$CONFIRMATION_ID" --arg ticket "$ORIG_TICKET" \
-  --arg cardType "$CARD_TYPE" --arg cardNumber "$CARD_NUMBER" \
-  --arg cardExpiry "$CARD_EXPIRY" --arg sellStatus "$SELL_STATUS" \
-  '{
-    pnrLocator: $pnr,
-    originalTicketNumber: $ticket,
-    receivedFrom: "E2E SMOKE",
-    cancelSegments: [1],
-    newSegments: [{
-      origin: .origin,
-      destination: .destination,
-      departureDateTime: .departureDateTime,
-      arrivalDateTime: .arrivalDateTime,
-      marketingCarrier: .carrier,
-      flightNumber: .flightNumber,
-      bookingClass: .bookingClass,
-      status: $sellStatus
-    }],
-    bargainFinder: true,
-    autoRedirect: true,
-    priceTolerance: {
-      amountSpecified: 0,
-      acceptableIncrease: { amount: 500, haltOnNonAcceptablePrice: true }
-    },
-    confirm: {
-      formOfPayment: {
-        type: "card",
-        vendorCode: $cardType,
-        number: $cardNumber,
-        expireDate: $cardExpiry
-      }
-    }
-  }')
-
-# A transport-level failure (non-2xx) is still a hard fail. Application-level
-# outcomes ride back on HTTP 200 in applicationResults, so a successful CLI
-# call here can still represent an air-book abort — which we inspect below.
-if ! EXCHANGE_OUT=$(run_cli $CLI exchange-booking "${BASE_URL_FLAG[@]}" --body "$EXCHANGE_BODY"); then
-  cat "$TMP_ERR" >&2
-  fail "exchange-booking (commit — transport error)"
-fi
-
-EX_STATUS=$(echo "$EXCHANGE_OUT" | jq -r '.applicationResults.status // "(none)"')
-EX_ERRORS=$(echo "$EXCHANGE_OUT" | jq -r '.applicationResults.errors | length // 0')
-AMOUNT_RETURNED=$(echo "$EXCHANGE_OUT" | jq -r '.exchangeConfirmations[0].amountReturned // empty')
-PQR_NUMBER=$(echo "$EXCHANGE_OUT" | jq -r '.exchangeConfirmations[0].pqrNumber // "?"')
-echo "applicationResults.status: $EX_STATUS"
-echo "PQR: $PQR_NUMBER  amountReturned: ${AMOUNT_RETURNED:-?}"
-
-# COMMIT_COMPLETE gates the post-commit steps (8–9). When the commit does not
-# reach Complete (the expected NN result in CERT), we record the diagnostic,
-# skip the verify/fulfill steps that assume a swapped segment, and proceed to
-# cleanup so no ticket leaks.
+step 7 "exchange-booking — COMMIT (sell status $SELL_STATUS, retry across candidates)"
+# Walk the ranked candidate list, committing each in turn. A candidate whose
+# booking class has no sellable inventory comes back with an air-book abort
+# (the NN sell never settles): applicationResults is Incomplete and carries
+# WARN.SP.HALT_ON_STATUS_RECEIVED / "returned status code NN" /
+# "Unable to perform air booking step". That is NOT a hard failure — it just
+# means this class is closed, so we advance to the next candidate. Any other
+# non-Complete outcome (e.g. price tolerance exceeded) is a genuine error and
+# stops the loop. The price-tolerance knobs mirror production.
 COMMIT_COMPLETE=0
 COMMIT_SUMMARY=""
-if [[ "$EX_STATUS" == "Complete" && "$EX_ERRORS" == "0" ]]; then
-  COMMIT_COMPLETE=1
-  COMMIT_SUMMARY="Complete (PQR $PQR_NUMBER, amountReturned ${AMOUNT_RETURNED:-?})"
-else
-  COMMIT_SUMMARY="NOT Complete (status=$EX_STATUS, ${EX_ERRORS} error(s)) — documented-path result, captured for support"
+CHOSEN=""
+RESHOP_GRAND_TOTAL=""
+EXCHANGE_OUT=""
+EX_STATUS=""
+EX_ERRORS=0
+AMOUNT_RETURNED=""
+PQR_NUMBER="?"
+ATTEMPTS=0
+LAST_ABORT_SUMMARY=""
+
+TOTAL_CAND=$CAND_COUNT
+(( TOTAL_CAND > MAX_EXCHANGE_ATTEMPTS )) && TOTAL_CAND=$MAX_EXCHANGE_ATTEMPTS
+
+for (( idx=0; idx<TOTAL_CAND; idx++ )); do
+  CAND=$(echo "$CANDIDATES" | jq -c ".[$idx]")
+  ATTEMPTS=$(( idx + 1 ))
   echo ""
-  echo "exchange did not complete (sell status $SELL_STATUS):"
+  echo "  attempt $ATTEMPTS/$TOTAL_CAND: $(echo "$CAND" | jq -r '"\(.carrier)\(.flightNumber) \(.departureDateTime) class=\(.bookingClass) delta=\(.grandTotal) \(.currency)"')"
+
+  EXCHANGE_BODY=$(echo "$CAND" | jq \
+    --arg pnr "$CONFIRMATION_ID" --arg ticket "$ORIG_TICKET" \
+    --arg cardType "$CARD_TYPE" --arg cardNumber "$CARD_NUMBER" \
+    --arg cardExpiry "$CARD_EXPIRY" --arg sellStatus "$SELL_STATUS" \
+    '{
+      pnrLocator: $pnr,
+      originalTicketNumber: $ticket,
+      receivedFrom: "E2E SMOKE",
+      cancelSegments: [1],
+      newSegments: [{
+        origin: .origin,
+        destination: .destination,
+        departureDateTime: .departureDateTime,
+        arrivalDateTime: .arrivalDateTime,
+        marketingCarrier: .carrier,
+        flightNumber: .flightNumber,
+        bookingClass: .bookingClass,
+        status: $sellStatus
+      }],
+      bargainFinder: true,
+      autoRedirect: true,
+      priceTolerance: {
+        amountSpecified: 0,
+        acceptableIncrease: { amount: 500, haltOnNonAcceptablePrice: true }
+      },
+      confirm: {
+        formOfPayment: {
+          type: "card",
+          vendorCode: $cardType,
+          number: $cardNumber,
+          expireDate: $cardExpiry
+        }
+      }
+    }')
+
+  # A transport-level failure (non-2xx) is still a hard fail. Application-level
+  # outcomes ride back on HTTP 200 in applicationResults, so a successful CLI
+  # call here can still represent an air-book abort — which we inspect below.
+  if ! EXCHANGE_OUT=$(run_cli $CLI exchange-booking "${BASE_URL_FLAG[@]}" --body "$EXCHANGE_BODY"); then
+    cat "$TMP_ERR" >&2
+    fail "exchange-booking (commit — transport error)"
+  fi
+
+  EX_STATUS=$(echo "$EXCHANGE_OUT" | jq -r '.applicationResults.status // "(none)"')
+  EX_ERRORS=$(echo "$EXCHANGE_OUT" | jq -r '.applicationResults.errors | length // 0')
+  AMOUNT_RETURNED=$(echo "$EXCHANGE_OUT" | jq -r '.exchangeConfirmations[0].amountReturned // empty')
+  PQR_NUMBER=$(echo "$EXCHANGE_OUT" | jq -r '.exchangeConfirmations[0].pqrNumber // "?"')
+  echo "  applicationResults.status: $EX_STATUS"
+
+  if [[ "$EX_STATUS" == "Complete" && "$EX_ERRORS" == "0" ]]; then
+    COMMIT_COMPLETE=1
+    CHOSEN="$CAND"
+    RESHOP_GRAND_TOTAL=$(echo "$CAND" | jq -r '.grandTotal')
+    COMMIT_SUMMARY="Complete on attempt $ATTEMPTS/$TOTAL_CAND (PQR $PQR_NUMBER, amountReturned ${AMOUNT_RETURNED:-?})"
+    echo "  PQR: $PQR_NUMBER  amountReturned: ${AMOUNT_RETURNED:-?}"
+    break
+  fi
+
+  # Did this attempt abort specifically at the air-book step (class closed)?
+  # If so, it is retryable — move to the next candidate. Match on the
+  # diagnostic codes/strings Sabre returns for an unsettled NN sell.
+  if echo "$EXCHANGE_OUT" | jq -e '
+      [ .applicationResults | (.errors // []) + (.warnings // [])
+        | .[] | (.systemSpecificResults // [])[] | (.messages // [])[]
+        | (.code // ""), (.value // "") ] | any(
+          test("HALT_ON_STATUS_RECEIVED"; "i")
+          or test("Unable to perform air booking step"; "i")
+          or test("returned status code NN"; "i")) ' >/dev/null 2>&1; then
+    LAST_ABORT_SUMMARY="air-book abort on $(echo "$CAND" | jq -r '"\(.carrier)\(.flightNumber) class=\(.bookingClass)"') (class likely has no sellable inventory)"
+    echo "  -> $LAST_ABORT_SUMMARY; trying next candidate"
+    continue
+  fi
+
+  # Any other non-Complete outcome is a genuine error: stop and report it.
+  echo ""
+  echo "exchange failed with a non-retryable error (status=$EX_STATUS):"
   echo "$EXCHANGE_OUT" | jq -r '(.applicationResults.errors // [])
     | .[]? | "  [\(.type // "?")] " + ((.systemSpecificResults // [])
         | map((.messages // []) | map(.value // .code // "") | join(" ")) | join(" | "))' 2>/dev/null \
     || echo "  (see $LOG_DIR for the raw response)"
+  fail "exchange-booking (commit — non-retryable error on attempt $ATTEMPTS)"
+done
+
+if [[ "$COMMIT_COMPLETE" != "1" ]]; then
+  # Every tried candidate aborted at air-book — no sellable class found within
+  # the attempt budget. Record the documented-path diagnostic; steps 8–9 are
+  # skipped below and cleanup still runs so no ticket leaks.
+  COMMIT_SUMMARY="NOT Complete after $ATTEMPTS attempt(s): every candidate aborted at air-book (no sellable class found) — documented-path result, captured for support"
+  CHOSEN=$(echo "$CANDIDATES" | jq -c '.[0]')
+  RESHOP_GRAND_TOTAL=$(echo "$CHOSEN" | jq -r '.grandTotal')
+  echo ""
+  echo "exchange did not complete on any of $ATTEMPTS candidate(s); last: ${LAST_ABORT_SUMMARY:-see $LOG_DIR}"
 fi
 
 FULFILL_RESULT="n/a (commit did not complete)"
@@ -621,9 +708,9 @@ NEW_FLIGHT_NUMS=""
 NEW_TICKET=""
 
 if [[ "$COMMIT_COMPLETE" != "1" ]]; then
-  # The commit did not reach Complete (expected with the NN default in CERT).
-  # Steps 8–9 assume a swapped segment / stored PQR, so skip them and go to
-  # cleanup. The full request/response for the failed commit is in the bundle.
+  # No candidate committed (every tried class aborted at air-book). Steps 8–9
+  # assume a swapped segment / stored PQR, so skip them and go to cleanup. The
+  # full request/response for each failed attempt is in the log bundle.
   step 8 "get-booking — SKIPPED (commit did not complete)"
   step 9 "fulfill-tickets — SKIPPED (commit did not complete)"
 else
@@ -736,6 +823,7 @@ echo "original ticket:      $ORIG_TICKET (${CARRIER}${FLIGHT_NUM} $DEP_DATE)"
 echo "chosen offer:         $(echo "$CHOSEN" | jq -r '"\(.carrier)\(.flightNumber) \(.departureDateTime)"')"
 echo "reshop grandTotal:    $RESHOP_GRAND_TOTAL"
 echo "sell status:          $SELL_STATUS"
+echo "candidates tried:     $ATTEMPTS of $CAND_COUNT eligible (cap $MAX_EXCHANGE_ATTEMPTS)"
 echo "exchange commit:      $COMMIT_SUMMARY"
 if [[ "$COMMIT_COMPLETE" == "1" ]]; then
   if [[ -n "$AMOUNT_RETURNED" && "$AMOUNT_RETURNED" == "$RESHOP_GRAND_TOTAL" ]]; then
