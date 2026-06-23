@@ -319,8 +319,60 @@ export interface FlightReshopTotalPrice {
   currencyCode?: string;
   /** Total tax charged on change fees. */
   totalTaxOnFee?: string;
-  /** Total change/penalty fee associated with the exchange. */
+  /**
+   * Total change/penalty fee associated with the exchange.
+   *
+   * Set only on the offer-level {@link FlightReshopOffer.totalPriceDifference}
+   * (Sabre's `TotalPrice`), where the wire value is a single decimal string.
+   * On the fare-level {@link FlightReshopOfferFare.priceDifference} the fee is
+   * a per-currency breakdown surfaced as {@link fees} instead.
+   */
   totalFee?: string;
+  /**
+   * Per-currency breakdown of the change/penalty fee. Set only on the
+   * fare-level {@link FlightReshopOfferFare.priceDifference} (Sabre's
+   * `ExchangeTicketCharge.totalFee.fees`); absent on the offer-level
+   * {@link totalFee}. Omitted when there are no fees.
+   */
+  fees?: readonly FlightReshopFee[];
+  /**
+   * Per-tax-code differences associated with the exchange. Set only on the
+   * fare-level {@link FlightReshopOfferFare.priceDifference} (Sabre's
+   * `ExchangeTicketCharge.taxes`).
+   */
+  taxes?: readonly FlightReshopTax[];
+  /**
+   * If `true`, the residual amount is forfeited by exchange rules. Set only on
+   * the fare-level {@link FlightReshopOfferFare.priceDifference}; omitted by
+   * Sabre when not applicable.
+   */
+  isResidualAmountForfeited?: boolean;
+}
+
+/**
+ * A per-fee breakdown entry of an exchange/penalty fee. Mirrors Sabre's
+ * `ExchangeValue`; both fields are required on the wire.
+ */
+export interface FlightReshopFee {
+  /** Monetary amount of the fee (decimal string). */
+  amount: string;
+  /** Three-letter ISO 4217 currency code. */
+  currencyCode: string;
+}
+
+/**
+ * One tax-difference line associated with an exchange. Mirrors Sabre's
+ * `ExchangeTax`.
+ */
+export interface FlightReshopTax {
+  /** The tax code (e.g. `XY`). */
+  taxCode: string;
+  /** Monetary amount of the tax difference (decimal string). */
+  amount?: string;
+  /** Three-letter ISO 4217 currency code. */
+  currencyCode?: string;
+  /** If `true`, the tax difference amount has already been paid. */
+  isPaid?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -361,34 +413,83 @@ export interface FlightReshopFareComponentSegmentDetail {
   bookingClassCode?: string;
   /** Cabin name. May be `Unknown` on the response side. */
   cabinName?: FlightReshopCabinName | 'Unknown';
+  /**
+   * If `true`, an availability break occurs after this flight — i.e. it should
+   * not be married to the subsequent flight.
+   */
+  isAvailabilityBreak?: boolean;
+  /** Meal-service code for this segment (e.g. `VGML`). */
+  mealCode?: string;
+  /**
+   * Reference (UUID) to the checked-baggage offer attribute that applies to
+   * this segment, resolving into {@link FlightReshopOutput.offerAttributes}'s
+   * `checkedBaggageItems[].id`.
+   */
+  checkedBaggageRef?: string;
+}
+
+/**
+ * Branded-fare detail associated with a fare component. Mirrors Sabre's
+ * `FareBrand`.
+ */
+export interface FlightReshopFareBrand {
+  /** Brand code (e.g. `ECOFLEX`). */
+  code?: string;
+  /** Human-readable brand name (e.g. `ECO FLEX`). */
+  name?: string;
+  /** Identifier of the brand program (e.g. `CFFLH`). */
+  programId?: string;
 }
 
 /**
  * A fare component of a fare calculated for the offer. v1 surfaces the
- * fare basis plus the per-flight booking details needed to sell the
- * offer's flights in a follow-up exchange; richer attributes (brand,
- * account code, baggage refs) are not exposed yet.
+ * fare basis, branded-fare detail and account code, plus the per-flight
+ * booking details needed to sell the offer's flights in a follow-up
+ * exchange.
  */
 export interface FlightReshopFareComponent {
   /** Fare basis code associated with the component (e.g. `ABCDE10`). */
   fareBasisCode?: string;
+  /** Account code associated with the component (e.g. `ACC33`). */
+  accountCode?: string;
+  /** Branded-fare detail associated with the component. */
+  brand?: FlightReshopFareBrand;
   /** Per-flight booking details for the flights this component covers. */
   segmentDetails?: readonly FlightReshopFareComponentSegmentDetail[];
 }
 
 /**
+ * Type of private fare a fare was generated under. Mirrors Sabre's
+ * `PrivateFareIndicatorEnum`.
+ */
+export type FlightReshopPrivateFare = 'Has Program Code' | 'Ineligible For Ticketing' | 'Any';
+
+/**
  * A priced fare within an offer item, scoped to one or more travelers.
- * v1 surfaces the traveler list, the per-fare price difference, and the
- * fare components carrying the booking class per flight — the pieces
- * needed to chain an offer into Exchange Booking.
+ * v1 surfaces the traveler list, the per-fare price difference, the fare
+ * components carrying the booking class per flight, and the flexibility
+ * refs linking the fare to {@link FlightReshopOutput.offerAttributes} —
+ * the pieces needed to chain an offer into Exchange Booking.
  */
 export interface FlightReshopOfferFare {
   /** Travelers this fare applies to. */
   travelers?: readonly FlightReshopOfferTraveler[];
   /** Exchange/reissue cost for the travelers in this fare. */
   priceDifference?: FlightReshopTotalPrice;
+  /** Type of private fare this fare was generated under, if any. */
+  privateFare?: FlightReshopPrivateFare;
   /** Fare components with the booking class per referenced flight. */
   fareComponents?: readonly FlightReshopFareComponent[];
+  /**
+   * Reference (UUID) to the refundability rule for this fare, resolving into
+   * {@link FlightReshopOfferAttributes.refundabilityItems}'s `id`.
+   */
+  refundabilityRef?: string;
+  /**
+   * Reference (UUID) to the change rule for this fare, resolving into
+   * {@link FlightReshopOfferAttributes.changeItems}'s `id`.
+   */
+  changeRef?: string;
 }
 
 /** A priceable item within an offer (one or more fares). */
@@ -446,6 +547,27 @@ export interface FlightReshopOffer {
 }
 
 /**
+ * A hidden (en-route) stop on a flight — a scheduled stop that is not a
+ * connection point. Mirrors Sabre's `HiddenStop`.
+ */
+export interface FlightReshopHiddenStop {
+  /** Three-letter IATA airport code of the hidden stop. */
+  airportCode: string;
+  /** Scheduled departure date from the stop, `YYYY-MM-DD`. */
+  departureDate?: string;
+  /** Scheduled departure time from the stop, `HH:MM`. */
+  departureTime?: string;
+  /** Scheduled arrival date at the stop, `YYYY-MM-DD`. */
+  arrivalDate?: string;
+  /** Scheduled arrival time at the stop, `HH:MM`. */
+  arrivalTime?: string;
+  /** IATA aircraft type designator code for the onward leg. */
+  aircraftTypeCode?: string;
+  /** Layover duration at the stop, in minutes. */
+  durationInMinutes?: number;
+}
+
+/**
  * A flight used to construct exchange offers. Referenced from
  * {@link FlightReshopJourneyResult.flightRefs} by `id`.
  */
@@ -476,6 +598,8 @@ export interface FlightReshopFlight {
   aircraftTypeCode?: string;
   /** Flight duration in minutes. */
   durationInMinutes?: number;
+  /** En-route hidden stops on this flight, if any. */
+  hiddenStops?: readonly FlightReshopHiddenStop[];
   /** If `true`, an aircraft equipment change occurs. */
   hasChangeOfGauge?: boolean;
   /** If `true`, this segment is married to the previous one. */
@@ -499,6 +623,171 @@ export interface FlightReshopJourneyResult {
   arrivalAirportCode?: string;
   /** Journey duration in minutes. */
   durationInMinutes?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Output — offer attributes (baggage / flexibility)
+// ---------------------------------------------------------------------------
+
+/**
+ * Free-text definition of a baggage item (allowance or charge). Mirrors
+ * Sabre's `BaggageItemDefinition`.
+ */
+export interface FlightReshopBaggageItemDefinition {
+  /** Free-text descriptions of the baggage item. */
+  description?: readonly string[];
+}
+
+/**
+ * One free-baggage allowance applicable to a portion of travel. Mirrors
+ * Sabre's `BaggageAllowances`.
+ */
+export interface FlightReshopBaggageAllowance {
+  /** Maximum number of pieces allowed free of charge. */
+  numberOfPieces?: number;
+  /** Maximum weight per piece in pounds; absent when no weight limit applies. */
+  maximumWeightInPounds?: number;
+  /** Maximum weight per piece in kilograms; absent when no weight limit applies. */
+  maximumWeightInKilograms?: number;
+  /** Definition of the included baggage item. */
+  bagDefinition?: FlightReshopBaggageItemDefinition;
+  /** Two-letter IATA code of the airline whose baggage provisions apply. */
+  airlineCode?: string;
+}
+
+/**
+ * One excess-baggage charge applicable to a portion of travel. Mirrors
+ * Sabre's `BaggageCharges`.
+ */
+export interface FlightReshopBaggageCharge {
+  /** First piece (inclusive) in the range the charge covers, counted past the free allowance. */
+  firstPiece?: number;
+  /** Last piece (inclusive) in the range the charge covers. */
+  lastPiece?: number;
+  /** Monetary amount of the charge (decimal string). */
+  amount?: string;
+  /** Three-letter ISO 4217 currency code for `amount`. */
+  currencyCode?: string;
+  /** Definition of the charged baggage item. */
+  bagDefinition?: FlightReshopBaggageItemDefinition;
+  /** Two-letter IATA code of the airline whose baggage provisions apply. */
+  airlineCode?: string;
+}
+
+/**
+ * A checked-baggage offer attribute. Its `id` is referenced from
+ * {@link FlightReshopFareComponentSegmentDetail.checkedBaggageRef}. Mirrors
+ * Sabre's `Baggage`.
+ */
+export interface FlightReshopCheckedBaggage {
+  /** UUID of the attribute, referenced by `checkedBaggageRef`. */
+  id: string;
+  /** Free-allowance entries per portion of travel. */
+  allowances?: readonly FlightReshopBaggageAllowance[];
+  /** Excess-baggage charge entries per portion of travel. */
+  charges?: readonly FlightReshopBaggageCharge[];
+}
+
+/**
+ * A voluntary change/refund rule, with whether it is permitted and the
+ * applicable charge range. Mirrors Sabre's `FlexibilityRule`.
+ */
+export interface FlightReshopFlexibilityRule {
+  /** If `true`, change or refund is permitted (possibly free, i.e. charge 0). */
+  isPermitted: boolean;
+  /** Maximum cost of the change or refund (decimal string). */
+  maxCharge?: string;
+  /** Minimum cost of the change or refund (decimal string). */
+  minCharge?: string;
+  /** Three-letter ISO 4217 currency code. */
+  currencyCode?: string;
+}
+
+/**
+ * Refund or change charges for a fare, split by before/after departure.
+ * The `id` is referenced from {@link FlightReshopOfferFare.refundabilityRef}
+ * (when in `refundabilityItems`) or `changeRef` (when in `changeItems`).
+ * Mirrors Sabre's `RefundChangeCharges`.
+ */
+export interface FlightReshopRefundChangeCharges {
+  /** UUID of the attribute, referenced by `refundabilityRef` / `changeRef`. */
+  id: string;
+  /** Charges applicable before departure. */
+  beforeDeparture?: FlightReshopFlexibilityRule;
+  /** Charges applicable after departure. */
+  afterDeparture?: FlightReshopFlexibilityRule;
+}
+
+/**
+ * Top-level offer attributes shared across the response's offers: checked
+ * baggage, refundability and change rules. Fares and segments link into
+ * these by UUID ref. Mirrors Sabre's `OfferAttributes`.
+ */
+export interface FlightReshopOfferAttributes {
+  /** Checked-baggage attributes, referenced by `checkedBaggageRef`. */
+  checkedBaggageItems?: readonly FlightReshopCheckedBaggage[];
+  /** Refundability rules, referenced by `refundabilityRef`. */
+  refundabilityItems?: readonly FlightReshopRefundChangeCharges[];
+  /** Change rules, referenced by `changeRef`. */
+  changeItems?: readonly FlightReshopRefundChangeCharges[];
+}
+
+// ---------------------------------------------------------------------------
+// Output — associated EMDs
+// ---------------------------------------------------------------------------
+
+/**
+ * Reason-for-issuance-code (RFIC) name of an EMD. Mirrors Sabre's
+ * `ReasonForIssuanceEnum`.
+ */
+export type FlightReshopReasonForIssuance =
+  | 'Air Transportation'
+  | 'Surface Transportation Non Air Services'
+  | 'Baggage'
+  | 'Financial Impact'
+  | 'Airport Services'
+  | 'Merchandise'
+  | 'Inflight Services'
+  | 'Individual Airline Use'
+  | 'Unknown';
+
+/**
+ * Refund eligibility of an EMD. `Re-use` means non-refundable but the value
+ * may be reapplied to a future purchase; `Unknown` means it could not be
+ * determined. Mirrors Sabre's `RefundEligibilityEnum`.
+ */
+export type FlightReshopRefundEligibility = 'Refundable' | 'Non-refundable' | 'Re-use' | 'Unknown';
+
+/**
+ * One associated Electronic Miscellaneous Document (EMD-A). Mirrors Sabre's
+ * `ElectronicMiscellaneousDocumentToExchange`.
+ */
+export interface FlightReshopElectronicMiscellaneousDocument {
+  /** The EMD-A number. */
+  number?: string;
+  /** Reason-for-issuance code (RFIC) defined by IATA (e.g. `C`). */
+  reasonForIssuanceCode?: string;
+  /** Name of the reason-for-issuance code. */
+  reasonForIssuanceName?: FlightReshopReasonForIssuance;
+  /** Service-type-driven refund eligibility of the document. */
+  refundEligibility?: FlightReshopRefundEligibility;
+  /** Unused monetary amount of the document (decimal string). */
+  unusedAmount?: string;
+  /** Complete monetary amount of the document (decimal string). */
+  total?: string;
+  /** Three-letter ISO 4217 currency code. */
+  currencyCode?: string;
+}
+
+/**
+ * EMD-As associated with a particular electronic flight ticket. Mirrors
+ * Sabre's `AssociatedElectronicMiscellaneousDocuments`.
+ */
+export interface FlightReshopAssociatedEmds {
+  /** Electronic flight ticket number the EMD-As are associated with. */
+  ticketNumber?: string;
+  /** The associated EMD-As. */
+  electronicMiscellaneousDocuments?: readonly FlightReshopElectronicMiscellaneousDocument[];
 }
 
 /**
@@ -541,6 +830,17 @@ export interface FlightReshopOutput {
   numberOfOffers?: number;
   /** The priceable exchange offers. */
   offers?: readonly FlightReshopOffer[];
+  /**
+   * Offer attributes (checked baggage, refundability, change rules) shared
+   * across the offers and linked to fares/segments by UUID ref. Present when
+   * Sabre returns retailing attributes.
+   */
+  offerAttributes?: FlightReshopOfferAttributes;
+  /**
+   * EMD-As associated with the exchanged tickets, grouped by ticket number.
+   * Present when associated EMDs exist for the exchange.
+   */
+  associatedElectronicMiscellaneousDocuments?: readonly FlightReshopAssociatedEmds[];
   /** Flights referenced by the offers' journeys. */
   flights?: readonly FlightReshopFlight[];
   /** Journeys referenced by the offers. */

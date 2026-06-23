@@ -3,20 +3,32 @@ import type { components } from '../../generated/flight-reshop.js';
 import { ensureTrailingSlash } from '../../http/ensure-trailing-slash.js';
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type {
+  FlightReshopAssociatedEmds,
+  FlightReshopBaggageAllowance,
+  FlightReshopBaggageCharge,
+  FlightReshopCheckedBaggage,
+  FlightReshopElectronicMiscellaneousDocument,
+  FlightReshopFareBrand,
   FlightReshopFareComponent,
   FlightReshopFareComponentSegmentDetail,
+  FlightReshopFee,
+  FlightReshopFlexibilityRule,
   FlightReshopFlight,
+  FlightReshopHiddenStop,
   FlightReshopInput,
   FlightReshopJourney,
   FlightReshopJourneyResult,
   FlightReshopLocation,
   FlightReshopMessage,
   FlightReshopOffer,
+  FlightReshopOfferAttributes,
   FlightReshopOfferFare,
   FlightReshopOfferItem,
   FlightReshopOfferTraveler,
   FlightReshopOutput,
+  FlightReshopRefundChangeCharges,
   FlightReshopRetainItem,
+  FlightReshopTax,
   FlightReshopTicket,
   FlightReshopTimeWindow,
   FlightReshopTotalPrice,
@@ -201,6 +213,13 @@ export function fromReshopResponse(res: SabreResponse): FlightReshopOutput {
   if (parsed.timestamp !== undefined) out.timestamp = parsed.timestamp;
   if (parsed.numberOfOffers !== undefined) out.numberOfOffers = parsed.numberOfOffers;
   if (parsed.offers !== undefined) out.offers = parsed.offers.map(mapOffer);
+  if (parsed.offerAttributes !== undefined) {
+    out.offerAttributes = mapOfferAttributes(parsed.offerAttributes);
+  }
+  if (parsed.associatedElectronicMiscellaneousDocuments !== undefined) {
+    out.associatedElectronicMiscellaneousDocuments =
+      parsed.associatedElectronicMiscellaneousDocuments.map(mapAssociatedEmds);
+  }
   if (parsed.flights !== undefined) out.flights = parsed.flights.map(mapFlight);
   if (parsed.journeys !== undefined) out.journeys = parsed.journeys.map(mapJourney);
   if (parsed.errors !== undefined) out.errors = parsed.errors.map(mapMessage);
@@ -240,6 +259,40 @@ function mapTotalPrice(
   return out;
 }
 
+type ExchangeTicketCharge = components['schemas']['ExchangeTicketCharge'];
+
+/**
+ * Maps the fare-level `priceDifference` (Sabre's `ExchangeTicketCharge`).
+ * Adds the per-fee/per-tax granularity and the residual-forfeit flag on top
+ * of the shared {@link mapExchangeCharge} scalars. Here `totalFee` is an
+ * object (`{ fees: [...] }`), unlike the scalar `TotalPrice.totalFee`, so the
+ * fee breakdown lands in {@link FlightReshopTotalPrice.fees}.
+ */
+function mapExchangeTicketCharge(p: ExchangeTicketCharge): FlightReshopTotalPrice {
+  const out = mapExchangeCharge(p);
+  if (p.totalFee?.fees !== undefined) {
+    out.fees = p.totalFee.fees.map(
+      (fee): FlightReshopFee => ({
+        amount: fee.amount,
+        currencyCode: fee.currencyCode,
+      }),
+    );
+  }
+  if (p.taxes !== undefined) {
+    out.taxes = p.taxes.map((t): FlightReshopTax => {
+      const tax: FlightReshopTax = { taxCode: t.taxCode };
+      if (t.amount !== undefined) tax.amount = t.amount;
+      if (t.currencyCode !== undefined) tax.currencyCode = t.currencyCode;
+      if (t.isPaid !== undefined) tax.isPaid = t.isPaid;
+      return tax;
+    });
+  }
+  if (p.isResidualAmountForfeited !== undefined) {
+    out.isResidualAmountForfeited = p.isResidualAmountForfeited;
+  }
+  return out;
+}
+
 function mapTraveler(
   t: NonNullable<
     NonNullable<ReshopResponse['offers']>[number]['items'][number]['fares'][number]['travelers']
@@ -260,12 +313,25 @@ function mapSegmentDetail(
   if (d.flightRef !== undefined) out.flightRef = d.flightRef;
   if (d.bookingClassCode !== undefined) out.bookingClassCode = d.bookingClassCode;
   if (d.cabinName !== undefined) out.cabinName = d.cabinName;
+  if (d.isAvailabilityBreak !== undefined) out.isAvailabilityBreak = d.isAvailabilityBreak;
+  if (d.mealCode !== undefined) out.mealCode = d.mealCode;
+  if (d.checkedBaggageRef !== undefined) out.checkedBaggageRef = d.checkedBaggageRef;
+  return out;
+}
+
+function mapFareBrand(b: components['schemas']['FareBrand']): FlightReshopFareBrand {
+  const out: FlightReshopFareBrand = {};
+  if (b.code !== undefined) out.code = b.code;
+  if (b.name !== undefined) out.name = b.name;
+  if (b.programId !== undefined) out.programId = b.programId;
   return out;
 }
 
 function mapFareComponent(c: components['schemas']['FareComponent']): FlightReshopFareComponent {
   const out: FlightReshopFareComponent = {};
   if (c.fareBasisCode !== undefined) out.fareBasisCode = c.fareBasisCode;
+  if (c.accountCode !== undefined) out.accountCode = c.accountCode;
+  if (c.brand !== undefined) out.brand = mapFareBrand(c.brand);
   if (c.segmentDetails !== undefined) out.segmentDetails = c.segmentDetails.map(mapSegmentDetail);
   return out;
 }
@@ -275,8 +341,13 @@ function mapFare(
 ): FlightReshopOfferFare {
   const out: FlightReshopOfferFare = {};
   if (f.travelers !== undefined) out.travelers = f.travelers.map(mapTraveler);
-  if (f.priceDifference !== undefined) out.priceDifference = mapExchangeCharge(f.priceDifference);
+  if (f.priceDifference !== undefined) {
+    out.priceDifference = mapExchangeTicketCharge(f.priceDifference);
+  }
+  if (f.privateFare !== undefined) out.privateFare = f.privateFare;
   if (f.fareComponents !== undefined) out.fareComponents = f.fareComponents.map(mapFareComponent);
+  if (f.refundabilityRef !== undefined) out.refundabilityRef = f.refundabilityRef;
+  if (f.changeRef !== undefined) out.changeRef = f.changeRef;
   return out;
 }
 
@@ -333,6 +404,7 @@ function mapFlight(f: NonNullable<ReshopResponse['flights']>[number]): FlightRes
   if (f.arrivalTime !== undefined) out.arrivalTime = f.arrivalTime;
   if (f.aircraftTypeCode !== undefined) out.aircraftTypeCode = f.aircraftTypeCode;
   if (f.durationInMinutes !== undefined) out.durationInMinutes = f.durationInMinutes;
+  if (f.hiddenStops !== undefined) out.hiddenStops = f.hiddenStops.map(mapHiddenStop);
   if (f.hasChangeOfGauge !== undefined) out.hasChangeOfGauge = f.hasChangeOfGauge;
   if (f.isMarriedWithPreviousFlight !== undefined) {
     out.isMarriedWithPreviousFlight = f.isMarriedWithPreviousFlight;
@@ -351,6 +423,19 @@ function mapJourney(j: NonNullable<ReshopResponse['journeys']>[number]): FlightR
   return out;
 }
 
+function mapHiddenStop(
+  h: NonNullable<NonNullable<ReshopResponse['flights']>[number]['hiddenStops']>[number],
+): FlightReshopHiddenStop {
+  const out: FlightReshopHiddenStop = { airportCode: h.airportCode };
+  if (h.departureDate !== undefined) out.departureDate = h.departureDate;
+  if (h.departureTime !== undefined) out.departureTime = h.departureTime;
+  if (h.arrivalDate !== undefined) out.arrivalDate = h.arrivalDate;
+  if (h.arrivalTime !== undefined) out.arrivalTime = h.arrivalTime;
+  if (h.aircraftTypeCode !== undefined) out.aircraftTypeCode = h.aircraftTypeCode;
+  if (h.durationInMinutes !== undefined) out.durationInMinutes = h.durationInMinutes;
+  return out;
+}
+
 function mapMessage(m: NonNullable<ReshopResponse['errors']>[number]): FlightReshopMessage {
   const out: FlightReshopMessage = {};
   if (m.category !== undefined) out.category = m.category;
@@ -359,5 +444,107 @@ function mapMessage(m: NonNullable<ReshopResponse['errors']>[number]): FlightRes
   if (m.fieldPath !== undefined) out.fieldPath = m.fieldPath;
   if (m.fieldName !== undefined) out.fieldName = m.fieldName;
   if (m.fieldValue !== undefined) out.fieldValue = m.fieldValue;
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Response — offer attributes (baggage / flexibility)
+// ---------------------------------------------------------------------------
+
+function mapBaggageAllowance(
+  a: components['schemas']['BaggageAllowances'],
+): FlightReshopBaggageAllowance {
+  const out: FlightReshopBaggageAllowance = {};
+  if (a.numberOfPieces !== undefined) out.numberOfPieces = a.numberOfPieces;
+  if (a.maximumWeightInPounds !== undefined) out.maximumWeightInPounds = a.maximumWeightInPounds;
+  if (a.maximumWeightInKilograms !== undefined) {
+    out.maximumWeightInKilograms = a.maximumWeightInKilograms;
+  }
+  if (a.bagDefinition?.description !== undefined) {
+    out.bagDefinition = { description: [...a.bagDefinition.description] };
+  }
+  if (a.airlineCode !== undefined) out.airlineCode = a.airlineCode;
+  return out;
+}
+
+function mapBaggageCharge(c: components['schemas']['BaggageCharges']): FlightReshopBaggageCharge {
+  const out: FlightReshopBaggageCharge = {};
+  if (c.firstPiece !== undefined) out.firstPiece = c.firstPiece;
+  if (c.lastPiece !== undefined) out.lastPiece = c.lastPiece;
+  if (c.amount !== undefined) out.amount = c.amount;
+  if (c.currencyCode !== undefined) out.currencyCode = c.currencyCode;
+  if (c.bagDefinition?.description !== undefined) {
+    out.bagDefinition = { description: [...c.bagDefinition.description] };
+  }
+  if (c.airlineCode !== undefined) out.airlineCode = c.airlineCode;
+  return out;
+}
+
+function mapCheckedBaggage(b: components['schemas']['Baggage']): FlightReshopCheckedBaggage {
+  const out: FlightReshopCheckedBaggage = { id: b.id };
+  if (b.allowances !== undefined) out.allowances = b.allowances.map(mapBaggageAllowance);
+  if (b.charges !== undefined) out.charges = b.charges.map(mapBaggageCharge);
+  return out;
+}
+
+function mapFlexibilityRule(
+  r: components['schemas']['FlexibilityRule'],
+): FlightReshopFlexibilityRule {
+  const out: FlightReshopFlexibilityRule = { isPermitted: r.isPermitted };
+  if (r.maxCharge !== undefined) out.maxCharge = r.maxCharge;
+  if (r.minCharge !== undefined) out.minCharge = r.minCharge;
+  if (r.currencyCode !== undefined) out.currencyCode = r.currencyCode;
+  return out;
+}
+
+function mapRefundChangeCharges(
+  c: components['schemas']['RefundChangeCharges'],
+): FlightReshopRefundChangeCharges {
+  const out: FlightReshopRefundChangeCharges = { id: c.id };
+  if (c.beforeDeparture !== undefined) out.beforeDeparture = mapFlexibilityRule(c.beforeDeparture);
+  if (c.afterDeparture !== undefined) out.afterDeparture = mapFlexibilityRule(c.afterDeparture);
+  return out;
+}
+
+function mapOfferAttributes(
+  a: components['schemas']['OfferAttributes'],
+): FlightReshopOfferAttributes {
+  const out: FlightReshopOfferAttributes = {};
+  if (a.checkedBaggageItems !== undefined) {
+    out.checkedBaggageItems = a.checkedBaggageItems.map(mapCheckedBaggage);
+  }
+  if (a.refundabilityItems !== undefined) {
+    out.refundabilityItems = a.refundabilityItems.map(mapRefundChangeCharges);
+  }
+  if (a.changeItems !== undefined) out.changeItems = a.changeItems.map(mapRefundChangeCharges);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Response — associated EMDs
+// ---------------------------------------------------------------------------
+
+function mapEmd(
+  e: components['schemas']['ElectronicMiscellaneousDocumentToExchange'],
+): FlightReshopElectronicMiscellaneousDocument {
+  const out: FlightReshopElectronicMiscellaneousDocument = {};
+  if (e.number !== undefined) out.number = e.number;
+  if (e.reasonForIssuanceCode !== undefined) out.reasonForIssuanceCode = e.reasonForIssuanceCode;
+  if (e.reasonForIssuanceName !== undefined) out.reasonForIssuanceName = e.reasonForIssuanceName;
+  if (e.refundEligibility !== undefined) out.refundEligibility = e.refundEligibility;
+  if (e.unusedAmount !== undefined) out.unusedAmount = e.unusedAmount;
+  if (e.total !== undefined) out.total = e.total;
+  if (e.currencyCode !== undefined) out.currencyCode = e.currencyCode;
+  return out;
+}
+
+function mapAssociatedEmds(
+  a: components['schemas']['AssociatedElectronicMiscellaneousDocuments'],
+): FlightReshopAssociatedEmds {
+  const out: FlightReshopAssociatedEmds = {};
+  if (a.ticketNumber !== undefined) out.ticketNumber = a.ticketNumber;
+  if (a.electronicMiscellaneousDocuments !== undefined) {
+    out.electronicMiscellaneousDocuments = a.electronicMiscellaneousDocuments.map(mapEmd);
+  }
   return out;
 }

@@ -85,6 +85,50 @@ describe('FlightReshopV1Service.reshop', () => {
     expect(body.tickets[0].number).toBe('0012972101507');
   });
 
+  it('maps top-level offerAttributes and associated EMDs through the client', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(
+        () =>
+          new Response(
+            JSON.stringify({
+              numberOfOffers: 0,
+              offerAttributes: {
+                checkedBaggageItems: [{ id: 'bag-1', allowances: [{ numberOfPieces: 1 }] }],
+                refundabilityItems: [{ id: 'refund-1', beforeDeparture: { isPermitted: true } }],
+                changeItems: [{ id: 'change-1', afterDeparture: { isPermitted: false } }],
+              },
+              associatedElectronicMiscellaneousDocuments: [
+                {
+                  ticketNumber: '0167489825830',
+                  electronicMiscellaneousDocuments: [
+                    { number: '0167489825831', refundEligibility: 'Refundable', total: '125.00' },
+                  ],
+                },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+
+    const client = createSabreClient({
+      baseUrl: 'https://api.cert.platform.sabre.com',
+      auth: fakeProvider(),
+    });
+
+    const result = await client.flightReshopV1.reshop(input);
+    expect(result.offerAttributes?.checkedBaggageItems?.[0]?.id).toBe('bag-1');
+    expect(result.offerAttributes?.refundabilityItems?.[0]?.beforeDeparture?.isPermitted).toBe(
+      true,
+    );
+    expect(result.offerAttributes?.changeItems?.[0]?.id).toBe('change-1');
+    expect(
+      result.associatedElectronicMiscellaneousDocuments?.[0]?.electronicMiscellaneousDocuments?.[0]
+        ?.refundEligibility,
+    ).toBe('Refundable');
+  });
+
   it('surfaces the downline error on an HTTP 200 with no offers', async () => {
     vi.stubGlobal(
       'fetch',
