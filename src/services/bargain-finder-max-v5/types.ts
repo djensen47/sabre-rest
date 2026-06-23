@@ -259,6 +259,73 @@ export interface FareOffer {
   validatingCarrierCode?: string;
   /** Content model for this offer, when populated. */
   distributionModel?: 'ATPCO' | 'NDC' | 'API';
+  /**
+   * Optional-service (ancillary) fees Sabre attached to this offer, grouped
+   * by ATPCO fee category — baggage, seats, meals, in-flight entertainment,
+   * etc. Absent when Sabre returned no ancillary fee data for the offer.
+   */
+  ancillaryFees?: readonly AncillaryFee[];
+}
+
+/**
+ * An ancillary (optional-service) fee group on a {@link FareOffer}.
+ *
+ * Maps one entry of Sabre's `ancillaryFeeGroup.ancillaryFees`. Each group
+ * carries an ATPCO fee category {@link code} (e.g. `BG` = baggage) plus the
+ * individual priced {@link details} lines within that category.
+ */
+export interface AncillaryFee {
+  /**
+   * ATPCO fee group code, when populated. Common values: `BG` (baggage),
+   * `IE` (in-flight entertainment), `ML` (meals), `SA` (seats), `UN`
+   * (unaccompanied passenger).
+   */
+  code?: string;
+  /** Human-readable name of the fee group (e.g. `IN-FLIGHT ENTERTAINMENT`), when populated. */
+  name?: string;
+  /**
+   * Informational message attached to the group, when Sabre returned one
+   * (e.g. `AIR EXTRAS NOT APPLICABLE OR ARE UNKNOWN`).
+   */
+  message?: string;
+  /**
+   * Individual priced fee lines within this group, in wire order. Empty when
+   * Sabre returned the group without detail entries.
+   */
+  details: readonly AncillaryFeeDetail[];
+}
+
+/** A single priced ancillary fee line within an {@link AncillaryFee}. */
+export interface AncillaryFeeDetail {
+  /** Fee amount payable in cash, when populated. */
+  amount?: number;
+  /**
+   * Ancillary type code, when populated: `F` (flight-related) or `P`
+   * (prepaid).
+   */
+  ancillaryTypeCode?: string;
+  /** Owning carrier IATA code, when populated. */
+  carrier?: string;
+  /** Carrier-specific service code, when populated. */
+  code?: string;
+  /** ATPCO Optional Services industry subcode, when populated. */
+  subcode?: string;
+  /** Ancillary subgroup two-letter code (e.g. `BG`), when populated. */
+  subgroup?: string;
+  /** Origin airport IATA code for the service, when populated. */
+  origin?: string;
+  /** Destination airport IATA code for the service, when populated. */
+  destination?: string;
+  /** 1-based first travel segment the fee covers, when populated. */
+  startSegment?: number;
+  /** 1-based last travel segment the fee covers, when populated. */
+  endSegment?: number;
+  /**
+   * Free-text description lines exactly as Sabre returned them, in wire
+   * order. Combines the human `description` line and the ATPCO filing lines
+   * (`description1`, `description2`). Empty when Sabre sent none.
+   */
+  descriptions: readonly string[];
 }
 
 /**
@@ -309,6 +376,88 @@ export interface PassengerFare {
   baggageCharges: readonly BaggageCharge[];
   /** Individual tax line items for this passenger, in wire order. */
   taxes: readonly Tax[];
+  /**
+   * Change/refund penalties Sabre filed for this passenger's fare, in wire
+   * order. Each entry describes the eligibility and amount for either a
+   * change or a refund. Empty when Sabre returned no penalty data — note
+   * that for ATPCO fares an empty list does not by itself mean "no penalty"
+   * (see {@link ChangeRefundPenalty.cat16Info}); consumers must consult the
+   * fare rules for authoritative conditions.
+   */
+  penalties?: readonly ChangeRefundPenalty[];
+  /**
+   * Per-leg fare breakdown, in trip order. Each entry gives the cost of one
+   * itinerary leg for this passenger, letting consumers attribute the total
+   * fare leg by leg. Absent when Sabre returned no per-leg pricing.
+   */
+  legs?: readonly PassengerLegFare[];
+}
+
+/**
+ * A change or refund penalty filed for a passenger's fare.
+ *
+ * Maps one entry of Sabre's `penaltiesInfo.penalties`. The {@link type}
+ * (e.g. `Change`, `Refund`) plus {@link applicability} (before vs. after
+ * departure) describe which penalty this is; {@link amount} / {@link currency}
+ * and {@link minPenaltyAmount} carry the charge.
+ */
+export interface ChangeRefundPenalty {
+  /** Penalty kind as Sabre labelled it (e.g. `Change`, `Refund`), when populated. */
+  type?: string;
+  /**
+   * Whether the penalty applies `Before` or `After` departure, when
+   * populated.
+   */
+  applicability?: 'Before' | 'After';
+  /** True when Sabre marked the fare as changeable. */
+  changeable?: boolean;
+  /** True when Sabre marked the fare as refundable. */
+  refundable?: boolean;
+  /**
+   * True when general changeability/refundability holds but restrictions
+   * apply — consult the fare rules for the conditions. Present only when
+   * Sabre set the flag.
+   */
+  conditionsApply?: boolean;
+  /**
+   * Maximum penalty amount (assumes all flights changed, ticket-level for
+   * ATPCO), when populated.
+   */
+  amount?: number;
+  /** ISO 4217 currency code for {@link amount}, when populated. */
+  currency?: string;
+  /** Minimum penalty amount, when Sabre filed one. */
+  minPenaltyAmount?: number;
+  /** ISO 4217 currency code for {@link minPenaltyAmount}, when populated. */
+  minPenaltyCurrency?: string;
+  /**
+   * True when the penalty information comes from Sabre filing Category 16.
+   * For ATPCO fares, change/refund penalties are governed by categories 31
+   * and 33 instead, and the absence of penalty data defaults to "no
+   * penalty" — so consumers should not treat a missing penalty as
+   * authoritative without checking the fare rules. Present only when Sabre
+   * set the flag.
+   */
+  cat16Info?: boolean;
+  /** Airline-supplied penalty description, when populated. */
+  description?: string;
+}
+
+/** Per-leg fare for a passenger within a {@link PassengerFare}. */
+export interface PassengerLegFare {
+  /**
+   * Sabre's `LegDesc` reference id this leg fare corresponds to, when
+   * populated. Matches the {@link ItineraryLeg.ref} of the priced leg.
+   */
+  ref?: number;
+  /**
+   * Detailed status code when a fare could not be returned for the leg, when
+   * populated: `A` (class not available), `O` (class not offered), `F` (no
+   * fare found or applicable).
+   */
+  status?: string;
+  /** Total fare for this leg, when Sabre populated it. */
+  totalFare?: TotalFare;
 }
 
 /**
@@ -571,6 +720,60 @@ export interface FlightSegment {
    * class for a priced fare may differ.
    */
   scheduleBookingClass?: string;
+  /**
+   * Aircraft equipment code for the segment (e.g. `346` for an A340-600,
+   * `73H`), when Sabre populated it. Sourced from the schedule's
+   * `carrier.equipment.code`.
+   */
+  equipment?: string;
+  /**
+   * US DOT on-time rating for the flight, when Sabre populated it. A
+   * single-letter grade (e.g. `A`) reflecting the carrier's published
+   * performance band.
+   */
+  dotRating?: string;
+  /**
+   * DOT on-time performance indicator (DEI 502), when Sabre populated it.
+   * A numeric code rather than a percentage — interpret per Sabre's DEI
+   * 502 scale.
+   */
+  onTimePerformance?: number;
+  /**
+   * Hidden (technical / non-traffic) stops on this segment, in operating
+   * order. These are intermediate stops the segment makes that are not
+   * sellable connection points. Absent when the segment has none.
+   */
+  hiddenStops?: readonly HiddenStop[];
+}
+
+/**
+ * A hidden (technical) stop within a {@link FlightSegment}.
+ *
+ * Hidden stops are intermediate touchdowns on a single flight number that
+ * are not bookable connection points — fuel/crew stops, for example. Maps
+ * one entry of Sabre's `scheduleDescs[].hiddenStops`.
+ */
+export interface HiddenStop {
+  /** Intermediate airport IATA code, when populated. */
+  airport?: string;
+  /** Arrival time at the intermediate point, as Sabre returned it, when populated. */
+  arrivalTime?: string;
+  /** Departure time from the intermediate point, as Sabre returned it, when populated. */
+  departureTime?: string;
+  /**
+   * Day shift of the arrival date at the intermediate point relative to the
+   * segment's departure date, when populated.
+   */
+  arrivalDateAdjustment?: number;
+  /**
+   * Day shift of the departure date from the intermediate point relative to
+   * the segment's departure date, when populated.
+   */
+  departureDateAdjustment?: number;
+  /** Air miles flown for this flight leg, when populated. */
+  airMiles?: number;
+  /** Equipment type at the intermediate point, when populated. */
+  equipment?: string;
 }
 
 /** Departure or arrival point for a flight segment. */

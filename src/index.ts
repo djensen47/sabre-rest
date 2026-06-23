@@ -282,11 +282,16 @@ export type {
   GetAncillariesOutput,
 } from './services/get-ancillaries-v2/types.js';
 export type {
+  AncillaryFee,
+  AncillaryFeeDetail,
   CabinClass,
+  ChangeRefundPenalty,
   FlightSegment,
+  HiddenStop,
   ItineraryLeg,
   OriginDestination,
   PassengerCount,
+  PassengerLegFare,
   PointOfSale,
   PricedItinerary,
   SabreMessage,

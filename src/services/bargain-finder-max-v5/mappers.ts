@@ -3,14 +3,19 @@ import type { components } from '../../generated/bargain-finder-max.js';
 import { ensureTrailingSlash } from '../../http/ensure-trailing-slash.js';
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type {
+  AncillaryFee,
+  AncillaryFeeDetail,
   BaggageAllowance,
   BaggageCharge,
+  ChangeRefundPenalty,
   FareComponent,
   FareComponentSegment,
   FareOffer,
   FlightSegment,
+  HiddenStop,
   ItineraryLeg,
   PassengerFare,
+  PassengerLegFare,
   PassengerTotal,
   PricedItinerary,
   SabreMessage,
@@ -294,7 +299,7 @@ function buildPricedItinerary(
   // predate the `fareOffers` field and are kept here unchanged so existing
   // consumers see no behavior change.
   const pricing = (itin.pricingInformation ?? [])[0];
-  const totalFare = extractTotalFare(pricing?.fare);
+  const totalFare = extractTotalFare(pricing?.fare?.totalFare);
   if (totalFare !== undefined) {
     result.totalFare = totalFare;
   }
@@ -333,7 +338,11 @@ function buildFareOffer(
   }
 
   const offer: FareOffer = { passengerFares };
-  const totalFare = extractTotalFare(pricing.fare);
+  const ancillaryFees = pricing.fare?.ancillaryFeeGroup?.ancillaryFees;
+  if (ancillaryFees && ancillaryFees.length > 0) {
+    offer.ancillaryFees = ancillaryFees.map(buildAncillaryFee);
+  }
+  const totalFare = extractTotalFare(pricing.fare?.totalFare);
   if (totalFare !== undefined) {
     offer.totalFare = totalFare;
   }
@@ -344,6 +353,37 @@ function buildFareOffer(
     offer.distributionModel = pricing.distributionModel;
   }
   return offer;
+}
+
+function buildAncillaryFee(fee: components['schemas']['AncillaryFeeType']): AncillaryFee {
+  const details: AncillaryFeeDetail[] = (fee.details ?? []).map(buildAncillaryFeeDetail);
+  const out: AncillaryFee = { details };
+  if (fee.code !== undefined) out.code = fee.code;
+  if (fee.name !== undefined) out.name = fee.name;
+  if (fee.message !== undefined) out.message = fee.message;
+  return out;
+}
+
+function buildAncillaryFeeDetail(
+  detail: components['schemas']['AncillaryFeeDetailsType'],
+): AncillaryFeeDetail {
+  const descriptions: string[] = [];
+  if (typeof detail.description === 'string') descriptions.push(detail.description);
+  if (typeof detail.description1 === 'string') descriptions.push(detail.description1);
+  if (typeof detail.description2 === 'string') descriptions.push(detail.description2);
+
+  const out: AncillaryFeeDetail = { descriptions };
+  if (typeof detail.amount === 'number') out.amount = detail.amount;
+  if (detail.ancillaryTypeCode !== undefined) out.ancillaryTypeCode = detail.ancillaryTypeCode;
+  if (detail.carrier !== undefined) out.carrier = detail.carrier;
+  if (detail.code !== undefined) out.code = detail.code;
+  if (detail.subcode !== undefined) out.subcode = detail.subcode;
+  if (detail.subgroup !== undefined) out.subgroup = detail.subgroup;
+  if (detail.origin !== undefined) out.origin = detail.origin;
+  if (detail.destination !== undefined) out.destination = detail.destination;
+  if (typeof detail.startSegment === 'number') out.startSegment = detail.startSegment;
+  if (typeof detail.endSegment === 'number') out.endSegment = detail.endSegment;
+  return out;
 }
 
 function buildPassengerFare(
@@ -378,6 +418,14 @@ function buildPassengerFare(
   });
 
   const out: PassengerFare = { fareComponents, baggageAllowances, baggageCharges, taxes };
+
+  const penalties = info.penaltiesInfo?.penalties;
+  if (penalties && penalties.length > 0) {
+    out.penalties = penalties.map(buildPenalty);
+  }
+  if (info.legs && info.legs.length > 0) {
+    out.legs = info.legs.map(buildPassengerLegFare);
+  }
 
   if (info.passengerType !== undefined) out.passengerType = info.passengerType;
   if (typeof info.passengerNumber === 'number') out.passengerNumber = info.passengerNumber;
@@ -500,6 +548,33 @@ function buildTax(desc: components['schemas']['TaxType'] | undefined): Tax {
   return out;
 }
 
+function buildPenalty(penalty: components['schemas']['Penalty']): ChangeRefundPenalty {
+  const out: ChangeRefundPenalty = {};
+  if (penalty.type !== undefined) out.type = penalty.type;
+  if (penalty.applicability !== undefined) out.applicability = penalty.applicability;
+  if (typeof penalty.changeable === 'boolean') out.changeable = penalty.changeable;
+  if (typeof penalty.refundable === 'boolean') out.refundable = penalty.refundable;
+  if (typeof penalty.conditionsApply === 'boolean') out.conditionsApply = penalty.conditionsApply;
+  if (typeof penalty.amount === 'number') out.amount = penalty.amount;
+  if (penalty.currency !== undefined) out.currency = penalty.currency;
+  if (typeof penalty.minPenalty?.amount === 'number')
+    out.minPenaltyAmount = penalty.minPenalty.amount;
+  if (penalty.minPenalty?.currency !== undefined)
+    out.minPenaltyCurrency = penalty.minPenalty.currency;
+  if (typeof penalty.cat16Info === 'boolean') out.cat16Info = penalty.cat16Info;
+  if (penalty.description !== undefined) out.description = penalty.description;
+  return out;
+}
+
+function buildPassengerLegFare(leg: components['schemas']['PricingLegType']): PassengerLegFare {
+  const out: PassengerLegFare = {};
+  if (typeof leg.ref === 'number') out.ref = leg.ref;
+  if (leg.status !== undefined) out.status = leg.status;
+  const totalFare = extractTotalFare(leg.totalFare);
+  if (totalFare !== undefined) out.totalFare = totalFare;
+  return out;
+}
+
 function extractPassengerTotal(
   total: components['schemas']['PassengerTotalFareType'] | undefined,
 ): PassengerTotal | undefined {
@@ -572,7 +647,34 @@ function buildFlightSegment(
     segment.scheduleBookingClass = desc.bookingDetails.classOfService;
   }
 
+  if (carrier?.equipment?.code !== undefined) {
+    segment.equipment = carrier.equipment.code;
+  }
+  if (desc.dotRating !== undefined) {
+    segment.dotRating = desc.dotRating;
+  }
+  if (typeof desc.onTimePerformance === 'number') {
+    segment.onTimePerformance = desc.onTimePerformance;
+  }
+  if (desc.hiddenStops && desc.hiddenStops.length > 0) {
+    segment.hiddenStops = desc.hiddenStops.map(buildHiddenStop);
+  }
+
   return segment;
+}
+
+function buildHiddenStop(stop: components['schemas']['HiddenStopType']): HiddenStop {
+  const out: HiddenStop = {};
+  if (stop.airport !== undefined) out.airport = stop.airport;
+  if (stop.arrivalTime !== undefined) out.arrivalTime = stop.arrivalTime;
+  if (stop.departureTime !== undefined) out.departureTime = stop.departureTime;
+  if (typeof stop.arrivalDateAdjustment === 'number')
+    out.arrivalDateAdjustment = stop.arrivalDateAdjustment;
+  if (typeof stop.departureDateAdjustment === 'number')
+    out.departureDateAdjustment = stop.departureDateAdjustment;
+  if (typeof stop.airMiles === 'number') out.airMiles = stop.airMiles;
+  if (stop.equipment !== undefined) out.equipment = stop.equipment;
+  return out;
 }
 
 function buildDepartureEndpoint(
@@ -601,9 +703,8 @@ function buildArrivalEndpoint(
 }
 
 function extractTotalFare(
-  fare: components['schemas']['FareType'] | undefined,
+  tf: components['schemas']['TotalFareType'] | undefined,
 ): TotalFare | undefined {
-  const tf = fare?.totalFare;
   if (!tf) return undefined;
   const out: TotalFare = {};
   if (typeof tf.totalPrice === 'number') out.totalAmount = tf.totalPrice;
