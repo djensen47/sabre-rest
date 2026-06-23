@@ -1458,3 +1458,331 @@ describe('fareOffers', () => {
     expect(out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.taxes).toEqual([]);
   });
 });
+
+describe('expanded response data (issue #113)', () => {
+  it('surfaces ancillary fees grouped by code with priced detail lines', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [],
+                        ancillaryFeeGroup: {
+                          ancillaryFees: [
+                            {
+                              code: 'BG',
+                              name: 'BAGGAGE',
+                              details: [
+                                {
+                                  amount: 40,
+                                  ancillaryTypeCode: 'P',
+                                  carrier: 'AA',
+                                  code: 'SU1',
+                                  subcode: '0C3',
+                                  subgroup: 'BG',
+                                  origin: 'SVO',
+                                  destination: 'LHR',
+                                  startSegment: 1,
+                                  endSegment: 1,
+                                  description: 'PREPAID BAGGAGE 23KG',
+                                  description1: 'UP TO 50 POUNDS/23 KILOGRAMS',
+                                  description2: 'UP TO 80 LINEAR INCHES',
+                                },
+                              ],
+                            },
+                            {
+                              code: 'IE',
+                              name: 'IN-FLIGHT ENTERTAINMENT',
+                              message: 'AIR EXTRAS NOT APPLICABLE OR ARE UNKNOWN',
+                            },
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(out.itineraries[0]?.fareOffers[0]?.ancillaryFees).toEqual([
+      {
+        code: 'BG',
+        name: 'BAGGAGE',
+        details: [
+          {
+            amount: 40,
+            ancillaryTypeCode: 'P',
+            carrier: 'AA',
+            code: 'SU1',
+            subcode: '0C3',
+            subgroup: 'BG',
+            origin: 'SVO',
+            destination: 'LHR',
+            startSegment: 1,
+            endSegment: 1,
+            descriptions: [
+              'PREPAID BAGGAGE 23KG',
+              'UP TO 50 POUNDS/23 KILOGRAMS',
+              'UP TO 80 LINEAR INCHES',
+            ],
+          },
+        ],
+      },
+      {
+        code: 'IE',
+        name: 'IN-FLIGHT ENTERTAINMENT',
+        message: 'AIR EXTRAS NOT APPLICABLE OR ARE UNKNOWN',
+        details: [],
+      },
+    ]);
+  });
+
+  it('surfaces change/refund penalties including min penalty and cat16 flag', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [],
+                              penaltiesInfo: {
+                                penalties: [
+                                  {
+                                    type: 'Change',
+                                    applicability: 'Before',
+                                    changeable: true,
+                                    amount: 150,
+                                    currency: 'USD',
+                                    cat16Info: true,
+                                    minPenalty: { amount: 75, currency: 'USD' },
+                                    description: 'CHANGE FEE APPLIES',
+                                  },
+                                  {
+                                    type: 'Refund',
+                                    applicability: 'After',
+                                    refundable: false,
+                                    conditionsApply: true,
+                                  },
+                                ],
+                              },
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.penalties).toEqual([
+      {
+        type: 'Change',
+        applicability: 'Before',
+        changeable: true,
+        amount: 150,
+        currency: 'USD',
+        cat16Info: true,
+        minPenaltyAmount: 75,
+        minPenaltyCurrency: 'USD',
+        description: 'CHANGE FEE APPLIES',
+      },
+      {
+        type: 'Refund',
+        applicability: 'After',
+        refundable: false,
+        conditionsApply: true,
+      },
+    ]);
+  });
+
+  it('surfaces per-leg fare breakdown with ref, status, and total fare', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [],
+                              legs: [
+                                {
+                                  ref: 200,
+                                  totalFare: { totalPrice: 400, currency: 'USD' },
+                                },
+                                {
+                                  ref: 201,
+                                  status: 'F',
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(out.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.legs).toEqual([
+      { ref: 200, totalFare: { totalAmount: 400, currency: 'USD' } },
+      { ref: 201, status: 'F' },
+    ]);
+  });
+
+  it('surfaces equipment, dot rating, on-time performance, and hidden stops on a segment', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          scheduleDescs: [
+            {
+              id: 100,
+              carrier: { marketing: 'BA', marketingFlightNumber: 178, equipment: { code: '346' } },
+              departure: { airport: 'JFK', time: '21:00:00' },
+              arrival: { airport: 'LHR', time: '09:00:00' },
+              dotRating: 'A',
+              onTimePerformance: 8,
+              hiddenStops: [
+                {
+                  airport: 'BOS',
+                  arrivalTime: '22:00:00',
+                  departureTime: '22:45:00',
+                  arrivalDateAdjustment: 0,
+                  departureDateAdjustment: 0,
+                  airMiles: 187,
+                  equipment: '346',
+                },
+              ],
+            },
+          ],
+          legDescs: [{ id: 200, schedules: [{ ref: 100 }] }],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  legs: [{ ref: 200 }],
+                  pricingInformation: [{ fare: { passengerInfoList: [] } }],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const seg = out.itineraries[0]?.legs[0]?.segments[0];
+    expect(seg?.equipment).toBe('346');
+    expect(seg?.dotRating).toBe('A');
+    expect(seg?.onTimePerformance).toBe(8);
+    expect(seg?.hiddenStops).toEqual([
+      {
+        airport: 'BOS',
+        arrivalTime: '22:00:00',
+        departureTime: '22:45:00',
+        arrivalDateAdjustment: 0,
+        departureDateAdjustment: 0,
+        airMiles: 187,
+        equipment: '346',
+      },
+    ]);
+  });
+
+  it('omits expanded fields and uses empty arrays when Sabre returns none', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          scheduleDescs: [
+            {
+              id: 100,
+              carrier: { marketing: 'BA', marketingFlightNumber: 178 },
+              departure: { airport: 'JFK', time: '21:00:00' },
+              arrival: { airport: 'LHR', time: '09:00:00' },
+            },
+          ],
+          legDescs: [{ id: 200, schedules: [{ ref: 100 }] }],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  legs: [{ ref: 200 }],
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          { passengerInfo: { passengerType: 'ADT', fareComponents: [] } },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const seg = out.itineraries[0]?.legs[0]?.segments[0];
+    expect(seg?.equipment).toBeUndefined();
+    expect(seg?.dotRating).toBeUndefined();
+    expect(seg?.onTimePerformance).toBeUndefined();
+    // Expanded array fields are absent (not empty arrays) when Sabre
+    // returned none — these fields do not exist on the structurally-shared
+    // Revalidate Itinerary types, so they must stay optional.
+    expect(seg?.hiddenStops).toBeUndefined();
+
+    const offer = out.itineraries[0]?.fareOffers[0];
+    expect(offer?.ancillaryFees).toBeUndefined();
+    const pf = offer?.passengerFares[0];
+    expect(pf?.penalties).toBeUndefined();
+    expect(pf?.legs).toBeUndefined();
+  });
+});
