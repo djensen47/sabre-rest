@@ -420,6 +420,285 @@ describe('fromRevalidateResponse', () => {
     expect(pf?.taxes[1]).toEqual({ code: 'XF', amount: 4.5, currency: 'USD', station: 'JFK' });
   });
 
+  it('maps equipment, dot rating, on-time performance, and hidden stops on a segment', () => {
+    const result = fromRevalidateResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          scheduleDescs: [
+            {
+              id: 1,
+              carrier: { marketing: 'BA', marketingFlightNumber: 178, equipment: { code: '346' } },
+              departure: { airport: 'JFK', time: '21:00:00' },
+              arrival: { airport: 'LHR', time: '09:00:00' },
+              dotRating: 'A',
+              onTimePerformance: 7,
+              hiddenStops: [
+                { airport: 'BOS', arrivalTime: '22:00', departureTime: '22:45', airMiles: 200 },
+              ],
+            },
+          ],
+          legDescs: [{ id: 10, schedules: [{ ref: 1 }] }],
+          itineraryGroups: [{ itineraries: [{ legs: [{ ref: 10 }], pricingInformation: [] }] }],
+        },
+      }),
+    );
+
+    const seg = result.itineraries[0]?.legs[0]?.segments[0];
+    expect(seg?.equipment).toBe('346');
+    expect(seg?.dotRating).toBe('A');
+    expect(seg?.onTimePerformance).toBe(7);
+    expect(seg?.hiddenStops).toEqual([
+      { airport: 'BOS', arrivalTime: '22:00', departureTime: '22:45', airMiles: 200 },
+    ]);
+  });
+
+  it('maps per-passenger penalties, reissue, amenities, and per-leg fares', () => {
+    const result = fromRevalidateResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          taxDescs: [{ id: 1, code: 'US', amount: 25, currency: 'USD' }],
+          taxSummaryDescs: [{ id: 5, code: 'ZP', amount: 4.3, currency: 'USD' }],
+          legDescs: [{ id: 10, schedules: [] }],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  legs: [{ ref: 10 }],
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              penaltiesInfo: {
+                                penalties: [
+                                  {
+                                    type: 'Change',
+                                    applicability: 'Before',
+                                    changeable: true,
+                                    amount: 200,
+                                    currency: 'USD',
+                                    minPenalty: { amount: 100, currency: 'USD' },
+                                    cat16Info: true,
+                                  },
+                                  { type: 'Refund', refundable: false },
+                                ],
+                              },
+                              reissue: {
+                                changeFees: [{ amount: 150, currency: 'USD', highest: true }],
+                                electronicTicketRequired: true,
+                                formOfRefund: 'A',
+                              },
+                              reissueText: 'CHG1',
+                              seatSelection: [{ type: 'F', segment: [{ id: 0 }, { id: 1 }] }],
+                              priorityBoarding: [{ type: 'C', segment: [{ id: 0 }] }],
+                              legs: [
+                                {
+                                  ref: 10,
+                                  status: 'F',
+                                  totalFare: { totalPrice: 500, currency: 'USD' },
+                                  taxes: [{ ref: 1 }],
+                                  taxSummaries: [{ ref: 5 }],
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const pf = result.itineraries[0]?.fareOffers[0]?.passengerFares[0];
+
+    expect(pf?.penalties).toEqual([
+      {
+        type: 'Change',
+        applicability: 'Before',
+        changeable: true,
+        amount: 200,
+        currency: 'USD',
+        minPenaltyAmount: 100,
+        minPenaltyCurrency: 'USD',
+        cat16Info: true,
+      },
+      { type: 'Refund', refundable: false },
+    ]);
+
+    expect(pf?.reissue).toEqual({
+      changeFees: [{ amount: 150, currency: 'USD', highest: true }],
+      electronicTicketRequired: true,
+      formOfRefund: 'A',
+    });
+    expect(pf?.reissueText).toBe('CHG1');
+
+    expect(pf?.seatSelection).toEqual([{ charge: 'Free', code: 'F', segmentIndices: [0, 1] }]);
+    expect(pf?.priorityBoarding).toEqual([
+      { charge: 'Chargeable', code: 'C', segmentIndices: [0] },
+    ]);
+
+    expect(pf?.legs).toEqual([
+      {
+        ref: 10,
+        status: 'F',
+        totalFare: { totalAmount: 500, currency: 'USD' },
+        taxes: [{ code: 'US', amount: 25, currency: 'USD' }],
+        taxSummaries: [{ code: 'ZP', amount: 4.3, currency: 'USD' }],
+      },
+    ]);
+  });
+
+  it('maps an unrecognized amenity code to a code-only entry', () => {
+    const result = fromRevalidateResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          legDescs: [{ id: 10, schedules: [] }],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  legs: [{ ref: 10 }],
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              seatSelection: [{ type: 'Z', segment: [{ id: 0 }] }],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const pf = result.itineraries[0]?.fareOffers[0]?.passengerFares[0];
+    expect(pf?.seatSelection).toEqual([{ code: 'Z', segmentIndices: [0] }]);
+    expect(pf?.priorityBoarding).toBeUndefined();
+  });
+
+  it('maps fare-component filing detail and per-segment flags', () => {
+    const result = fromRevalidateResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          fareComponentDescs: [
+            {
+              id: 1,
+              fareBasisCode: 'YOW',
+              brand: {
+                code: 'XX',
+                brandName: 'Main Cabin',
+                programCode: 'DOMBE',
+                programDescription: 'BT FARES',
+              },
+              negotiatedFare: true,
+              privateFare: false,
+              matchedAccountCode: 'ACME01',
+              corporateIdMatched: true,
+              notValidBefore: '2026-01-01',
+              notValidAfter: '2026-12-31',
+              eligibleForTicketing: true,
+            },
+          ],
+          legDescs: [{ id: 10, schedules: [] }],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  legs: [{ ref: 10 }],
+                  pricingInformation: [
+                    {
+                      fare: {
+                        passengerInfoList: [
+                          {
+                            passengerInfo: {
+                              passengerType: 'ADT',
+                              fareComponents: [
+                                {
+                                  ref: 1,
+                                  segments: [
+                                    {
+                                      segment: {
+                                        bookingCode: 'Y',
+                                        availabilityBreak: true,
+                                        dualInventoryCode: 'C',
+                                      },
+                                    },
+                                  ],
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const fc = result.itineraries[0]?.fareOffers[0]?.passengerFares[0]?.fareComponents[0];
+    expect(fc?.brand).toEqual({
+      code: 'XX',
+      name: 'Main Cabin',
+      programCode: 'DOMBE',
+      programDescription: 'BT FARES',
+    });
+    expect(fc?.negotiatedFare).toBe(true);
+    expect(fc?.privateFare).toBe(false);
+    expect(fc?.matchedAccountCode).toBe('ACME01');
+    expect(fc?.corporateIdMatched).toBe(true);
+    expect(fc?.notValidBefore).toBe('2026-01-01');
+    expect(fc?.notValidAfter).toBe('2026-12-31');
+    expect(fc?.eligibleForTicketing).toBe(true);
+    expect(fc?.segments[0]).toEqual({
+      bookingCode: 'Y',
+      availabilityBreak: true,
+      dualInventoryCode: 'C',
+    });
+  });
+
+  it('omits new optional fields when Sabre returned none', () => {
+    const result = fromRevalidateResponse(okResponse(girResponse));
+    const pf = result.itineraries[0]?.fareOffers[0]?.passengerFares[0];
+    expect(pf?.penalties).toBeUndefined();
+    expect(pf?.reissue).toBeUndefined();
+    expect(pf?.reissueText).toBeUndefined();
+    expect(pf?.seatSelection).toBeUndefined();
+    expect(pf?.priorityBoarding).toBeUndefined();
+    expect(pf?.legs).toBeUndefined();
+    const seg = result.itineraries[0]?.legs[0]?.segments[0];
+    expect(seg?.equipment).toBeUndefined();
+    expect(seg?.hiddenStops).toBeUndefined();
+  });
+
   it('returns empty itineraries for a response with no itinerary groups', () => {
     const result = fromRevalidateResponse(
       okResponse({
