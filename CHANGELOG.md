@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.18.0](https://github.com/djensen47/sabre-rest/compare/v0.17.0...v0.18.0) (2026-06-23)
+
+
+### Features
+
+* **bfm,revalidate:** expose seatsAvailable per fare-component segment ([#106](https://github.com/djensen47/sabre-rest/issues/106)) ([4a1877e](https://github.com/djensen47/sabre-rest/commit/4a1877e9fb07a9998b010a5fd576a5e1310b8c15))
+* **bfm:** expand response data with penalties, ancillary fees, per-leg fares, equipment ([#120](https://github.com/djensen47/sabre-rest/issues/120)) ([4e33912](https://github.com/djensen47/sabre-rest/commit/4e33912c4631d97b1f317c2f9c6242014107562b)), closes [#113](https://github.com/djensen47/sabre-rest/issues/113)
+* **flight-reshop-v1:** expand response data (offer attributes, EMDs, branded fares) ([#118](https://github.com/djensen47/sabre-rest/issues/118)) ([3d96665](https://github.com/djensen47/sabre-rest/commit/3d966657c5737d878f0f40c0b097425666c872e5)), closes [#114](https://github.com/djensen47/sabre-rest/issues/114)
+* **revalidate:** expand response data (penalties, reissue, amenities, per-leg taxes, fare-component detail) ([#121](https://github.com/djensen47/sabre-rest/issues/121)) ([b22ba7d](https://github.com/djensen47/sabre-rest/commit/b22ba7d467c156492db0f9d1221973535f793f49))
+
+
+### Bug Fixes
+
+* **exchange-booking-v1:** drop NN from default HaltOnStatus; smoke-test tweaks ([#108](https://github.com/djensen47/sabre-rest/issues/108)) ([2ea22c8](https://github.com/djensen47/sabre-rest/commit/2ea22c8d2c3682caf7832f95765c6ba18201525f))
+
 ## [0.17.0](https://github.com/djensen47/sabre-rest/compare/v0.16.0...v0.17.0) (2026-06-13)
 
 
