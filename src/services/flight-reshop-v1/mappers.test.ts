@@ -299,6 +299,220 @@ describe('fromReshopResponse', () => {
     });
   });
 
+  it('maps branded-fare detail, private fare, flexibility refs, and fare-level tax/fee granularity', () => {
+    const out = fromReshopResponse(
+      makeResponse(
+        JSON.stringify({
+          offers: [
+            {
+              id: 'offer-1',
+              items: [
+                {
+                  fares: [
+                    {
+                      privateFare: 'Has Program Code',
+                      refundabilityRef: 'refund-1',
+                      changeRef: 'change-1',
+                      priceDifference: {
+                        type: 'Add collect',
+                        grandTotal: '128.00',
+                        currencyCode: 'USD',
+                        totalFee: { fees: [{ amount: '100.00', currencyCode: 'USD' }] },
+                        taxes: [
+                          { taxCode: 'XY', amount: '8.00', currencyCode: 'USD', isPaid: false },
+                        ],
+                        isResidualAmountForfeited: true,
+                      },
+                      fareComponents: [
+                        {
+                          fareBasisCode: 'ABCDE10',
+                          accountCode: 'ACC33',
+                          brand: { code: 'ECOFLEX', name: 'ECO FLEX', programId: 'CFFLH' },
+                          segmentDetails: [
+                            {
+                              flightRef: 'f-1',
+                              bookingClassCode: 'Q',
+                              cabinName: 'Economy',
+                              isAvailabilityBreak: true,
+                              mealCode: 'VGML',
+                              checkedBaggageRef: 'bag-1',
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    const fare = out.offers?.[0]?.items?.[0]?.fares?.[0];
+    expect(fare?.privateFare).toBe('Has Program Code');
+    expect(fare?.refundabilityRef).toBe('refund-1');
+    expect(fare?.changeRef).toBe('change-1');
+    expect(fare?.priceDifference?.fees).toEqual([{ amount: '100.00', currencyCode: 'USD' }]);
+    expect(fare?.priceDifference?.taxes).toEqual([
+      { taxCode: 'XY', amount: '8.00', currencyCode: 'USD', isPaid: false },
+    ]);
+    expect(fare?.priceDifference?.isResidualAmountForfeited).toBe(true);
+    // ExchangeTicketCharge.totalFee is an object, so the scalar totalFee stays unset.
+    expect(fare?.priceDifference?.totalFee).toBeUndefined();
+    const component = fare?.fareComponents?.[0];
+    expect(component?.accountCode).toBe('ACC33');
+    expect(component?.brand).toEqual({ code: 'ECOFLEX', name: 'ECO FLEX', programId: 'CFFLH' });
+    expect(component?.segmentDetails?.[0]).toEqual({
+      flightRef: 'f-1',
+      bookingClassCode: 'Q',
+      cabinName: 'Economy',
+      isAvailabilityBreak: true,
+      mealCode: 'VGML',
+      checkedBaggageRef: 'bag-1',
+    });
+  });
+
+  it('maps top-level offerAttributes (baggage + refundability + change rules)', () => {
+    const out = fromReshopResponse(
+      makeResponse(
+        JSON.stringify({
+          offerAttributes: {
+            checkedBaggageItems: [
+              {
+                id: 'bag-1',
+                allowances: [
+                  {
+                    numberOfPieces: 1,
+                    maximumWeightInKilograms: 23,
+                    bagDefinition: { description: ['First checked bag'] },
+                    airlineCode: 'AA',
+                  },
+                ],
+                charges: [
+                  {
+                    firstPiece: 1,
+                    lastPiece: 2,
+                    amount: '100.00',
+                    currencyCode: 'USD',
+                    airlineCode: 'AA',
+                  },
+                ],
+              },
+            ],
+            refundabilityItems: [
+              {
+                id: 'refund-1',
+                beforeDeparture: { isPermitted: true, maxCharge: '14.00', currencyCode: 'USD' },
+                afterDeparture: { isPermitted: false },
+              },
+            ],
+            changeItems: [{ id: 'change-1', beforeDeparture: { isPermitted: true } }],
+          },
+        }),
+      ),
+    );
+
+    const attrs = out.offerAttributes;
+    const bag = attrs?.checkedBaggageItems?.[0];
+    expect(bag?.id).toBe('bag-1');
+    expect(bag?.allowances?.[0]).toEqual({
+      numberOfPieces: 1,
+      maximumWeightInKilograms: 23,
+      bagDefinition: { description: ['First checked bag'] },
+      airlineCode: 'AA',
+    });
+    expect(bag?.charges?.[0]?.amount).toBe('100.00');
+    expect(attrs?.refundabilityItems?.[0]).toEqual({
+      id: 'refund-1',
+      beforeDeparture: { isPermitted: true, maxCharge: '14.00', currencyCode: 'USD' },
+      afterDeparture: { isPermitted: false },
+    });
+    expect(attrs?.changeItems?.[0]).toEqual({
+      id: 'change-1',
+      beforeDeparture: { isPermitted: true },
+    });
+  });
+
+  it('maps top-level associatedElectronicMiscellaneousDocuments (EMD-A)', () => {
+    const out = fromReshopResponse(
+      makeResponse(
+        JSON.stringify({
+          associatedElectronicMiscellaneousDocuments: [
+            {
+              ticketNumber: '0167489825830',
+              electronicMiscellaneousDocuments: [
+                {
+                  number: '0167489825831',
+                  reasonForIssuanceCode: 'C',
+                  reasonForIssuanceName: 'Baggage',
+                  refundEligibility: 'Refundable',
+                  unusedAmount: '25.00',
+                  total: '125.00',
+                  currencyCode: 'USD',
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    const emdGroup = out.associatedElectronicMiscellaneousDocuments?.[0];
+    expect(emdGroup?.ticketNumber).toBe('0167489825830');
+    expect(emdGroup?.electronicMiscellaneousDocuments?.[0]).toEqual({
+      number: '0167489825831',
+      reasonForIssuanceCode: 'C',
+      reasonForIssuanceName: 'Baggage',
+      refundEligibility: 'Refundable',
+      unusedAmount: '25.00',
+      total: '125.00',
+      currencyCode: 'USD',
+    });
+  });
+
+  it('maps flight hiddenStops', () => {
+    const out = fromReshopResponse(
+      makeResponse(
+        JSON.stringify({
+          flights: [
+            {
+              id: 'f-1',
+              hiddenStops: [
+                {
+                  airportCode: 'DFW',
+                  departureDate: '2026-07-09',
+                  departureTime: '09:15',
+                  arrivalDate: '2026-07-09',
+                  arrivalTime: '12:28',
+                  aircraftTypeCode: 'E90',
+                  durationInMinutes: 300,
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(out.flights?.[0]?.hiddenStops?.[0]).toEqual({
+      airportCode: 'DFW',
+      departureDate: '2026-07-09',
+      departureTime: '09:15',
+      arrivalDate: '2026-07-09',
+      arrivalTime: '12:28',
+      aircraftTypeCode: 'E90',
+      durationInMinutes: 300,
+    });
+  });
+
+  it('omits offerAttributes and associated EMDs when absent', () => {
+    const out = fromReshopResponse(makeResponse(JSON.stringify({ numberOfOffers: 0 })));
+    expect(out.offerAttributes).toBeUndefined();
+    expect(out.associatedElectronicMiscellaneousDocuments).toBeUndefined();
+  });
+
   it('maps an empty response (no offers, no flights)', () => {
     const out = fromReshopResponse(
       makeResponse(JSON.stringify({ timestamp: '2026-06-04T00:00:00Z' })),
