@@ -3,14 +3,21 @@ import type { components } from '../../generated/revalidate-itinerary.js';
 import { ensureTrailingSlash } from '../../http/ensure-trailing-slash.js';
 import type { SabreRequest, SabreResponse } from '../../http/types.js';
 import type {
+  Amenity,
   BaggageAllowance,
   BaggageCharge,
+  ChangeFee,
+  ChangeRefundPenalty,
+  FareBrand,
   FareComponent,
   FareComponentSegment,
   FareOffer,
   FlightSegment,
+  HiddenStop,
   ItineraryLeg,
   PassengerFare,
+  PassengerLegFare,
+  PassengerReissue,
   PassengerTotal,
   PricedItinerary,
   RevalidateItineraryInput,
@@ -18,6 +25,7 @@ import type {
   SabreMessage,
   SegmentEndpoint,
   Tax,
+  TaxSummary,
   TotalFare,
 } from './types.js';
 
@@ -200,6 +208,13 @@ export function fromRevalidateResponse(res: SabreResponse): RevalidateItineraryO
     }
   }
 
+  const taxSummaryById = new Map<number, components['schemas']['TaxSummaryType']>();
+  for (const t of root.taxSummaryDescs ?? []) {
+    if (typeof t.id === 'number') {
+      taxSummaryById.set(t.id, t);
+    }
+  }
+
   const itineraries: PricedItinerary[] = [];
   for (const group of root.itineraryGroups ?? []) {
     for (const itin of group.itineraries ?? []) {
@@ -212,6 +227,7 @@ export function fromRevalidateResponse(res: SabreResponse): RevalidateItineraryO
           baggageAllowanceById,
           baggageChargeById,
           taxById,
+          taxSummaryById,
         ),
       );
     }
@@ -240,6 +256,7 @@ function buildPricedItinerary(
   baggageAllowanceById: Map<number, components['schemas']['BaggageAllowanceType']>,
   baggageChargeById: Map<number, components['schemas']['BaggageChargeType']>,
   taxById: Map<number, components['schemas']['TaxType']>,
+  taxSummaryById: Map<number, components['schemas']['TaxSummaryType']>,
 ): PricedItinerary {
   const legs: ItineraryLeg[] = (itin.legs ?? []).map((legRef) => {
     const ref = typeof legRef.ref === 'number' ? legRef.ref : undefined;
@@ -248,7 +265,14 @@ function buildPricedItinerary(
   });
 
   const fareOffers: FareOffer[] = (itin.pricingInformation ?? []).map((pi) =>
-    buildFareOffer(pi, fareComponentById, baggageAllowanceById, baggageChargeById, taxById),
+    buildFareOffer(
+      pi,
+      fareComponentById,
+      baggageAllowanceById,
+      baggageChargeById,
+      taxById,
+      taxSummaryById,
+    ),
   );
 
   const result: PricedItinerary = { legs, fareOffers };
@@ -278,6 +302,7 @@ function buildFareOffer(
   baggageAllowanceById: Map<number, components['schemas']['BaggageAllowanceType']>,
   baggageChargeById: Map<number, components['schemas']['BaggageChargeType']>,
   taxById: Map<number, components['schemas']['TaxType']>,
+  taxSummaryById: Map<number, components['schemas']['TaxSummaryType']>,
 ): FareOffer {
   const passengerFares: PassengerFare[] = [];
   for (const entry of pricing.fare?.passengerInfoList ?? []) {
@@ -289,6 +314,7 @@ function buildFareOffer(
         baggageAllowanceById,
         baggageChargeById,
         taxById,
+        taxSummaryById,
       ),
     );
   }
@@ -313,6 +339,7 @@ function buildPassengerFare(
   baggageAllowanceById: Map<number, components['schemas']['BaggageAllowanceType']>,
   baggageChargeById: Map<number, components['schemas']['BaggageChargeType']>,
   taxById: Map<number, components['schemas']['TaxType']>,
+  taxSummaryById: Map<number, components['schemas']['TaxSummaryType']>,
 ): PassengerFare {
   const fareComponents: FareComponent[] = (info.fareComponents ?? []).map((idEntry) => {
     const desc = typeof idEntry.ref === 'number' ? fareComponentById.get(idEntry.ref) : undefined;
@@ -340,6 +367,22 @@ function buildPassengerFare(
 
   const out: PassengerFare = { fareComponents, baggageAllowances, baggageCharges, taxes };
 
+  const penalties = info.penaltiesInfo?.penalties;
+  if (penalties && penalties.length > 0) {
+    out.penalties = penalties.map(buildPenalty);
+  }
+  if (info.reissue !== undefined) out.reissue = buildReissue(info.reissue);
+  if (info.reissueText !== undefined) out.reissueText = info.reissueText;
+  if (info.seatSelection && info.seatSelection.length > 0) {
+    out.seatSelection = info.seatSelection.map(buildAmenity);
+  }
+  if (info.priorityBoarding && info.priorityBoarding.length > 0) {
+    out.priorityBoarding = info.priorityBoarding.map(buildAmenity);
+  }
+  if (info.legs && info.legs.length > 0) {
+    out.legs = info.legs.map((leg) => buildPassengerLegFare(leg, taxById, taxSummaryById));
+  }
+
   if (info.passengerType !== undefined) out.passengerType = info.passengerType;
   if (typeof info.passengerNumber === 'number') out.passengerNumber = info.passengerNumber;
   if (typeof info.total === 'number') out.passengerCount = info.total;
@@ -350,6 +393,102 @@ function buildPassengerFare(
   const total = extractPassengerTotal(info.passengerTotalFare);
   if (total !== undefined) out.total = total;
 
+  return out;
+}
+
+function buildPenalty(penalty: components['schemas']['Penalty']): ChangeRefundPenalty {
+  const out: ChangeRefundPenalty = {};
+  if (penalty.type !== undefined) out.type = penalty.type;
+  if (penalty.applicability !== undefined) out.applicability = penalty.applicability;
+  if (typeof penalty.changeable === 'boolean') out.changeable = penalty.changeable;
+  if (typeof penalty.refundable === 'boolean') out.refundable = penalty.refundable;
+  if (typeof penalty.conditionsApply === 'boolean') out.conditionsApply = penalty.conditionsApply;
+  if (typeof penalty.amount === 'number') out.amount = penalty.amount;
+  if (penalty.currency !== undefined) out.currency = penalty.currency;
+  if (typeof penalty.minPenalty?.amount === 'number')
+    out.minPenaltyAmount = penalty.minPenalty.amount;
+  if (penalty.minPenalty?.currency !== undefined)
+    out.minPenaltyCurrency = penalty.minPenalty.currency;
+  if (typeof penalty.cat16Info === 'boolean') out.cat16Info = penalty.cat16Info;
+  if (penalty.description !== undefined) out.description = penalty.description;
+  return out;
+}
+
+function buildReissue(reissue: components['schemas']['ReissueType']): PassengerReissue {
+  const changeFees: ChangeFee[] = (reissue.changeFees ?? []).map(buildChangeFee);
+  const out: PassengerReissue = { changeFees };
+  if (typeof reissue.electronicTicketRequired === 'boolean')
+    out.electronicTicketRequired = reissue.electronicTicketRequired;
+  if (typeof reissue.electronicTicketNotAllowed === 'boolean')
+    out.electronicTicketNotAllowed = reissue.electronicTicketNotAllowed;
+  if (reissue.formOfRefund !== undefined) out.formOfRefund = reissue.formOfRefund;
+  if (reissue.residual !== undefined) out.residual = reissue.residual;
+  return out;
+}
+
+function buildChangeFee(fee: components['schemas']['ChangeFeeType']): ChangeFee {
+  const out: ChangeFee = {};
+  if (typeof fee.amount === 'number') out.amount = fee.amount;
+  if (fee.currency !== undefined) out.currency = fee.currency;
+  if (typeof fee.highest === 'boolean') out.highest = fee.highest;
+  if (typeof fee.notApplicable === 'boolean') out.notApplicable = fee.notApplicable;
+  if (typeof fee.waived === 'boolean') out.waived = fee.waived;
+  return out;
+}
+
+function buildAmenity(amenity: components['schemas']['AmenitiesType']): Amenity {
+  const segmentIndices: number[] = [];
+  for (const seg of amenity.segment ?? []) {
+    if (typeof seg.id === 'number') segmentIndices.push(seg.id);
+  }
+  const out: Amenity = { segmentIndices };
+  if (amenity.type !== undefined) {
+    out.code = amenity.type;
+    const charge = AMENITY_CHARGE_BY_CODE[amenity.type];
+    if (charge !== undefined) out.charge = charge;
+  }
+  return out;
+}
+
+const AMENITY_CHARGE_BY_CODE: Record<string, Amenity['charge']> = {
+  F: 'Free',
+  C: 'Chargeable',
+  N: 'NotOffered',
+};
+
+function buildPassengerLegFare(
+  leg: components['schemas']['PricingLegType'],
+  taxById: Map<number, components['schemas']['TaxType']>,
+  taxSummaryById: Map<number, components['schemas']['TaxSummaryType']>,
+): PassengerLegFare {
+  const taxes: Tax[] = (leg.taxes ?? []).map((taxRef) => {
+    const desc = typeof taxRef.ref === 'number' ? taxById.get(taxRef.ref) : undefined;
+    return buildTax(desc);
+  });
+  const taxSummaries: TaxSummary[] = (leg.taxSummaries ?? []).map((sumRef) => {
+    const desc = typeof sumRef.ref === 'number' ? taxSummaryById.get(sumRef.ref) : undefined;
+    return buildTaxSummary(desc);
+  });
+
+  const out: PassengerLegFare = { taxes, taxSummaries };
+  if (typeof leg.ref === 'number') out.ref = leg.ref;
+  if (leg.status !== undefined) out.status = leg.status;
+  const totalFare = extractTotalFareFromTotal(leg.totalFare);
+  if (totalFare !== undefined) out.totalFare = totalFare;
+  return out;
+}
+
+function buildTaxSummary(desc: components['schemas']['TaxSummaryType'] | undefined): TaxSummary {
+  const out: TaxSummary = {};
+  if (!desc) return out;
+  if (desc.code !== undefined) out.code = desc.code;
+  if (typeof desc.amount === 'number') out.amount = desc.amount;
+  if (desc.currency !== undefined) out.currency = desc.currency;
+  if (desc.country !== undefined) out.country = desc.country;
+  if (desc.description !== undefined) out.description = desc.description;
+  if (desc.station !== undefined) out.station = desc.station;
+  if (typeof desc.publishedAmount === 'number') out.publishedAmount = desc.publishedAmount;
+  if (desc.publishedCurrency !== undefined) out.publishedCurrency = desc.publishedCurrency;
   return out;
 }
 
@@ -373,9 +512,31 @@ function buildFareComponent(
     if (desc.cabinCode !== undefined) out.cabinCode = desc.cabinCode;
     if (desc.governingCarrier !== undefined) out.governingCarrier = desc.governingCarrier;
     if (desc.farePassengerType !== undefined) out.farePassengerType = desc.farePassengerType;
+    if (desc.brand !== undefined) {
+      const brand = buildFareBrand(desc.brand);
+      if (brand !== undefined) out.brand = brand;
+    }
+    if (typeof desc.negotiatedFare === 'boolean') out.negotiatedFare = desc.negotiatedFare;
+    if (typeof desc.privateFare === 'boolean') out.privateFare = desc.privateFare;
+    if (desc.matchedAccountCode !== undefined) out.matchedAccountCode = desc.matchedAccountCode;
+    if (typeof desc.corporateIdMatched === 'boolean')
+      out.corporateIdMatched = desc.corporateIdMatched;
+    if (desc.notValidBefore !== undefined) out.notValidBefore = desc.notValidBefore;
+    if (desc.notValidAfter !== undefined) out.notValidAfter = desc.notValidAfter;
+    if (typeof desc.eligibleForTicketing === 'boolean')
+      out.eligibleForTicketing = desc.eligibleForTicketing;
   }
 
   return out;
+}
+
+function buildFareBrand(brand: components['schemas']['BrandType']): FareBrand | undefined {
+  const out: FareBrand = {};
+  if (brand.code !== undefined) out.code = brand.code;
+  if (brand.brandName !== undefined) out.name = brand.brandName;
+  if (brand.programCode !== undefined) out.programCode = brand.programCode;
+  if (brand.programDescription !== undefined) out.programDescription = brand.programDescription;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function buildFareComponentSegment(
@@ -386,6 +547,8 @@ function buildFareComponentSegment(
   if (seg.cabinCode !== undefined) out.cabinCode = seg.cabinCode;
   if (seg.mealCode !== undefined) out.mealCode = seg.mealCode;
   if (typeof seg.seatsAvailable === 'number') out.seatsAvailable = seg.seatsAvailable;
+  if (typeof seg.availabilityBreak === 'boolean') out.availabilityBreak = seg.availabilityBreak;
+  if (seg.dualInventoryCode !== undefined) out.dualInventoryCode = seg.dualInventoryCode;
   return out;
 }
 
@@ -529,7 +692,34 @@ function buildFlightSegment(
     segment.scheduleBookingClass = desc.bookingDetails.classOfService;
   }
 
+  if (carrier?.equipment?.code !== undefined) {
+    segment.equipment = carrier.equipment.code;
+  }
+  if (desc.dotRating !== undefined) {
+    segment.dotRating = desc.dotRating;
+  }
+  if (typeof desc.onTimePerformance === 'number') {
+    segment.onTimePerformance = desc.onTimePerformance;
+  }
+  if (desc.hiddenStops && desc.hiddenStops.length > 0) {
+    segment.hiddenStops = desc.hiddenStops.map(buildHiddenStop);
+  }
+
   return segment;
+}
+
+function buildHiddenStop(stop: components['schemas']['HiddenStopType']): HiddenStop {
+  const out: HiddenStop = {};
+  if (stop.airport !== undefined) out.airport = stop.airport;
+  if (stop.arrivalTime !== undefined) out.arrivalTime = stop.arrivalTime;
+  if (stop.departureTime !== undefined) out.departureTime = stop.departureTime;
+  if (typeof stop.arrivalDateAdjustment === 'number')
+    out.arrivalDateAdjustment = stop.arrivalDateAdjustment;
+  if (typeof stop.departureDateAdjustment === 'number')
+    out.departureDateAdjustment = stop.departureDateAdjustment;
+  if (typeof stop.airMiles === 'number') out.airMiles = stop.airMiles;
+  if (stop.equipment !== undefined) out.equipment = stop.equipment;
+  return out;
 }
 
 function buildDepartureEndpoint(
@@ -560,7 +750,12 @@ function buildArrivalEndpoint(
 function extractTotalFare(
   fare: components['schemas']['FareType'] | undefined,
 ): TotalFare | undefined {
-  const tf = fare?.totalFare;
+  return extractTotalFareFromTotal(fare?.totalFare);
+}
+
+function extractTotalFareFromTotal(
+  tf: components['schemas']['TotalFareType'] | undefined,
+): TotalFare | undefined {
   if (!tf) return undefined;
   const out: TotalFare = {};
   if (typeof tf.totalPrice === 'number') out.totalAmount = tf.totalPrice;
