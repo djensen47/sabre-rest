@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/djensen47/sabre-rest/compare/v0.18.0...v0.19.0) (2026-06-29)
+
+
+### Features
+
+* add geo-search v4 and geo-autocomplete v2 services ([#126](https://github.com/djensen47/sabre-rest/issues/126)) ([bd0a803](https://github.com/djensen47/sabre-rest/commit/bd0a8035e21dbfc2fc05e999f38a745b4e366b14)), closes [#125](https://github.com/djensen47/sabre-rest/issues/125)
+
 ## [0.18.0](https://github.com/djensen47/sabre-rest/compare/v0.17.0...v0.18.0) (2026-06-23)
 
 
