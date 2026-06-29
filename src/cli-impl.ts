@@ -22,6 +22,9 @@ import type { Middleware, SabreRequest } from './http/types.js';
 import type {
   Airline,
   AirlineAlliance,
+  AutocompleteInput,
+  AutocompleteOutput,
+  AutocompletePlace,
   AvailAddressRef,
   AvailGeoCodeRef,
   AvailHotel,
@@ -260,6 +263,26 @@ export function airlinesToTableRows(out: LookupAirlinesOutput): {
     a.alternativeName ?? '',
   ]);
   return { headers: ['code', 'name', 'alternativeName'], rows };
+}
+
+/** Converts a Geo Autocomplete output into table rows. */
+export function autocompleteToTableRows(out: AutocompleteOutput): {
+  headers: readonly string[];
+  rows: readonly string[][];
+} {
+  const rows: string[][] = [];
+  for (const group of out.groups) {
+    for (const place of group.places) {
+      rows.push([
+        place.id ?? '',
+        place.name ?? '',
+        place.city ?? '',
+        place.country ?? '',
+        place.category ?? group.category ?? '',
+      ]);
+    }
+  }
+  return { headers: ['id', 'name', 'city', 'country', 'category'], rows };
 }
 
 /** Converts an Airline Alliance Lookup output into table rows. */
@@ -630,6 +653,33 @@ export function buildAirlineAllianceLookupInput(values: {
   const codes = splitCommaList(values.codes);
   if (codes === undefined) return undefined;
   return { codes };
+}
+
+/** Builds the input for `geoAutocompleteV2.autocomplete` from CLI flags. */
+export function buildGeoAutocompleteInput(values: {
+  query?: string;
+  category?: string;
+  limit?: string;
+  'client-id'?: string;
+  body?: string;
+}): AutocompleteInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as AutocompleteInput;
+  }
+  if (!values.query) {
+    throw new CliUsageError('--query is required (minimum 3 characters)');
+  }
+  const input: AutocompleteInput = { query: values.query };
+  if (values.category !== undefined) {
+    input.category = values.category as AutocompleteInput['category'];
+  }
+  if (values.limit !== undefined) {
+    input.limit = Number(values.limit);
+  }
+  if (values['client-id'] !== undefined) {
+    input.clientId = values['client-id'];
+  }
+  return input;
 }
 
 /** Flag set for `bargain-finder-max` (parseArgs values + repeated --pax). */
@@ -2674,6 +2724,7 @@ Commands:
   exchange-booking          Sabre Exchange Booking v1.1.0
   flight-reshop             Sabre Flight Reshop v1.0
   fulfill-tickets           Sabre Booking Management v1 — Fulfill Flight Tickets
+  geo-autocomplete          Sabre Geo Autocomplete v2
   get-ancillaries           Sabre Get Ancillaries v2
   get-booking               Sabre Booking Management v1 — Get Booking
   get-hotel-avail           Sabre Get Hotel Avail v5
@@ -2744,6 +2795,36 @@ Examples:
   sabre-rest airline-alliance-lookup
   sabre-rest airline-alliance-lookup --codes "*A,*O" --format table
 `;
+
+const GEO_AUTOCOMPLETE_HELP = `Usage: sabre-rest geo-autocomplete [flags]
+
+Sabre Geo Autocomplete v2. Returns location predictions for a text query.
+
+Flags:
+  --query <text>            Search text, min 3 characters (required unless --body)
+  --category <cat>          Filter: AIR, CITY, RAIL, POI, LOCATION
+  --limit <n>               Results per category (1-30, default 5)
+  --client-id <id>          Client identifier
+  --body <json>             Override input with raw JSON (ignores other flags)
+  --base-url <url>          Override SABRE_BASE_URL
+  --format json|table       Output format (default: json)
+  --debug-request           Print the outbound HTTP request to stderr
+  -h, --help                Show this help
+
+Examples:
+  sabre-rest geo-autocomplete --query Dallas
+  sabre-rest geo-autocomplete --query Lon --category AIR --limit 10
+  sabre-rest geo-autocomplete --query "New York" --format table
+`;
+
+const GEO_AUTOCOMPLETE_OPTIONS = {
+  ...COMMON_OPTIONS,
+  query: { type: 'string' },
+  category: { type: 'string' },
+  limit: { type: 'string' },
+  'client-id': { type: 'string' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
 
 const BFM_HELP = `Usage: sabre-rest bargain-finder-max [flags]
 
@@ -3486,6 +3567,33 @@ async function airlineAllianceLookupCommand(
   });
 }
 
+async function geoAutocompleteCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: GEO_AUTOCOMPLETE_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(GEO_AUTOCOMPLETE_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildGeoAutocompleteInput(values);
+  const result = await client.geoAutocompleteV2.autocomplete(input);
+  emitResult(result, format, io, () => {
+    const { headers, rows } = autocompleteToTableRows(result);
+    return renderTable(headers, rows);
+  });
+}
+
 async function bargainFinderMaxCommand(
   argv: readonly string[],
   env: CliEnvConfig,
@@ -4029,6 +4137,7 @@ export const COMMANDS: Record<
   'exchange-booking': exchangeBookingCommand,
   'flight-reshop': flightReshopCommand,
   'fulfill-tickets': fulfillTicketsCommand,
+  'geo-autocomplete': geoAutocompleteCommand,
   'get-ancillaries': getAncillariesCommand,
   'get-booking': getBookingCommand,
   'get-hotel-avail': getHotelAvailCommand,

@@ -243,6 +243,14 @@ export type {
   ExchangeTaxLine,
   ExchangeTransactionInformation,
 } from './services/exchange-booking-v1/types.js';
+export type { GeoAutocompleteV2Service } from './services/geo-autocomplete-v2/service.js';
+export type {
+  AutocompleteCategoryGroup,
+  AutocompleteInput,
+  AutocompleteOutput,
+  AutocompletePlace,
+  GeoCategory,
+} from './services/geo-autocomplete-v2/types.js';
 export type { FlightReshopV1Service } from './services/flight-reshop-v1/service.js';
 export type {
   FlightReshopAssociatedEmds,

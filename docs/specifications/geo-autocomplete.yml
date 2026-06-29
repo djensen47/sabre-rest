@@ -1,0 +1,214 @@
+openapi: 3.0.0
+info:
+  title: Geo Autocomplete
+  version: v2
+  description: The Geo Autocomplete API returns a list of location predictions for
+    text-based geographic search queries.
+paths:
+  /v2/geo/autocomplete:
+    get:
+      operationId: geoAutocomplete
+      description: >
+        It returns an on-the-fly list of up to five of the most relevant
+        location predictions to aid the traveler in selecting a desired place.
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: |
+            The full word or substring to be autocompleted.
+
+            A minimum of three characters is required.
+          example: Dall
+          schema:
+            type: string
+        - name: category
+          in: query
+          required: false
+          description: |
+            Retrieves places that are associated with this specified category.
+          schema:
+            type: string
+            enum:
+              - AIR
+              - CITY
+              - RAIL
+              - POI
+              - LOCATION
+        - name: limit
+          in: query
+          required: false
+          description: |
+            The number of search results to return per category.
+          schema:
+            type: number
+            minimum: 1
+            maximum: 30
+            default: 5
+        - name: clientId
+          in: query
+          required: false
+          description: |
+            The unique identifier for the client.
+            In place of the example, provide your clientId.
+          example: devstudio
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful Response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeoAutocompleteResponse"
+        "400":
+          description: |
+            Bad Request
+
+            - Required string parameter `query` is not present.
+            - Unable to convert `limit` to required type number.
+security:
+  - oauth2_authentication: []
+servers:
+  - url: https://api.cert.platform.sabre.com
+components:
+  securitySchemes:
+    oauth2_authentication:
+      type: oauth2
+      x-base64-encode-client-credentials: true
+      flows:
+        clientCredentials:
+          tokenUrl: https://api.cert.platform.sabre.com/v2/auth/token
+          scopes: {}
+  schemas:
+    GeoAutocompleteResponse:
+      description: Contains location predictions for the text-based geographic search query.
+      type: object
+      properties:
+        responseHeader:
+          description: The metadata associated with the request and response.
+          type: object
+          properties:
+            status:
+              description: HTTP status code.
+              type: number
+              example: 0
+            QTime:
+              description: The time (in seconds) taken to execute the query.
+              type: number
+              example: 4
+        grouped:
+          description: The results of the query specific to the requested category.
+          type: object
+          properties:
+            category:AIR:
+              $ref: "#/components/schemas/CategoryResponse"
+            category:RAIL:
+              $ref: "#/components/schemas/CategoryResponse"
+            category:CITY:
+              $ref: "#/components/schemas/CategoryResponse"
+            category:POI:
+              $ref: "#/components/schemas/CategoryResponse"
+            categpry:LOCATION:
+              $ref: "#/components/schemas/CategoryResponse"
+    CategoryResponse:
+      description: The category of the response based on the request, such as 'AIR`,
+        `RAIL`, `CITY`, `POI` or `LOCATION`.
+      type: object
+      properties:
+        matches:
+          description: Total number of places that matched the requested category.
+          type: number
+          example: 181
+        doclist:
+          description: Location results that matched the query.
+          type: object
+          properties:
+            numFound:
+              description: Total number of results found based on the query.
+              type: number
+              example: 10
+            start:
+              description: The starting position of the places that matched the query.
+              type: number
+              example: 0
+            docs:
+              description: Lists the places that matched the query.
+              type: array
+              items:
+                description: Contains location information like the address data and geo code
+                  for the matched locations.
+                type: object
+                properties:
+                  name:
+                    description: Complete name of the place that matched the query.
+                    type: string
+                    example: Dallas/Fort Worth Intl.
+                  city:
+                    description: City name fully spelled.
+                    type: string
+                    example: Dallas
+                  country:
+                    description: Country as a two-letter, ISO 3166 code.
+                    type: string
+                    example: US
+                  countryName:
+                    description: Country name fully spelled.
+                    type: string
+                    example: United States Of America
+                  stateName:
+                    description: State or province name fully spelled.
+                    type: string
+                    example: Texas
+                  state:
+                    description: State or province as an abbreviated code.
+                    type: string
+                    example: TX
+                  category:
+                    description: Type of category such as 'AIR','RAIL', and 'CITY'.
+                    type: string
+                    example: AIR
+                  id:
+                    description: The unique identifier for the place that matched the query.
+                    type: string
+                    example: DFW
+                  dataset:
+                    description: The type of data such as 'AIR', 'RAIL', 'LOCATION', 'POI' or
+                      'CITY'.
+                    type: string
+                    example: AIR
+                  datasource:
+                    description: The source that provides the geographical data.
+                    type: string
+                    example: INNOVATA
+                  confidenceFactor:
+                    type: string
+                    example: "1"
+                    description: >
+                      The degree of accuracy in the latitude and longitude (as
+                      provided by the geocoding entity) of the location that
+                      matched the query.
+                  latitude:
+                    description: The geographic latitude of the place that matched the query.
+                    type: string
+                    example: "32.896111"
+                  longitude:
+                    description: The geographic longitude of the place that matched the query.
+                    type: string
+                    example: "-97.041111"
+                  iataCityCode:
+                    description: The three-letter IATA code of the city where the place that matched
+                      the query is located in.
+                    type: string
+                    example: QDF
+                  ranking:
+                    type: number
+                    example: 884
+                    description: >
+                      The position (from 1-900) of a city or airport to
+                      respectively indicate the population density or air
+                      traffic volume of the place.
+
+                      A city when ranked 900 indicates a large population.
+
+                      An airport when ranked 900 indicates a high traffic by the number of nonstop flights from there.

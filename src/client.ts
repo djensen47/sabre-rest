@@ -32,6 +32,10 @@ import {
   type FlightReshopV1Service,
 } from './services/flight-reshop-v1/service.js';
 import {
+  DefaultGeoAutocompleteV2Service,
+  type GeoAutocompleteV2Service,
+} from './services/geo-autocomplete-v2/service.js';
+import {
   DefaultGetAncillariesV2Service,
   type GetAncillariesV2Service,
 } from './services/get-ancillaries-v2/service.js';
@@ -144,6 +148,15 @@ export interface SabreClient {
    * Read-only; pair with Exchange Booking to commit the reissue.
    */
   readonly flightReshopV1: FlightReshopV1Service;
+
+  /**
+   * Sabre Geo Autocomplete v2.
+   *
+   * Returns location predictions for text-based geographic search queries,
+   * covering airports, cities, rail stations, points of interest, and
+   * general locations.
+   */
+  readonly geoAutocompleteV2: GeoAutocompleteV2Service;
 
   /**
    * Sabre Get Ancillaries v2.
@@ -302,6 +315,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
   const createPassengerNameRecordV25 = new DefaultCreatePassengerNameRecordV25Service(deps);
   const exchangeBookingV1 = new DefaultExchangeBookingV1Service(deps);
   const flightReshopV1 = new DefaultFlightReshopV1Service(deps);
+  const geoAutocompleteV2 = new DefaultGeoAutocompleteV2Service(deps);
   const getAncillariesV2 = new DefaultGetAncillariesV2Service(deps);
   const getHotelAvailV5 = new DefaultGetHotelAvailV5Service(deps);
   const getHotelDetailsV5 = new DefaultGetHotelDetailsV5Service(deps);
@@ -320,6 +334,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
     createPassengerNameRecordV25,
     exchangeBookingV1,
     flightReshopV1,
+    geoAutocompleteV2,
     getAncillariesV2,
     getHotelAvailV5,
     getHotelDetailsV5,
@@ -340,6 +355,7 @@ interface SabreClientServices {
   createPassengerNameRecordV25: CreatePassengerNameRecordV25Service;
   exchangeBookingV1: ExchangeBookingV1Service;
   flightReshopV1: FlightReshopV1Service;
+  geoAutocompleteV2: GeoAutocompleteV2Service;
   getAncillariesV2: GetAncillariesV2Service;
   getHotelAvailV5: GetHotelAvailV5Service;
   getHotelDetailsV5: GetHotelDetailsV5Service;
@@ -365,6 +381,7 @@ class DefaultSabreClient implements SabreClient {
   readonly createPassengerNameRecordV25: CreatePassengerNameRecordV25Service;
   readonly exchangeBookingV1: ExchangeBookingV1Service;
   readonly flightReshopV1: FlightReshopV1Service;
+  readonly geoAutocompleteV2: GeoAutocompleteV2Service;
   readonly getAncillariesV2: GetAncillariesV2Service;
   readonly getHotelAvailV5: GetHotelAvailV5Service;
   readonly getHotelDetailsV5: GetHotelDetailsV5Service;
@@ -384,6 +401,7 @@ class DefaultSabreClient implements SabreClient {
     this.createPassengerNameRecordV25 = services.createPassengerNameRecordV25;
     this.exchangeBookingV1 = services.exchangeBookingV1;
     this.flightReshopV1 = services.flightReshopV1;
+    this.geoAutocompleteV2 = services.geoAutocompleteV2;
     this.getAncillariesV2 = services.getAncillariesV2;
     this.getHotelAvailV5 = services.getHotelAvailV5;
     this.getHotelDetailsV5 = services.getHotelDetailsV5;
