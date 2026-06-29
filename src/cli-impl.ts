@@ -41,6 +41,12 @@ import type {
   FlightReshopInput,
   FulfillTicketsInput,
   GeoRef,
+  GeoSearchCategory,
+  GeoSearchDirection,
+  GeoSearchDistanceUnit,
+  GeoSearchInput,
+  GeoSearchOutput,
+  GeoSearchRef,
   GetAncillariesInput,
   GetBookingInput,
   GetHotelAvailInput,
@@ -2358,6 +2364,215 @@ export function buildRefundTicketsInput(values: {
   return input;
 }
 
+const GEO_SEARCH_CATEGORIES: ReadonlySet<GeoSearchCategory> = new Set([
+  'HOTEL',
+  'CAR',
+  'AIR',
+  'RAIL',
+]);
+const GEO_SEARCH_UOMS: ReadonlySet<GeoSearchDistanceUnit> = new Set(['MI', 'KM']);
+const GEO_SEARCH_DIRECTIONS: ReadonlySet<GeoSearchDirection> = new Set([
+  'N',
+  'S',
+  'E',
+  'W',
+  'NE',
+  'NW',
+  'SE',
+  'SW',
+]);
+
+export interface GeoSearchFlagValues {
+  'geo-code'?: string;
+  'ref-point'?: string;
+  address?: string;
+  category?: string;
+  radius?: string;
+  uom?: string;
+  direction?: string;
+  'max-results'?: string;
+  'max-search-results'?: string;
+  offset?: string;
+  'non-aggregator-only'?: boolean;
+  attributes?: string;
+  body?: string;
+}
+
+export function buildGeoSearchInput(values: GeoSearchFlagValues): GeoSearchInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as GeoSearchInput;
+  }
+
+  const anchors = [values['geo-code'], values['ref-point'], values.address].filter(
+    (v): v is string => v !== undefined,
+  );
+  if (anchors.length === 0) {
+    throw new CliUsageError(
+      'geo-search requires one of --geo-code, --ref-point, or --address. (Or supply --body with a full JSON input.)',
+    );
+  }
+  if (anchors.length > 1) {
+    throw new CliUsageError(
+      'geo-search: --geo-code, --ref-point, and --address are mutually exclusive. Pick one.',
+    );
+  }
+
+  if (values.category === undefined) {
+    throw new CliUsageError('geo-search requires --category (HOTEL, CAR, AIR, or RAIL).');
+  }
+  if (!GEO_SEARCH_CATEGORIES.has(values.category as GeoSearchCategory)) {
+    throw new CliUsageError(
+      `Invalid --category value '${values.category}'. Expected one of: ${Array.from(GEO_SEARCH_CATEGORIES).join(', ')}.`,
+    );
+  }
+  const category = values.category as GeoSearchCategory;
+
+  const uom = parseGeoSearchUom(values.uom);
+  const radius = parseGeoSearchRadius(values.radius);
+  const geoRef = parseGeoSearchRef(values);
+
+  const input: GeoSearchInput = { category, radius, uom, geoRef };
+
+  if (values.direction !== undefined) {
+    if (!GEO_SEARCH_DIRECTIONS.has(values.direction as GeoSearchDirection)) {
+      throw new CliUsageError(
+        `Invalid --direction value '${values.direction}'. Expected one of: ${Array.from(GEO_SEARCH_DIRECTIONS).join(', ')}.`,
+      );
+    }
+    input.direction = values.direction as GeoSearchDirection;
+  }
+
+  if (values['max-results'] !== undefined) {
+    const n = Number(values['max-results']);
+    if (!Number.isInteger(n) || n < 1) {
+      throw new CliUsageError(
+        `Invalid --max-results value '${values['max-results']}'. Expected a positive integer.`,
+      );
+    }
+    input.maxResults = n;
+  }
+
+  if (values['max-search-results'] !== undefined) {
+    const n = Number(values['max-search-results']);
+    if (!Number.isInteger(n) || n < 1) {
+      throw new CliUsageError(
+        `Invalid --max-search-results value '${values['max-search-results']}'. Expected a positive integer.`,
+      );
+    }
+    input.maxSearchResults = n;
+  }
+
+  if (values.offset !== undefined) {
+    const n = Number(values.offset);
+    if (!Number.isInteger(n) || n < 0) {
+      throw new CliUsageError(
+        `Invalid --offset value '${values.offset}'. Expected a non-negative integer.`,
+      );
+    }
+    input.offset = n;
+  }
+
+  if (values['non-aggregator-only'] === true) {
+    input.returnNonAggregatorPropertiesOnly = true;
+  }
+
+  if (values.attributes !== undefined) {
+    const attrs = values.attributes.split(',').map((pair) => {
+      const eqIdx = pair.indexOf('=');
+      if (eqIdx < 1) {
+        throw new CliUsageError(
+          `Invalid --attributes entry '${pair}'. Expected NAME=VALUE format.`,
+        );
+      }
+      return { name: pair.slice(0, eqIdx), value: pair.slice(eqIdx + 1) };
+    });
+    if (attrs.length > 0) input.attributes = attrs;
+  }
+
+  return input;
+}
+
+function parseGeoSearchUom(raw: string | undefined): GeoSearchDistanceUnit {
+  if (raw === undefined) return 'MI';
+  if (!GEO_SEARCH_UOMS.has(raw as GeoSearchDistanceUnit)) {
+    throw new CliUsageError(`Invalid --uom value '${raw}'. Expected MI or KM.`);
+  }
+  return raw as GeoSearchDistanceUnit;
+}
+
+function parseGeoSearchRadius(raw: string | undefined): number {
+  if (raw === undefined) return 25;
+  const n = Number(raw);
+  if (Number.isNaN(n) || n <= 0) {
+    throw new CliUsageError(`Invalid --radius value '${raw}'. Expected a positive number.`);
+  }
+  return n;
+}
+
+function parseGeoSearchRef(values: GeoSearchFlagValues): GeoSearchRef {
+  if (values['geo-code'] !== undefined) {
+    const parts = values['geo-code'].split(',');
+    if (parts.length !== 2) {
+      throw new CliUsageError(
+        `Invalid --geo-code value '${values['geo-code']}'. Expected lat,lon (e.g. 32.877,-96.96).`,
+      );
+    }
+    const latitude = Number(parts[0]);
+    const longitude = Number(parts[1]);
+    if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
+      throw new CliUsageError(
+        `Invalid --geo-code value '${values['geo-code']}'. Both lat and lon must be numbers.`,
+      );
+    }
+    return { kind: 'geoCode', latitude, longitude };
+  }
+
+  if (values['ref-point'] !== undefined) {
+    const parts = values['ref-point'].split(':');
+    if (parts.length !== 3) {
+      throw new CliUsageError(
+        `Invalid --ref-point value '${values['ref-point']}'. Expected TYPE:VALUE:CONTEXT (e.g. 6:DFW:CODE).`,
+      );
+    }
+    const [refPointType, value, valueContext] = parts as [string, string, string];
+    const validTypes = new Set(['6', '7', '11', '16', '18', '37']);
+    if (!validTypes.has(refPointType)) {
+      throw new CliUsageError(
+        `Invalid ref-point TYPE '${refPointType}'. Expected one of: 6, 7, 11, 16, 18, 37.`,
+      );
+    }
+    if (valueContext !== 'CODE' && valueContext !== 'NAME') {
+      throw new CliUsageError(
+        `Invalid ref-point CONTEXT '${valueContext}'. Expected CODE or NAME.`,
+      );
+    }
+    return {
+      kind: 'refPoint',
+      value,
+      valueContext,
+      refPointType: refPointType as '6' | '7' | '11' | '16' | '18' | '37',
+    };
+  }
+
+  const raw = values.address as string;
+  const addrParts = raw.split(',');
+  if (addrParts.length < 1 || addrParts[0] === '') {
+    throw new CliUsageError(
+      `Invalid --address value '${raw}'. Expected COUNTRY[,CITY[,STATE[,STREET[,ZIP]]]].`,
+    );
+  }
+  const ref: GeoSearchRef = { kind: 'addressRef', countryCode: addrParts[0] as string };
+  if (addrParts[1] !== undefined && addrParts[1] !== '')
+    (ref as { city?: string }).city = addrParts[1];
+  if (addrParts[2] !== undefined && addrParts[2] !== '')
+    (ref as { stateProv?: string }).stateProv = addrParts[2];
+  if (addrParts[3] !== undefined && addrParts[3] !== '')
+    (ref as { street?: string }).street = addrParts[3];
+  if (addrParts[4] !== undefined && addrParts[4] !== '')
+    (ref as { postalCode?: string }).postalCode = addrParts[4];
+  return ref;
+}
+
 // ---------------------------------------------------------------------------
 // parseArgs option configurations
 // ---------------------------------------------------------------------------
@@ -2654,6 +2869,23 @@ const REFUND_TICKETS_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const GEO_SEARCH_OPTIONS = {
+  ...COMMON_OPTIONS,
+  'geo-code': { type: 'string' },
+  'ref-point': { type: 'string' },
+  address: { type: 'string' },
+  category: { type: 'string' },
+  radius: { type: 'string' },
+  uom: { type: 'string' },
+  direction: { type: 'string' },
+  'max-results': { type: 'string' },
+  'max-search-results': { type: 'string' },
+  offset: { type: 'string' },
+  'non-aggregator-only': { type: 'boolean' },
+  attributes: { type: 'string' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 // ---------------------------------------------------------------------------
 // Help text
 // ---------------------------------------------------------------------------
@@ -2674,6 +2906,7 @@ Commands:
   exchange-booking          Sabre Exchange Booking v1.1.0
   flight-reshop             Sabre Flight Reshop v1.0
   fulfill-tickets           Sabre Booking Management v1 — Fulfill Flight Tickets
+  geo-search                Sabre Geo Search v4
   get-ancillaries           Sabre Get Ancillaries v2
   get-booking               Sabre Booking Management v1 — Get Booking
   get-hotel-avail           Sabre Get Hotel Avail v5
@@ -3413,6 +3646,43 @@ Examples:
   sabre-rest refund-tickets --confirmation-id GLEBNY --tickets 0011234567890
 `;
 
+const GEO_SEARCH_HELP = `Usage: sabre-rest geo-search [flags]
+
+Sabre Geo Search v4. Radius search for airports, hotels, rail stations,
+and car rental locations relative to a geographic anchor.
+
+Anchor (exactly one required, unless --body):
+  --geo-code <lat,lon>      Latitude,longitude (e.g. 32.877,-96.96)
+  --ref-point <T:V:C>       RefPointType:Value:ValueContext
+                            (e.g. 6:DFW:CODE for airport DFW)
+                            TYPE is one of 6,7,11,16,18,37. CONTEXT is CODE or NAME.
+  --address <fields>        COUNTRY[,CITY[,STATE[,STREET[,ZIP]]]]
+                            (e.g. US,Irving,TX)
+
+Required:
+  --category <cat>          HOTEL | CAR | AIR | RAIL
+
+Other flags:
+  --radius <n>              Search radius (default: 25)
+  --uom <MI|KM>            Unit of measure for radius (default: MI)
+  --direction <dir>         N | S | E | W | NE | NW | SE | SW
+  --max-results <n>         Max results in search pool
+  --max-search-results <n>  Max results returned
+  --offset <n>              Pagination offset
+  --non-aggregator-only     Filter out aggregator properties
+  --attributes <list>       Comma-separated NAME=VALUE pairs (e.g. CHAIN=HC)
+  --body <json>             Override input with raw JSON (ignores other flags)
+  --base-url <url>          Override SABRE_BASE_URL
+  --format json|table       Output format (default: json). Table is one-row-per-result.
+  --debug-request           Print the outbound HTTP request to stderr
+  -h, --help                Show this help
+
+Examples:
+  sabre-rest geo-search --category HOTEL --geo-code 32.877,-96.96 --radius 5 --uom KM
+  sabre-rest geo-search --category AIR --ref-point 6:DFW:CODE --radius 10
+  sabre-rest geo-search --category CAR --address US,Irving,TX --format table
+`;
+
 // ---------------------------------------------------------------------------
 // Command handlers
 // ---------------------------------------------------------------------------
@@ -4014,6 +4284,52 @@ async function refundTicketsCommand(
   emitResult(result, format, io, () => formatJson(result));
 }
 
+async function geoSearchCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: GEO_SEARCH_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(GEO_SEARCH_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildGeoSearchInput(values);
+  const result = await client.geoSearchV4.search(input);
+  emitResult(result, format, io, () => {
+    const { headers, rows } = geoSearchToTableRows(result);
+    return renderTable(headers, rows);
+  });
+}
+
+function geoSearchToTableRows(result: GeoSearchOutput): {
+  headers: string[];
+  rows: string[][];
+} {
+  const headers = ['ID', 'Name', 'Distance', 'Dir', 'City', 'State', 'Country', 'Lat', 'Lon'];
+  const rows = result.results.map((r) => [
+    r.id ?? '',
+    r.name ?? '',
+    r.distance !== undefined ? String(r.distance) : '',
+    r.direction ?? '',
+    r.city ?? '',
+    r.state ?? '',
+    r.country ?? '',
+    r.latitude !== undefined ? String(r.latitude) : '',
+    r.longitude !== undefined ? String(r.longitude) : '',
+  ]);
+  return { headers, rows };
+}
+
 /** Mapping from subcommand name to its handler. Exported so tests can introspect it. */
 export const COMMANDS: Record<
   string,
@@ -4029,6 +4345,7 @@ export const COMMANDS: Record<
   'exchange-booking': exchangeBookingCommand,
   'flight-reshop': flightReshopCommand,
   'fulfill-tickets': fulfillTicketsCommand,
+  'geo-search': geoSearchCommand,
   'get-ancillaries': getAncillariesCommand,
   'get-booking': getBookingCommand,
   'get-hotel-avail': getHotelAvailCommand,
