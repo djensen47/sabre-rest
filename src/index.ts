@@ -285,6 +285,29 @@ export type {
   FlightReshopTotalPrice,
 } from './services/flight-reshop-v1/types.js';
 export type { BargainFinderMaxV5Service } from './services/bargain-finder-max-v5/service.js';
+export type { GeoAutocompleteV2Service } from './services/geo-autocomplete-v2/service.js';
+export type {
+  GeoAutocompleteCategory,
+  GeoAutocompleteGroup,
+  GeoAutocompleteInput,
+  GeoAutocompleteOutput,
+  GeoAutocompletePlace,
+} from './services/geo-autocomplete-v2/types.js';
+export type { GeoSearchV4Service } from './services/geo-search-v4/service.js';
+export type {
+  GeoSearchAddressRef,
+  GeoSearchAttribute,
+  GeoSearchCategory,
+  GeoSearchDirection,
+  GeoSearchDistanceUnit,
+  GeoSearchGeoCodeRef,
+  GeoSearchInput,
+  GeoSearchOutput,
+  GeoSearchRef,
+  GeoSearchRefPointRef,
+  GeoSearchResult,
+  GeoSearchResultAttribute,
+} from './services/geo-search-v4/types.js';
 export type { GetAncillariesV2Service } from './services/get-ancillaries-v2/service.js';
 export type {
   AncillaryError,
