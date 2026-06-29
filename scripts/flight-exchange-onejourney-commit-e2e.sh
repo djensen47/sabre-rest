@@ -657,6 +657,7 @@ fi
 
 # ---------------------------------------------------------------------------
 NEW_TICKET=""
+FULFILL_RESULT="skipped (commit not complete)"
 if [[ "$COMMIT_COMPLETE" == "1" ]]; then
   NEW_TICKET=$(echo "$POST_OUT" | jq -r --arg orig "$ORIG_TICKET" \
     '[ .flightTickets[]?.number // empty ] | map(select(. != $orig)) | first // empty')
@@ -675,9 +676,34 @@ if [[ "$COMMIT_COMPLETE" == "1" ]]; then
     if FULFILL2_OUT=$(run_cli $CLI fulfill-tickets "${BASE_URL_FLAG[@]}" --body "$REISSUE_FULFILL_BODY"); then
       NEW_TICKET=$(echo "$FULFILL2_OUT" | jq -r --arg orig "$ORIG_TICKET" \
         '[ .tickets[]?.number // empty ] | map(select(. != $orig)) | first // empty')
+      FULFILL2_ERRORS=$(echo "$FULFILL2_OUT" | jq -r '[.errors[]?.description] | join(" | ")')
+    else
+      NEW_TICKET=""
+      FULFILL2_ERRORS=$(cat "$TMP_ERR")
     fi
-    echo "reissued ticket: ${NEW_TICKET:-<none / see bundle>}"
+    if [[ -n "$NEW_TICKET" ]]; then
+      FULFILL_RESULT="issued $NEW_TICKET"
+      echo "reissued ticket: $NEW_TICKET"
+    elif [[ "$FULFILL2_ERRORS" == *"NEED AIRLINE PNR LOCATOR"* ]]; then
+      # Only reachable with a passive (GK) sell override: the segment commits
+      # but never gets an airline record locator, so AirTicketRQ refuses to
+      # issue against it. In production the carrier link confirms segments
+      # (KK/HK) and assigns the locator CERT omits. Tolerated, mirroring
+      # flight-exchange-e2e.sh.
+      FULFILL_RESULT="blocked by CERT (passive/GK segment has no airline locator)"
+      echo "fulfill blocked: NEED AIRLINE PNR LOCATOR — CERT cannot confirm a"
+      echo "passively-sold (GK) segment, so the reissued document cannot be"
+      echo "issued here. (Only reachable when --sell-status GK is forced.)"
+    else
+      # Any other ticketing failure (e.g. AirTicketLLSRQ 114, FLIGHT NUMBER
+      # DOES NOT MATCH ITINERARY IN AIRLINE SYSTEM) is a genuine failure: the
+      # exchange committed but the reissued document cannot be issued. Do not
+      # report OK. Cleanup voids the original ticket and cancels the PNR.
+      echo "fulfill errors: ${FULFILL2_ERRORS:-<none reported>}" >&2
+      fail "fulfill-tickets (reissue failed for an unexpected reason)"
+    fi
   else
+    FULFILL_RESULT="issued $NEW_TICKET (by commit)"
     step 9 "fulfill-tickets — SKIPPED (commit already issued the reissued ticket)"
   fi
 else
@@ -719,7 +745,7 @@ echo "changed journey:      $CHANGE"
 echo "commit strategy:      $COMMIT_STRATEGY"
 echo "exchange commit:      $EX_STATUS (PQR $PQR_NUMBER)"
 echo "itinerary assertion:  $ASSERT_RESULT"
-echo "reissued ticket:      ${NEW_TICKET:-n/a (not ticketed)}"
+echo "reissued ticket:      $FULFILL_RESULT"
 [[ -n "$LOG_DIR" ]] && echo "log bundle:           $LOG_DIR"
 echo ""
 echo "flight-exchange-onejourney-commit-e2e: OK"
