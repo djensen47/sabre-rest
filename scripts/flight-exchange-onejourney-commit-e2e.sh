@@ -472,14 +472,14 @@ RESHOP_BODY=$(jq -n \
   --arg change "$CHANGE" --arg keepItem "${KEEP_ITEM:-}" \
   --arg origDep "$DEP_DATE" --arg origRet "$RET_DATE" \
   '
-  ({ departureLocation: { cityCode: $from }, arrivalLocation: { cityCode: $to } }
+  ({ departureLocation: { airportCode: $from }, arrivalLocation: { airportCode: $to } }
     + (if $change == "outbound" then { departureDate: $depDate }
        else { departureDate: $origDep, retainFlights: [ { flightItemId: $keepItem } ] } end)) as $outJ
-  | ({ departureLocation: { cityCode: $to }, arrivalLocation: { cityCode: $from } }
+  | ({ departureLocation: { airportCode: $to }, arrivalLocation: { airportCode: $from } }
     + (if $change == "return" then { departureDate: $retDate }
        else { departureDate: $origRet, retainFlights: [ { flightItemId: $keepItem } ] } end)) as $retJ
-  | ({ departureLocation: { cityCode: $from }, arrivalLocation: { cityCode: $to }, departureDate: $depDate }) as $outJBoth
-  | ({ departureLocation: { cityCode: $to }, arrivalLocation: { cityCode: $from }, departureDate: $retDate }) as $retJBoth
+  | ({ departureLocation: { airportCode: $from }, arrivalLocation: { airportCode: $to }, departureDate: $depDate }) as $outJBoth
+  | ({ departureLocation: { airportCode: $to }, arrivalLocation: { airportCode: $from }, departureDate: $retDate }) as $retJBoth
   | {
       journeys: (if $change == "both" then [ $outJBoth, $retJBoth ] else [ $outJ, $retJ ] end),
       tickets: [{ number: $ticket }],
@@ -515,12 +515,21 @@ else
 fi
 CHOSEN=$(echo "$RESHOP_OUT" | jq \
   --argjson expectChanged "$EXPECT_CHANGED" \
-  --argjson origChangedFns "$ORIG_CHANGED_FNS" '
+  --argjson origChangedFns "$ORIG_CHANGED_FNS" \
+  --arg from "$FROM" --arg to "$TO" '
   (.flights // []) as $flights | (.journeys // []) as $journeys
   | [ (.offers // [])[] | . as $o
       | [ ($o.journeyRefs // [])[] | . as $jref
           | ($journeys[] | select(.id == $jref) | .flightRefs // [])[] | . as $fref
           | ($flights[] | select(.id == $fref)) ] as $of
+      # A reissue is bound to the originally ticketed board/off points. Reject
+      # any offer with a flight on a city-pair other than FROM↔TO — reshop by
+      # city code can return multi-airport-city siblings (e.g. ONT for LAX),
+      # and committing one yields AirTicketRQ error 114 (FLIGHT NUMBER DOES NOT
+      # MATCH ITINERARY IN AIRLINE SYSTEM). (Reshop is also queried by
+      # airportCode now; this guard stands even if an alternate airport slips in.)
+      | select([ $of[]
+          | select(([.departureAirportCode, .arrivalAirportCode] | sort) != ([$from, $to] | sort)) ] | length == 0)
       | ([ $of[] | select(.isBookingRequired == true) ]) as $changed
       | select(($changed | length) == $expectChanged)
       # Every changed flight must be a DIFFERENT flight number than the original
