@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.20.0](https://github.com/djensen47/sabre-rest/compare/v0.19.0...v0.20.0) (2026-07-06)
+
+
+### Features
+
+* add get-hotel-content v4 service ([#134](https://github.com/djensen47/sabre-rest/issues/134)) ([1a5c38f](https://github.com/djensen47/sabre-rest/commit/1a5c38f4c99ddbd778bd591427290e0c26d0609f))
+
+
+### Bug Fixes
+
+* improve flight exchange e2e test reliability and coverage ([#129](https://github.com/djensen47/sabre-rest/issues/129)) ([07e8513](https://github.com/djensen47/sabre-rest/commit/07e851392d34e3ca74e3a6dbd258d3e7c925f9c2))
+* statusline shows wrong context % for models without [1m] id suffix ([#133](https://github.com/djensen47/sabre-rest/issues/133)) ([e37f81e](https://github.com/djensen47/sabre-rest/commit/e37f81e053104c74803786c1532e154aaef80098))
+
 ## [0.19.0](https://github.com/djensen47/sabre-rest/compare/v0.18.0...v0.19.0) (2026-06-29)
 
 
