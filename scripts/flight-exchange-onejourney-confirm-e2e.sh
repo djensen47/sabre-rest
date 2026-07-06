@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
-# flight-exchange-onejourney-commit-e2e.sh — ONE-JOURNEY change, COMMITTED.
+# flight-exchange-onejourney-confirm-e2e.sh — ONE-JOURNEY change, COMMITTED,
+# with a CONFIRM-BEFORE-TICKET gate.
+#
+# Identical to flight-exchange-onejourney-commit-e2e.sh, but adds an explicit
+# segment-confirmation gate between the exchange commit and the reissue
+# ticketing. Error 114 (FLIGHT NUMBER DOES NOT MATCH ITINERARY IN AIRLINE
+# SYSTEM) happens when ticketing fires while a newly-sold segment is still
+# unconfirmed (NN) — the carrier has not yet settled it to HK/KK. Exchange
+# commit and carrier confirmation are asynchronous, so any fixed delay before
+# ticketing is a race. This script polls get-booking until the new segment(s)
+# reach a confirmed status (HK/KK) before attempting fulfill, and classifies a
+# never-confirmed segment as its own distinct failure rather than letting
+# ticketing blow up with a 114.
 #
 # Books a round trip, tickets it, then changes one (or both) journeys and
 # COMMITS the exchange, asserting the kept journey survives. `--change`
@@ -31,6 +43,8 @@
 #   6. select offer            pick an offer that changes only the chosen journey
 #   7. exchange-booking        COMMIT: cancel the changed segment(s), sell the new flight(s)
 #   8. get-booking             ASSERT kept journey unchanged + changed journey swapped
+#   8b. confirm gate           POLL get-booking until the new segment(s) reach
+#                              a confirmed status (HK/KK) before ticketing
 #   9. fulfill-tickets         issue the reissued ticket (if needed)
 #  10. void-tickets            release the financial document(s)
 #  11. cancel-booking          tear the PNR down
@@ -48,7 +62,7 @@
 # Prerequisites: `npm run build`; .env with SABRE_CLIENT_ID/SECRET/BASE_URL; jq.
 #
 # Usage:
-#   scripts/flight-exchange-onejourney-commit-e2e.sh --from DFW --to LAX \
+#   scripts/flight-exchange-onejourney-confirm-e2e.sh --from DFW --to LAX \
 #     --departure-date 2026-07-15 --return-date 2026-07-22 \
 #     [--new-return-date 2026-07-23]
 #
@@ -82,7 +96,14 @@
 #   --card-cvv <code>             Card security code (default: 123)
 #   --card-expiry <YYYY-MM>       Card expiry (default: 2027-12)
 #   --card-type <code>            Card vendor code (default: VI)
-#   --fulfill-delay <seconds>     Wait before the reissue fulfill (default: 15)
+#   --fulfill-delay <seconds>     Wait before the reissue fulfill (default: 15).
+#                                 Applied AFTER the confirm gate succeeds, as a
+#                                 final settle margin; set 0 to ticket as soon
+#                                 as the segment confirms.
+#   --confirm-timeout <seconds>   Max time to wait for the new segment(s) to
+#                                 reach a confirmed status (HK/KK) before
+#                                 ticketing (default: 120). 0 disables the gate.
+#   --confirm-interval <seconds>  Poll interval for the confirm gate (default: 10)
 #   --no-cleanup                  Leave the PNR/tickets in place (debugging)
 #   --base-url <url>              Override SABRE_BASE_URL
 #   -h, --help                    Show this help
@@ -114,11 +135,13 @@ CARD_CVV="123"
 CARD_EXPIRY="2027-12"
 CARD_TYPE="VI"
 FULFILL_DELAY=15
+CONFIRM_TIMEOUT=120
+CONFIRM_INTERVAL=10
 NO_CLEANUP=0
 BASE_URL=""
 
 usage() {
-  sed -n '2,88p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,109p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -143,6 +166,8 @@ while [[ $# -gt 0 ]]; do
     --card-expiry) CARD_EXPIRY="${2:-}"; shift 2 ;;
     --card-type) CARD_TYPE="${2:-}"; shift 2 ;;
     --fulfill-delay) FULFILL_DELAY="${2:-}"; shift 2 ;;
+    --confirm-timeout) CONFIRM_TIMEOUT="${2:-}"; shift 2 ;;
+    --confirm-interval) CONFIRM_INTERVAL="${2:-}"; shift 2 ;;
     --no-cleanup) NO_CLEANUP=1; shift ;;
     --base-url) BASE_URL="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -665,6 +690,76 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Step 8b — CONFIRM GATE.
+#
+# Error 114 (FLIGHT NUMBER DOES NOT MATCH ITINERARY IN AIRLINE SYSTEM) happens
+# when ticketing fires while a newly-sold segment is still NN — the carrier has
+# not yet settled it to a confirmed status (HK/KK). Commit and confirmation are
+# asynchronous, so a fixed sleep is a race. Poll get-booking until every new
+# (isBookingRequired) segment is confirmed before we attempt the reissue
+# fulfill. A segment that never confirms within the timeout is its own distinct
+# failure — we refuse to ticket into it rather than letting AirTicketRQ 114.
+CONFIRM_RESULT="skipped (commit not complete)"
+if [[ "$COMMIT_COMPLETE" == "1" && "$CONFIRM_TIMEOUT" -gt 0 ]]; then
+  step 8b "confirm gate — poll until new segment(s) reach HK/KK"
+
+  # The new flights are the offer segments flagged isBookingRequired. Both kept
+  # and changed offers carry the original flight numbers, so we gate only the
+  # ones the commit actually (re)sold.
+  NEW_FNS=$(echo "$CHOSEN" | jq -r '[ .segments[] | select(.isBookingRequired) | .flightNumber ] | unique | .[]')
+  if [[ -z "$NEW_FNS" ]]; then
+    echo "no isBookingRequired segments in the chosen offer — nothing to gate"
+    CONFIRM_RESULT="n/a (no new segments)"
+  else
+    echo "gating on new flight number(s): $(echo "$NEW_FNS" | paste -sd, -)"
+    CONFIRMED=0
+    ELAPSED=0
+    LAST_STATUSES=""
+    while (( ELAPSED < CONFIRM_TIMEOUT )); do
+      if ! GATE_OUT=$(run_cli $CLI get-booking "${BASE_URL_FLAG[@]}" --confirmation-id "$CONFIRMATION_ID"); then
+        cat "$TMP_ERR" >&2
+        fail "confirm gate (get-booking)"
+      fi
+      # For each new flight number, read its flightStatusCode. Confirmed iff
+      # every one is HK or KK. Unknown/missing counts as not-yet-confirmed.
+      ALL_OK=1
+      LAST_STATUSES=""
+      while IFS= read -r fn; do
+        [[ -z "$fn" ]] && continue
+        st=$(echo "$GATE_OUT" | jq -r --argjson fn "$fn" \
+          '[ .flights[]? | select(.flightNumber == $fn) | .flightStatusCode // "??" ] | first // "??"')
+        LAST_STATUSES+="${fn}=${st} "
+        [[ "$st" == "HK" || "$st" == "KK" ]] || ALL_OK=0
+      done <<< "$NEW_FNS"
+
+      if [[ "$ALL_OK" == "1" ]]; then
+        CONFIRMED=1
+        echo "  confirmed after ${ELAPSED}s: ${LAST_STATUSES}"
+        break
+      fi
+      echo "  not yet confirmed (${ELAPSED}s): ${LAST_STATUSES}— waiting ${CONFIRM_INTERVAL}s"
+      sleep "$CONFIRM_INTERVAL"
+      ELAPSED=$(( ELAPSED + CONFIRM_INTERVAL ))
+    done
+
+    if [[ "$CONFIRMED" == "1" ]]; then
+      CONFIRM_RESULT="confirmed (${LAST_STATUSES%% })"
+    else
+      CONFIRM_RESULT="NOT confirmed within ${CONFIRM_TIMEOUT}s (last: ${LAST_STATUSES%% })"
+      echo "new segment(s) never reached HK/KK within ${CONFIRM_TIMEOUT}s" >&2
+      echo "last seen statuses: ${LAST_STATUSES:-<none>}" >&2
+      echo "refusing to ticket into an unconfirmed segment (would fail AirTicketRQ 114)" >&2
+      fail "confirm gate (new segment never confirmed)"
+    fi
+  fi
+elif [[ "$COMMIT_COMPLETE" == "1" ]]; then
+  step 8b "confirm gate — SKIPPED (--confirm-timeout 0)"
+  CONFIRM_RESULT="skipped (--confirm-timeout 0)"
+else
+  step 8b "confirm gate — SKIPPED (commit not complete)"
+fi
+
+# ---------------------------------------------------------------------------
 NEW_TICKET=""
 FULFILL_RESULT="skipped (commit not complete)"
 if [[ "$COMMIT_COMPLETE" == "1" ]]; then
@@ -672,7 +767,7 @@ if [[ "$COMMIT_COMPLETE" == "1" ]]; then
     '[ .flightTickets[]?.number // empty ] | map(select(. != $orig)) | first // empty')
   if [[ -z "$NEW_TICKET" ]]; then
     step 9 "fulfill-tickets — issue the reissued document"
-    [[ "$FULFILL_DELAY" -gt 0 ]] && { echo "waiting ${FULFILL_DELAY}s (carrier-link confirmation is async)"; sleep "$FULFILL_DELAY"; }
+    [[ "$FULFILL_DELAY" -gt 0 ]] && { echo "waiting ${FULFILL_DELAY}s (settle margin after the confirm gate)"; sleep "$FULFILL_DELAY"; }
     REISSUE_FULFILL_BODY=$(jq -n \
       --arg cid "$CONFIRMATION_ID" --arg pcc "${SABRE_PCC:-}" \
       --arg cardType "$CARD_TYPE" --arg cardNumber "$CARD_NUMBER" --arg cardExpiry "$CARD_EXPIRY" \
@@ -746,7 +841,7 @@ fi
 
 # ---------------------------------------------------------------------------
 echo ""
-echo "================ ONE-JOURNEY COMMIT SUMMARY ================"
+echo "================ ONE-JOURNEY CONFIRM SUMMARY ================"
 echo "PNR:                  $CONFIRMATION_ID"
 echo "original ticket:      $ORIG_TICKET"
 echo "round trip:           ${OUT_CARRIER}${OUT_FLIGHT} ${FROM}→${TO} + ${RET_CARRIER}${RET_FLIGHT} ${TO}→${FROM}"
@@ -754,7 +849,8 @@ echo "changed journey:      $CHANGE"
 echo "commit strategy:      $COMMIT_STRATEGY"
 echo "exchange commit:      $EX_STATUS (PQR $PQR_NUMBER)"
 echo "itinerary assertion:  $ASSERT_RESULT"
+echo "confirm gate:         $CONFIRM_RESULT"
 echo "reissued ticket:      $FULFILL_RESULT"
 [[ -n "$LOG_DIR" ]] && echo "log bundle:           $LOG_DIR"
 echo ""
-echo "flight-exchange-onejourney-commit-e2e: OK"
+echo "flight-exchange-onejourney-confirm-e2e: OK"

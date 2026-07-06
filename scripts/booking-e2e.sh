@@ -151,7 +151,7 @@ step 1 "bargain-finder-max ($FROM → $TO on $DEP_DATE)"
 BFM_FILE=$(mktemp)
 trap 'rm -f "$TMP_ERR" "$BFM_FILE"' EXIT
 if ! $CLI bargain-finder-max "${BASE_URL_FLAG[@]}" \
-    --from "$FROM" --to "$TO" --departure-date "$DEP_DATE" --non-stop \
+    --from "$FROM" --to "$TO" --departure-date "$DEP_DATE" \
     >"$BFM_FILE" 2>"$TMP_ERR"; then
   cat "$TMP_ERR" >&2
   fail "bargain-finder-max"
@@ -162,18 +162,31 @@ if [[ -n "${BOOKING_E2E_DEBUG:-}" ]]; then
   echo "(debug) BFM response: /tmp/booking-e2e-bfm.json ($(wc -l < /tmp/booking-e2e-bfm.json) lines)"
 fi
 
-# Require exactly one leg, one segment for this smoke test.
-ITIN=$(jq --argjson i "$ITIN_INDEX" '.itineraries[$i]' "$BFM_FILE")
-if [[ "$ITIN" == "null" ]]; then
-  echo "error: no itinerary at index $ITIN_INDEX (BFM returned $(jq '.itineraries | length' "$BFM_FILE") results)" >&2
+# Find a single-leg, single-segment itinerary. Start at the user-supplied
+# index and scan forward; this allows connecting-flight results from BFM
+# without aborting the smoke test.
+TOTAL_ITINS=$(jq '.itineraries | length' "$BFM_FILE")
+if [[ "$TOTAL_ITINS" -eq 0 ]]; then
+  echo "error: no itinerary at index $ITIN_INDEX (BFM returned 0 results)" >&2
   exit 1
 fi
-LEG_COUNT=$(echo "$ITIN" | jq '.legs | length')
-SEG_COUNT=$(echo "$ITIN" | jq '.legs[0].segments | length')
-if [[ "$LEG_COUNT" != "1" || "$SEG_COUNT" != "1" ]]; then
-  echo "error: this smoke test only supports single-leg/single-segment itineraries" >&2
-  echo "       got legs=$LEG_COUNT segments=$SEG_COUNT at itinerary index $ITIN_INDEX" >&2
-  echo "       try --itinerary-index N to pick a simpler result" >&2
+
+ITIN=""
+SCAN_INDEX=$ITIN_INDEX
+while [[ $SCAN_INDEX -lt $TOTAL_ITINS ]]; do
+  CANDIDATE=$(jq --argjson i "$SCAN_INDEX" '.itineraries[$i]' "$BFM_FILE")
+  LEG_COUNT=$(echo "$CANDIDATE" | jq '.legs | length')
+  SEG_COUNT=$(echo "$CANDIDATE" | jq '.legs[0].segments | length')
+  if [[ "$LEG_COUNT" == "1" && "$SEG_COUNT" == "1" ]]; then
+    ITIN="$CANDIDATE"
+    break
+  fi
+  SCAN_INDEX=$((SCAN_INDEX + 1))
+done
+
+if [[ -z "$ITIN" ]]; then
+  echo "error: no single-leg/single-segment itinerary found in $TOTAL_ITINS results" >&2
+  echo "       (all are connecting flights)" >&2
   exit 1
 fi
 

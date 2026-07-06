@@ -487,8 +487,8 @@ RESHOP_BODY=$(jq -n \
   --arg ticket "$ORIG_TICKET" --arg bookingId "$CONFIRMATION_ID" \
   '{
     journeys: [{
-      departureLocation: { cityCode: $from },
-      arrivalLocation: { cityCode: $to },
+      departureLocation: { airportCode: $from },
+      arrivalLocation: { airportCode: $to },
       departureDate: $date
     }],
     tickets: [{ number: $ticket }],
@@ -518,6 +518,7 @@ step 6 "rank candidates (CAT-31 first, then original class, then largest delta)"
 CANDIDATES=$(echo "$RESHOP_OUT" | jq -c \
   --arg origFlight "$FLIGHT_NUM" --arg origClass "$BOOKING_CLASS" \
   --arg forceClass "$FORCE_CLASS" \
+  --arg origOrigin "$FROM" --arg origDest "$TO" \
   --argjson requireDiff "$REQUIRE_PRICE_DIFF" '
   (.flights // []) as $flights
   | (.journeys // []) as $journeys
@@ -530,6 +531,15 @@ CANDIDATES=$(echo "$RESHOP_OUT" | jq -c \
       | $j.flightRefs[0] as $fref
       | ($flights[] | select(.id == $fref)) as $f
       | select(($f.marketingFlightNumber | tostring) != $origFlight)
+      # A reissue is bound to the originally ticketed board/off points. Reshop
+      # with a city code (e.g. LAX) can return multi-airport-city siblings
+      # (e.g. ONT) — committing one yields AirTicketRQ error 114 (FLIGHT NUMBER
+      # DOES NOT MATCH ITINERARY IN AIRLINE SYSTEM). Reject any off-origin /
+      # off-destination offer so we never select a flight the ticket cannot be
+      # reissued against. (Reshop is also now queried by airportCode, but this
+      # guard stands even if a city-code query slips an alternate airport in.)
+      | select($f.departureAirportCode == $origOrigin)
+      | select($f.arrivalAirportCode == $origDest)
       | ([ $o.items[0].fares[0].fareComponents[]?.segmentDetails[]?
            | select(.flightRef == $fref) ] | first) as $sd
       | select($sd.bookingClassCode != null)
