@@ -51,6 +51,8 @@ import type {
   GetBookingInput,
   GetHotelAvailInput,
   GetHotelAvailOutput,
+  GetHotelContentInput,
+  GetHotelContentOutput,
   GetHotelDetailsInput,
   GetHotelDetailsOutput,
   GetHotelRateInfoInput,
@@ -473,6 +475,36 @@ export function detailsToTableRows(out: GetHotelDetailsOutput): {
   return {
     headers: ['room', 'rateSource', 'beforeTax', 'afterTax', 'currency', 'rateKey'],
     rows,
+  };
+}
+
+/**
+ * Converts a Get Hotel Content v4 output into a single-row summary table.
+ * Columns: code, name, chain, amenities count, descriptions count, media
+ * items count. There is only one hotel per response, so a one-row table
+ * (rather than one-row-per-record) is the useful shape; drilling into
+ * individual amenities, descriptions, or media items requires
+ * `--format json`.
+ */
+export function contentToTableRows(out: GetHotelContentOutput): {
+  headers: readonly string[];
+  rows: readonly string[][];
+} {
+  const hotel = out.hotel;
+  if (hotel === undefined) {
+    return { headers: ['code', 'name', 'chain', 'amenities', 'descriptions', 'media'], rows: [] };
+  }
+  const row = [
+    hotel.info.code,
+    hotel.info.hotelName ?? '',
+    hotel.info.chainCode ?? '',
+    String(hotel.descriptiveInfo?.amenities?.length ?? 0),
+    String(hotel.descriptiveInfo?.descriptions?.length ?? 0),
+    String(hotel.mediaInfo?.items?.length ?? 0),
+  ];
+  return {
+    headers: ['code', 'name', 'chain', 'amenities', 'descriptions', 'media'],
+    rows: [row],
   };
 }
 
@@ -1680,6 +1712,165 @@ function buildDetailsContentRef(
   return Object.keys(ref).length > 0 ? ref : undefined;
 }
 
+/** Flag set for `get-hotel-content`. */
+export interface HotelContentFlagValues {
+  'hotel-code'?: string;
+  'code-context'?: string;
+  pcc?: string;
+  'with-property-info'?: boolean;
+  'with-location'?: boolean;
+  'with-amenities'?: boolean;
+  'with-security'?: boolean;
+  'with-descriptions'?: string;
+  'with-media'?: boolean;
+  'media-max'?: string;
+  'media-images'?: string;
+  'media-panoramic'?: boolean;
+  'media-videos'?: string;
+  'media-categories'?: string;
+  'media-room-type-codes'?: string;
+  'media-languages'?: string;
+  'media-additional-info'?: string;
+  body?: string;
+}
+
+const CONTENT_DESCRIPTION_TYPES = DETAILS_DESCRIPTION_TYPES;
+const CONTENT_IMAGE_SIZES = DETAILS_IMAGE_SIZES;
+const CONTENT_VIDEO_TYPES = new Set(['VIDEO360', 'VIDEO720', 'VIDEOTHUMBNAIL', 'ALL'] as const);
+const CONTENT_ADDITIONAL_INFO_TYPES = new Set(['CAPTION', 'ROOM_TYPE_CODE'] as const);
+
+/**
+ * Builds the input for `getHotelContentV4.getContent` from the CLI flags.
+ *
+ * Unlike the other hotel services, this API has no rate-key rerun mode —
+ * `--hotel-code` is the only way in (or `--body` for a raw override).
+ * Descriptive info and media are opt-in via the same `--with-*` / `--media-*`
+ * flag shapes used by `get-hotel-details`.
+ */
+export function buildHotelContentInput(values: HotelContentFlagValues): GetHotelContentInput {
+  if (values.body !== undefined) {
+    return JSON.parse(values.body) as GetHotelContentInput;
+  }
+
+  if (values['hotel-code'] === undefined) {
+    throw new CliUsageError('get-hotel-content requires --hotel-code. (Or supply --body.)');
+  }
+
+  const codeContext = values['code-context'];
+  if (codeContext !== undefined && codeContext !== 'SABRE' && codeContext !== 'GLOBAL') {
+    throw new CliUsageError(
+      `Invalid --code-context value '${codeContext}'. Expected SABRE or GLOBAL.`,
+    );
+  }
+
+  const input: GetHotelContentInput = {
+    hotelRef:
+      codeContext === undefined
+        ? { code: values['hotel-code'] }
+        : { code: values['hotel-code'], codeContext },
+  };
+  if (values.pcc !== undefined) input.pointOfSale = { pseudoCityCode: values.pcc };
+
+  const descriptions = splitCommaList(values['with-descriptions']);
+  if (descriptions !== undefined) {
+    for (const type of descriptions) {
+      if (!CONTENT_DESCRIPTION_TYPES.has(type as never)) {
+        throw new CliUsageError(
+          `Invalid --with-descriptions value '${type}'. Expected one of: ${Array.from(
+            CONTENT_DESCRIPTION_TYPES,
+          ).join(', ')}.`,
+        );
+      }
+    }
+  }
+
+  const di: NonNullable<GetHotelContentInput['descriptiveInfo']> = {};
+  if (values['with-property-info']) di.propertyInfo = true;
+  if (values['with-location']) di.locationInfo = true;
+  if (values['with-amenities']) di.amenities = true;
+  if (values['with-security']) di.securityFeatures = true;
+  if (descriptions !== undefined) {
+    di.descriptions = descriptions as NonNullable<typeof di.descriptions>;
+  }
+  if (Object.keys(di).length > 0) input.descriptiveInfo = di;
+
+  const images = splitCommaList(values['media-images']);
+  if (images !== undefined) {
+    for (const size of images) {
+      if (!CONTENT_IMAGE_SIZES.has(size as never)) {
+        throw new CliUsageError(
+          `Invalid --media-images value '${size}'. Expected one of: ${Array.from(
+            CONTENT_IMAGE_SIZES,
+          ).join(', ')}.`,
+        );
+      }
+    }
+  }
+  const videos = splitCommaList(values['media-videos']);
+  if (videos !== undefined) {
+    for (const type of videos) {
+      if (!CONTENT_VIDEO_TYPES.has(type as never)) {
+        throw new CliUsageError(
+          `Invalid --media-videos value '${type}'. Expected one of: ${Array.from(
+            CONTENT_VIDEO_TYPES,
+          ).join(', ')}.`,
+        );
+      }
+    }
+  }
+  const additionalInfoTypes = splitCommaList(values['media-additional-info']);
+  if (additionalInfoTypes !== undefined) {
+    for (const type of additionalInfoTypes) {
+      if (!CONTENT_ADDITIONAL_INFO_TYPES.has(type as never)) {
+        throw new CliUsageError(
+          `Invalid --media-additional-info value '${type}'. Expected one of: ${Array.from(
+            CONTENT_ADDITIONAL_INFO_TYPES,
+          ).join(', ')}.`,
+        );
+      }
+    }
+  }
+  const categories = splitCommaList(values['media-categories'])?.map((c) => {
+    const code = Number(c);
+    if (!Number.isInteger(code)) {
+      throw new CliUsageError(`Invalid --media-categories value '${c}'. Expected an integer.`);
+    }
+    return code;
+  });
+  const roomTypeCodes = splitCommaList(values['media-room-type-codes']);
+  const languages = splitCommaList(values['media-languages']);
+
+  const needsMedia =
+    values['with-media'] === true ||
+    values['media-max'] !== undefined ||
+    images !== undefined ||
+    values['media-panoramic'] === true ||
+    videos !== undefined ||
+    categories !== undefined ||
+    roomTypeCodes !== undefined ||
+    additionalInfoTypes !== undefined ||
+    languages !== undefined;
+  if (needsMedia) {
+    const media: NonNullable<GetHotelContentInput['media']> = {};
+    if (values['media-max'] !== undefined) media.maxItems = values['media-max'];
+    if (images !== undefined) media.images = images as NonNullable<typeof media.images>;
+    if (values['media-panoramic']) media.panoramicMedias = ['HD360'];
+    if (videos !== undefined) media.videos = videos as NonNullable<typeof media.videos>;
+    if (categories !== undefined) media.categories = categories;
+    if (roomTypeCodes !== undefined) media.roomTypeCodes = roomTypeCodes;
+    if (additionalInfoTypes !== undefined) {
+      media.additionalInfo = additionalInfoTypes.map((type) => ({
+        type: type as 'CAPTION' | 'ROOM_TYPE_CODE',
+        value: true,
+      }));
+    }
+    if (languages !== undefined) media.languages = languages;
+    input.media = media;
+  }
+
+  return input;
+}
+
 /** Flag set for `book-hotel`. */
 export interface BookHotelFlagValues {
   'booking-key'?: string;
@@ -2654,6 +2845,28 @@ const HOTEL_AVAIL_OPTIONS = {
   body: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
+const HOTEL_CONTENT_OPTIONS = {
+  ...COMMON_OPTIONS,
+  'hotel-code': { type: 'string' },
+  'code-context': { type: 'string' },
+  pcc: { type: 'string' },
+  'with-property-info': { type: 'boolean' },
+  'with-location': { type: 'boolean' },
+  'with-amenities': { type: 'boolean' },
+  'with-security': { type: 'boolean' },
+  'with-descriptions': { type: 'string' },
+  'with-media': { type: 'boolean' },
+  'media-max': { type: 'string' },
+  'media-images': { type: 'string' },
+  'media-panoramic': { type: 'boolean' },
+  'media-videos': { type: 'string' },
+  'media-categories': { type: 'string' },
+  'media-room-type-codes': { type: 'string' },
+  'media-languages': { type: 'string' },
+  'media-additional-info': { type: 'string' },
+  body: { type: 'string' },
+} as const satisfies ParseArgsConfig['options'];
+
 const HOTEL_RATE_INFO_OPTIONS = {
   ...COMMON_OPTIONS,
   'hotel-code': { type: 'string' },
@@ -2910,6 +3123,7 @@ Commands:
   get-ancillaries           Sabre Get Ancillaries v2
   get-booking               Sabre Booking Management v1 — Get Booking
   get-hotel-avail           Sabre Get Hotel Avail v5
+  get-hotel-content         Sabre Get Hotel Content v4
   get-hotel-details         Sabre Get Hotel Details v5
   get-hotel-rate-info       Sabre Get Hotel Rate Info v5
   get-seats                 Sabre Get Seats v2
@@ -3102,6 +3316,60 @@ Examples:
     --start-date 2026-06-20 --end-date 2026-06-22 --max-results 5 --format table
   sabre-rest get-hotel-avail --hotels 100072188,100074506 --currency-code USD \\
     --start-date 2026-06-20 --end-date 2026-06-22
+`;
+
+const HOTEL_CONTENT_HELP = `Usage: sabre-rest get-hotel-content [flags]
+
+Sabre Get Hotel Content v4. Returns descriptive content (property info,
+location, amenities, security features, free-text descriptions) and/or
+media content (images, panoramics, videos) for a single hotel property.
+Carries no rate or pricing data, and has no rate-key rerun mode.
+
+Required (unless --body):
+  --hotel-code <code>          Hotel property ID (global or Sabre)
+  --code-context SABRE|GLOBAL
+                                (default: server applies SABRE)
+
+POS:
+  --pcc <code>                 Optional branch PCC (POS/Source)
+
+Descriptive content (opt-in; Sabre omits these unless requested):
+  --with-property-info           Include floors, rooms, policies, property type
+  --with-location                Include coordinates, address, neighborhoods, contact
+  --with-amenities                Include hotel amenities (HAC OTA codes)
+  --with-security                 Include security features (SEC OTA codes)
+  --with-descriptions <list>      Comma-separated: ShortDescription,Dining,Facilities,
+                                  Recreation,Services,Attractions,CancellationPolicy,
+                                  DepositPolicy,Directions,Policies,SafetyInfo,
+                                  TransportationInfo,GuaranteePolicy
+
+Media (opt-in):
+  --with-media                    Include media items (bare opt-in, no filters)
+  --media-max <n|ALL>             Max media items to return
+  --media-images <list>           Comma-separated sizes: ORIGINAL,THUMBNAIL,SMALL,
+                                  MEDIUM,LARGE
+  --media-panoramic                Include HD360 panoramic media
+  --media-videos <list>           Comma-separated: VIDEO360,VIDEO720,VIDEOTHUMBNAIL,ALL
+  --media-categories <list>       Comma-separated OTA PIC category codes (integers)
+  --media-room-type-codes <list>  Comma-separated room type codes
+  --media-languages <list>        Comma-separated two-character language codes
+  --media-additional-info <list>  Comma-separated: CAPTION,ROOM_TYPE_CODE
+                                  (requests each flag with value=true)
+
+Other:
+  --body <json>                Override input with raw JSON (ignores other flags)
+  --base-url <url>             Override SABRE_BASE_URL
+  --format json|table          Output format (default: json). Table is a
+                               single summary row (code, name, chain, amenity/
+                               description/media counts).
+  --debug-request              Print the outbound HTTP request to stderr
+  -h, --help                   Show this help
+
+Examples:
+  sabre-rest get-hotel-content --hotel-code 100072188 --code-context GLOBAL \\
+    --with-property-info --with-amenities --format table
+  sabre-rest get-hotel-content --hotel-code 8315 \\
+    --with-media --media-images MEDIUM,LARGE --media-max 10
 `;
 
 const HOTEL_RATE_INFO_HELP = `Usage: sabre-rest get-hotel-rate-info [flags]
@@ -3810,6 +4078,33 @@ async function getHotelAvailCommand(
   });
 }
 
+async function getHotelContentCommand(
+  argv: readonly string[],
+  env: CliEnvConfig,
+  io: CliIo,
+): Promise<void> {
+  const { values } = parseArgs({
+    args: argv as string[],
+    options: HOTEL_CONTENT_OPTIONS,
+    allowPositionals: false,
+    strict: true,
+  });
+  if (values.help === true) {
+    io.stdout.write(HOTEL_CONTENT_HELP);
+    return;
+  }
+  const format = parseOutputFormat(values.format);
+  const config = resolveClientConfig(env, { baseUrl: values['base-url'] });
+  const mw = values['debug-request'] ? [createDebugRequestMiddleware(io)] : undefined;
+  const client = buildClient(config, mw);
+  const input = buildHotelContentInput(values);
+  const result = await client.getHotelContentV4.getContent(input);
+  emitResult(result, format, io, () => {
+    const { headers, rows } = contentToTableRows(result);
+    return renderTable(headers, rows);
+  });
+}
+
 async function getHotelRateInfoCommand(
   argv: readonly string[],
   env: CliEnvConfig,
@@ -4349,6 +4644,7 @@ export const COMMANDS: Record<
   'get-ancillaries': getAncillariesCommand,
   'get-booking': getBookingCommand,
   'get-hotel-avail': getHotelAvailCommand,
+  'get-hotel-content': getHotelContentCommand,
   'get-hotel-details': getHotelDetailsCommand,
   'get-hotel-rate-info': getHotelRateInfoCommand,
   'get-seats': getSeatsCommand,

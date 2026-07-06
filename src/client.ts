@@ -48,6 +48,10 @@ import {
   type GetHotelAvailV5Service,
 } from './services/get-hotel-avail-v5/service.js';
 import {
+  DefaultGetHotelContentV4Service,
+  type GetHotelContentV4Service,
+} from './services/get-hotel-content-v4/service.js';
+import {
   DefaultGetHotelDetailsV5Service,
   type GetHotelDetailsV5Service,
 } from './services/get-hotel-details-v5/service.js';
@@ -184,6 +188,16 @@ export interface SabreClient {
    * produces the rate keys required by {@link HotelPriceCheckV5Service}.
    */
   readonly getHotelAvailV5: GetHotelAvailV5Service;
+
+  /**
+   * Sabre Get Hotel Content v4.
+   *
+   * Returns descriptive content (property info, location, amenities,
+   * security features, free-text descriptions) and/or media content
+   * (images, panoramics, videos) for a single hotel property. Carries no
+   * rate or pricing data.
+   */
+  readonly getHotelContentV4: GetHotelContentV4Service;
 
   /**
    * Sabre Get Hotel Details v5.
@@ -330,6 +344,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
   const geoSearchV4 = new DefaultGeoSearchV4Service(deps);
   const getAncillariesV2 = new DefaultGetAncillariesV2Service(deps);
   const getHotelAvailV5 = new DefaultGetHotelAvailV5Service(deps);
+  const getHotelContentV4 = new DefaultGetHotelContentV4Service(deps);
   const getHotelDetailsV5 = new DefaultGetHotelDetailsV5Service(deps);
   const getHotelRateInfoV5 = new DefaultGetHotelRateInfoV5Service(deps);
   const getSeatsV2 = new DefaultGetSeatsV2Service(deps);
@@ -350,6 +365,7 @@ export function createSabreClient(opts: SabreClientOptions): SabreClient {
     geoSearchV4,
     getAncillariesV2,
     getHotelAvailV5,
+    getHotelContentV4,
     getHotelDetailsV5,
     getHotelRateInfoV5,
     getSeatsV2,
@@ -372,6 +388,7 @@ interface SabreClientServices {
   geoSearchV4: GeoSearchV4Service;
   getAncillariesV2: GetAncillariesV2Service;
   getHotelAvailV5: GetHotelAvailV5Service;
+  getHotelContentV4: GetHotelContentV4Service;
   getHotelDetailsV5: GetHotelDetailsV5Service;
   getHotelRateInfoV5: GetHotelRateInfoV5Service;
   getSeatsV2: GetSeatsV2Service;
@@ -399,6 +416,7 @@ class DefaultSabreClient implements SabreClient {
   readonly geoSearchV4: GeoSearchV4Service;
   readonly getAncillariesV2: GetAncillariesV2Service;
   readonly getHotelAvailV5: GetHotelAvailV5Service;
+  readonly getHotelContentV4: GetHotelContentV4Service;
   readonly getHotelDetailsV5: GetHotelDetailsV5Service;
   readonly getHotelRateInfoV5: GetHotelRateInfoV5Service;
   readonly getSeatsV2: GetSeatsV2Service;
@@ -420,6 +438,7 @@ class DefaultSabreClient implements SabreClient {
     this.geoSearchV4 = services.geoSearchV4;
     this.getAncillariesV2 = services.getAncillariesV2;
     this.getHotelAvailV5 = services.getHotelAvailV5;
+    this.getHotelContentV4 = services.getHotelContentV4;
     this.getHotelDetailsV5 = services.getHotelDetailsV5;
     this.getHotelRateInfoV5 = services.getHotelRateInfoV5;
     this.getSeatsV2 = services.getSeatsV2;
