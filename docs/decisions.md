@@ -379,7 +379,7 @@ The ticketing smoke scripts (`scripts/booking-ticket-lifecycle.sh` and
 
 ### Why
 
-Sabre support confirmed our CERT PCC (`H50H`) requires a designated
+Sabre support confirmed our CERT PCC requires a designated
 printer to issue tickets, and specified `ticket.countryCode: "AT"` as
 the value to use. Empirically this matches every run: omitting
 `designatePrinters` returns

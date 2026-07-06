@@ -9,7 +9,7 @@ legacy "End-to-End Exchanges Workflow (Shop, Book, Price, Ticket)" developer
 guide. Sabre's PTC recommended the REST/Agentic path below over the legacy
 SOAP `ExchangeShoppingRQ` + `AutomatedExchangesLLSRQ` composition.
 
-> **Status (2026-06-12): fully ticketed end-to-end in CERT on PCC `H50H`.** The
+> **Status (2026-06-12): fully ticketed end-to-end in CERT on our CERT PCC.** The
 > entire flow now completes — shop → price → commit → **fulfill the reissued
 > ticket** — on the documented `NN` sell path. Two worked examples on the same
 > day: AA DFW→LAX as a `$0` even exchange, and AA ORD→MIA as a **$50.01
@@ -23,7 +23,7 @@ SOAP `ExchangeShoppingRQ` + `AutomatedExchangesLLSRQ` composition.
 > then could not be ticketed — see the history note in step 4). Between 6-10 and
 > 6-12 **nothing changed in our request** that explains this (the fulfill body
 > was byte-identical; the 6-12 run even kept `NN` in `HaltOnStatus` and still
-> did not halt). The cause is **server-side on `H50H`** — most likely automated
+> did not halt). The cause is **server-side on our CERT PCC** — most likely automated
 > reissue provisioning continuing to settle after its 2026-06-09 activation, or
 > a change in CERT's simulated carrier link. The library now defaults new
 > segments to `NN` (Sabre's documented value); `GK` is available as a per-segment
@@ -245,7 +245,7 @@ commit — Exchange Booking (step 4) is driven entirely by its own
 > **Automatic Segment Arrange** TJR flag enabled, which auto-sorts segments
 > after the sell.
 >
-> **Update (2026-07-06): `H50H` now has this entitlement.** Re-ran
+> **Update (2026-07-06): our CERT PCC now has this entitlement.** Re-ran
 > `flight-exchange-onejourney-commit-e2e.sh --commit-strategy minimal --change
 > outbound` (the exact case described above) — commit reached `Complete` with
 > **no warnings** and the reissue ticketed cleanly. The full-rebuild strategy
@@ -310,7 +310,7 @@ FOP charged); include it to **commit**. Body-driven. See
 > record locator, so the reissued ticket could not be issued (step 5). On
 > 2026-06-12 `NN` committed and ticketed cleanly with no request change, so the
 > default was reverted to `NN`. The flip is server-side (PCC provisioning /
-> carrier-link behavior on `H50H`), not a library fix — see the status note at
+> carrier-link behavior on our CERT PCC), not a library fix — see the status note at
 > the top.
 
 ```
@@ -336,7 +336,7 @@ Reshop offer's `totalPriceDifference.grandTotal`.
 ### 5. Fulfill Flight Tickets — `fulfill-tickets`
 
 Issues the new electronic ticket once the reissue is committed. Billable; the
-PCC requires a designated printer (`ticket.countryCode "AT"` on `H50H`). See
+PCC requires a designated printer (`ticket.countryCode "AT"` on our CERT PCC). See
 [`booking-ticket-lifecycle.sh`](../../scripts/booking-ticket-lifecycle.sh) for a
 working fulfill body.
 
@@ -350,14 +350,14 @@ the NN path).
 
 ## What we verified in CERT
 
-- **Entitlement: green.** `flightReshop` returns HTTP 200 on `H50H` — the
+- **Entitlement: green.** `flightReshop` returns HTTP 200 on our CERT PCC — the
   request authenticates, authorizes, and reaches the downline shopping service.
   This is **not** the SEAS `ERR.2SG.SEC.NOT_AUTHORIZED` wall.
 - **Fare rules: green.** `checkFlightTickets` on freshly issued AA tickets
   reports `isChangeable: true` with a CAT-31 provision (`source: "Category 31"`,
   `$0` change penalty on AA Main Cabin domestic). No CAT-16 fallback.
 - **Automated reissue: active (2026-06-09).** After Sabre activated automated
-  reissue on `H50H`, `flightReshop` returns priceable offers (45–50 per request
+  reissue on our CERT PCC, `flightReshop` returns priceable offers (45–50 per request
   on AA DFW→LAX). Before activation it returned "Automated reissue not active
   for this ticket" — identical across 6 AA routes and 2 fare classes, which is
   how we confirmed the gap was PCC-level rather than route/fare specific.
@@ -382,7 +382,7 @@ the NN path).
   *and* fulfilled with no change to our request (the fulfill body was
   byte-identical; `NN` was even left in `HaltOnStatus` and still did not halt).
   Nothing in the library explains the reversal — the variable is **server-side
-  on `H50H`** (reissue provisioning settling after the 2026-06-09 activation, or
+  on our CERT PCC** (reissue provisioning settling after the 2026-06-09 activation, or
   a CERT carrier-link change). The library default was reverted `GK` → `NN`
   accordingly; `GK` remains a per-segment override.
 

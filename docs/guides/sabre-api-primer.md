@@ -515,7 +515,7 @@ exchange that priced out higher than the customer agreed to.
 
 > ⚠️ **Production reality — full reissue verified, but the path is environment-
 > sensitive (CERT, 2026-06).** On 2026-06-12 the documented `NN` path completed
-> end-to-end in CERT on PCC `H50H` — commit *and* `fulfillFlightTickets` issued
+> end-to-end in CERT on our CERT PCC — commit *and* `fulfillFlightTickets` issued
 > the reissued document, on both a `$0` and a `$50.01` exchange. **Two days
 > earlier the same `NN` request aborted** at the air-book step ("Unable to
 > perform air booking step") *even with `HaltOnStatus` cleared*, and only a

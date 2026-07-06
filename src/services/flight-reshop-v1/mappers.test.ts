@@ -93,13 +93,13 @@ describe('toReshopRequest', () => {
         journeys: minimalInput.journeys,
         tickets: [{ number: '0012972101507', date: '2026-01-01', travelerIndex: 1 }],
         bookingId: 'GLEBNY',
-        targetPcc: 'H50H',
+        targetPcc: 'AAA',
         cabinName: 'Business',
         distributionModel: 'ATPCO',
       }).body ?? '',
     );
     expect(body.bookingId).toBe('GLEBNY');
-    expect(body.targetPcc).toBe('H50H');
+    expect(body.targetPcc).toBe('AAA');
     expect(body.source).toEqual({ distributionModel: 'ATPCO' });
     expect(body.fare).toEqual({
       cabin: { name: 'Business' },

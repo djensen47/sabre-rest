@@ -10,7 +10,7 @@
 #   flight-reshop --body '{journeys, tickets, ...}'
 # and prints a short summary of the offers (or the downline error).
 #
-# What "good" looks like (verified in CERT on PCC H50H since 2026-06-09,
+# What "good" looks like (verified in CERT on our CERT PCC since 2026-06-09,
 # when Sabre activated automated reissue):
 #   - offers[] populated (~45-50 on AA DFW->LAX), each with
 #     totalPriceDifference (grandTotal + type = Add collect/Even/Refund).
@@ -24,7 +24,8 @@
 #   --from / --to       the change-to journey origin/destination (city or
 #                       airport IATA codes), and
 #   --shop-date         the desired new departure date (YYYY-MM-DD).
-# Optionally --booking-id <PNR>, --cabin <name>, --target-pcc <pcc>.
+# Optionally --booking-id <PNR>, --cabin <name>, --target-pcc <pcc>
+# (defaults to SABRE_PCC from .env if set).
 #
 # To mint a fresh AA ticket to feed this script, run
 # booking-ticket-lifecycle.sh (which issues and then voids a ticket) — note
@@ -98,6 +99,17 @@ if [[ ! -f "dist/cli.js" ]]; then
   echo "error: dist/cli.js not found — run 'npm run build' first" >&2
   exit 2
 fi
+
+# Source .env so SABRE_PCC is available as the --target-pcc default below.
+# The CLI itself already reads SABRE_CLIENT_ID / SABRE_CLIENT_SECRET /
+# SABRE_BASE_URL independently, but targetPcc is explicit in the request body.
+if [[ -f ".env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+TARGET_PCC="${TARGET_PCC:-${SABRE_PCC:-}}"
 
 BASE_URL_FLAG=()
 [[ -n "$BASE_URL" ]] && BASE_URL_FLAG=(--base-url "$BASE_URL")

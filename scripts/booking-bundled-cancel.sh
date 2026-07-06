@@ -52,7 +52,7 @@
 #   --card-type <code>            Card vendor code (default: VI for Visa)
 #   --no-printers                 Omit designatePrinters from fulfillTickets.
 #                                 The default IS to send it: Sabre support
-#                                 confirmed our CERT PCC (H50H) requires a
+#                                 confirmed our CERT PCC requires a
 #                                 designated printer to issue tickets, with
 #                                 ticket.countryCode "AT". Without it,
 #                                 fulfillTickets fails PRINTER_NOT_ASSIGNED.
@@ -391,7 +391,7 @@ echo "errors:           $(echo "$CHECK_OUT" | jq -r '.errors | length // 0')"
 # ---------------------------------------------------------------------------
 step 6 "fulfill-tickets (PAYMENTCARD ${CARD_TYPE} ****$(printf '%s' "$CARD_NUMBER" | tail -c 4))"
 # designatePrinters is sent by default: Sabre support confirmed our CERT
-# PCC (H50H) requires a designated printer with ticket.countryCode "AT"
+# PCC (from SABRE_PCC) requires a designated printer with ticket.countryCode "AT"
 # to issue tickets. Without it, fulfillTickets returns
 # PRINTER_NOT_ASSIGNED. Pass --no-printers to reproduce that failure.
 FULFILL_BODY=$(jq -n \
