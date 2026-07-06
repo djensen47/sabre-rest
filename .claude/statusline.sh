@@ -24,10 +24,12 @@ model_name=$(jq -r '.model.display_name // .model.id // "?"' <<<"$input")
 # compact [1M] flag below carries the same info in less space.
 model_name=${model_name%% (*}
 onem=""
-ctx_window=200000
-if [[ "$model_id" == *"[1m]"* ]]; then
+# context_window.context_window_size (below) is the source of truth for the
+# window size; this flag is purely cosmetic and tolerates either an "[1m]"
+# model-id suffix or a large window size reported by Claude Code itself.
+ctx_window_size=$(jq -r '.context_window.context_window_size // 200000' <<<"$input")
+if [[ "$model_id" == *"[1m]"* || "$ctx_window_size" -gt 200000 ]]; then
   onem="[1M]"
-  ctx_window=1000000
 fi
 
 # --- git branch + worktree -------------------------------------------------
@@ -46,21 +48,12 @@ if [[ -n "$cwd" ]] && git -C "$cwd" rev-parse --is-inside-work-tree &>/dev/null;
   fi
 fi
 
-# --- context/token usage (last usage entry in the transcript) -------------
-# A transcript line's message.usage carries the running context for that turn:
-# input + both cache buckets. We read the last one that has usage.
-transcript=$(jq -r '.transcript_path // ""' <<<"$input")
-ctx_used=0
-if [[ -n "$transcript" && -f "$transcript" ]]; then
-  ctx_used=$(jq -s '
-    [ .[] | .message.usage
-      | select(. != null)
-      | ((.input_tokens // 0)
-         + (.cache_read_input_tokens // 0)
-         + (.cache_creation_input_tokens // 0)) ]
-    | last // 0
-  ' "$transcript" 2>/dev/null || echo 0)
-fi
+# --- context/token usage ---------------------------------------------------
+# Claude Code already computes this from the most recent API response and
+# hands it over pre-calculated — read it directly instead of re-deriving it
+# from the transcript (which duplicated the math and used the wrong window
+# size for models without a "[1m]" id suffix, e.g. Sonnet 5).
+pct=$(jq -r '.context_window.used_percentage // 0' <<<"$input" | cut -d. -f1)
 
 # --- cost ------------------------------------------------------------------
 cost=$(jq -r '.cost.total_cost_usd // 0' <<<"$input")
@@ -85,7 +78,6 @@ C_PR="${esc}[35m"       # magenta
 DIM="${esc}[2m"
 RESET="${esc}[0m"
 
-pct=$(awk -v u="$ctx_used" -v w="$ctx_window" 'BEGIN { printf "%d", (w>0 ? u*100/w : 0) }')
 # Context turns red past 80% so it stands out as it fills.
 C_CTX_NOW="$C_CTX"
 (( pct >= 80 )) && C_CTX_NOW="${esc}[31m"
