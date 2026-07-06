@@ -223,7 +223,7 @@ some PCCs *require* a designated printer, and issuance fails without one.
 > (`GK`). On the documented `NN` sell path the segment is carrier-confirmed and
 > fulfill succeeds — verified end-to-end in CERT on 2026-06-12 (see
 > [`flight-exchange-flow.md`](./flight-exchange-flow.md)). Note this proved
-> **date-dependent on `H50H`**: the identical `NN` request aborted air-book two
+> **date-dependent on our CERT PCC**: the identical `NN` request aborted air-book two
 > days earlier, so the resolution is server-side, not a credential/TJR lever.
 
 #### 3.6 Booking Management — Refund / Void / Check
