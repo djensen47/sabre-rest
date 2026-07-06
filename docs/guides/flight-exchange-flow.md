@@ -409,6 +409,12 @@ the NN path).
   assert the kept journey survives, then fulfill + cleanup. Demonstrates that
   the full rebuild tickets cleanly while the lean path hits
   `CHK DATE/TIME CONTINUITY`
+- `scripts/flight-exchange-onejourney-confirm-e2e.sh` — identical to
+  `flight-exchange-onejourney-commit-e2e.sh`, but adds a confirm-before-ticket
+  gate (`--confirm-timeout`, `--confirm-interval`) that polls `get-booking`
+  until the newly-sold segment(s) reach `HK`/`KK` before fulfilling. Guards
+  against the carrier-settlement race behind error 114 Cause 3 — see
+  [`exchange-reissue-114.md`](../findings/exchange-reissue-114.md)
 - `scripts/flight-reshop-flow.sh`, `scripts/exchange-booking-flow.sh`,
   `scripts/booking-ticket-lifecycle.sh` — runnable smoke tests for individual
   steps
