@@ -23,6 +23,26 @@ The new segment confirmed (HK) and the confirm-before-ticket gate passed at 0s, 
 
 **Fix (verified 2026-07-06):** the PCC now has the **Automatic Segment Arrange TJR** entitlement enabled. Re-ran `flight-exchange-onejourney-commit-e2e.sh --change return --commit-strategy full` (DFW⇄LAX round trip): commit reached `status: Complete` with **only** the "cancelling/rebooking identical segments" business warning — the TJR provider warning no longer appears — and `fulfillFlightTickets` issued the reissued ticket cleanly (`0017360597458`). Also re-verified the related `--commit-strategy minimal --change outbound` case (previously the one that risked `CHK DATE/TIME CONTINUITY` without this flag): commit `Complete` with **no warnings at all**, reissue ticket `0017360597456` issued.
 
+## Cause 3 — carrier-settlement race on an unconfirmed (NN) segment (MITIGATED)
+
+Distinct from Cause 1 and Cause 2 — those are data/ordering bugs; this is pure
+timing. Even with a correctly-selected offer and a `full`-strategy commit that
+reaches `status: Complete`, a newly-sold segment can still be `NN` ("need") at
+that moment: the commit response and the carrier's confirmation to `HK`/`KK`
+are asynchronous. If `fulfillFlightTickets` fires before the carrier link
+settles the segment, ticketing sees a segment the airline system doesn't yet
+recognize as matching and rejects it with the same 114. Any *fixed* delay
+between commit and fulfill (e.g. a flat sleep) is a race, not a guarantee —
+sometimes it settles in time, sometimes it doesn't.
+
+**Mitigation (implemented):** `scripts/flight-exchange-onejourney-confirm-e2e.sh`
+adds an explicit confirm-before-ticket gate — it polls `getBooking` after the
+commit and waits until every newly-sold (`isBookingRequired`) segment reports
+`flightStatusCode` `HK` or `KK` before attempting fulfill, refusing to ticket
+(`--confirm-timeout`, `--confirm-interval`) if a segment never confirms in
+time. This is a client-side workaround, not a server-side fix — there is no
+documented way to make the commit itself wait for carrier confirmation.
+
 ## Evidence
 
 - ONT failure: `.local/exchange-e2e-20260629T231531-…` (one-way, selected ONT→DFW)
@@ -33,4 +53,4 @@ The new segment confirmed (HK) and the confirm-before-ticket gate passed at 0s, 
 
 ## App relevance
 
-If the app's reshop/exchange flow can select an offer on a different airport than the ticketed one (MAC expansion not constrained at *selection* time), it will hit Cause 1 in production. Cause 2 is now resolved on PCCs with the Automatic Segment Arrange TJR entitlement enabled — round-trip single-journey changes using `--commit-strategy full` no longer hit 114, and the leaner `minimal` strategy (cancel only the changed segment) is now viable too, avoiding the unnecessary cancel+rebook of the retained leg.
+If the app's reshop/exchange flow can select an offer on a different airport than the ticketed one (MAC expansion not constrained at *selection* time), it will hit Cause 1 in production. Cause 2 is now resolved on PCCs with the Automatic Segment Arrange TJR entitlement enabled — round-trip single-journey changes using `--commit-strategy full` no longer hit 114, and the leaner `minimal` strategy (cancel only the changed segment) is now viable too, avoiding the unnecessary cancel+rebook of the retained leg. Cause 3 (the carrier-settlement race) is not tied to any entitlement and can recur on any commit — any caller that fulfills immediately after a `Complete` commit (or after a fixed sleep) is exposed; the app's fulfill step should poll for `HK`/`KK` on the new segment(s) rather than ticketing on a timer.
