@@ -16,12 +16,14 @@ import {
   buildGetAncillariesInput,
   buildGetBookingInput,
   buildHotelAvailInput,
+  buildHotelContentInput,
   buildHotelPriceCheckInput,
   buildHotelSearchInput,
   buildModifyBookingInput,
   buildRefundTicketsInput,
   buildRevalidateInput,
   buildVoidTicketsInput,
+  contentToTableRows,
   formatJson,
   formatTotalFare,
   hotelsToTableRows,
@@ -1140,6 +1142,7 @@ describe('COMMANDS dispatch table', () => {
       'get-ancillaries',
       'get-booking',
       'get-hotel-avail',
+      'get-hotel-content',
       'get-hotel-details',
       'get-hotel-rate-info',
       'get-seats',
@@ -1907,5 +1910,138 @@ describe('availToTableRows', () => {
   it('renders empty cells for hotels with no rate info', () => {
     const out = availToTableRows({ hotels: [{ code: 'X', codeContext: 'GLOBAL' }] });
     expect(out.rows).toEqual([['X', '', '', '', '', '', '']]);
+  });
+});
+
+describe('buildHotelContentInput', () => {
+  it('builds a minimum body from --hotel-code', () => {
+    const out = buildHotelContentInput({ 'hotel-code': '100072188', 'code-context': 'GLOBAL' });
+    expect(out).toEqual({
+      hotelRef: { code: '100072188', codeContext: 'GLOBAL' },
+    });
+  });
+
+  it('omits code-context when not supplied', () => {
+    const out = buildHotelContentInput({ 'hotel-code': '8315' });
+    expect(out.hotelRef).toEqual({ code: '8315' });
+  });
+
+  it('requires --hotel-code (or --body)', () => {
+    expect(() => buildHotelContentInput({})).toThrowError(CliUsageError);
+  });
+
+  it('rejects an invalid --code-context', () => {
+    expect(() =>
+      buildHotelContentInput({ 'hotel-code': '8315', 'code-context': 'BOGUS' }),
+    ).toThrowError(CliUsageError);
+  });
+
+  it('attaches --pcc as pointOfSale', () => {
+    const out = buildHotelContentInput({ 'hotel-code': '8315', pcc: 'TM61' });
+    expect(out.pointOfSale).toEqual({ pseudoCityCode: 'TM61' });
+  });
+
+  it('builds descriptiveInfo from --with-* flags', () => {
+    const out = buildHotelContentInput({
+      'hotel-code': '8315',
+      'with-property-info': true,
+      'with-amenities': true,
+      'with-descriptions': 'Dining,Facilities',
+    });
+    expect(out.descriptiveInfo).toEqual({
+      propertyInfo: true,
+      amenities: true,
+      descriptions: ['Dining', 'Facilities'],
+    });
+  });
+
+  it('rejects an invalid --with-descriptions value', () => {
+    expect(() =>
+      buildHotelContentInput({ 'hotel-code': '8315', 'with-descriptions': 'Bogus' }),
+    ).toThrowError(CliUsageError);
+  });
+
+  it('omits descriptiveInfo entirely when no --with-* flag is set', () => {
+    const out = buildHotelContentInput({ 'hotel-code': '8315' });
+    expect(out.descriptiveInfo).toBeUndefined();
+  });
+
+  it('builds a full media request from --media-* flags', () => {
+    const out = buildHotelContentInput({
+      'hotel-code': '8315',
+      'media-max': '10',
+      'media-images': 'MEDIUM,LARGE',
+      'media-panoramic': true,
+      'media-videos': 'VIDEO360',
+      'media-categories': '1,2',
+      'media-room-type-codes': 'A1K',
+      'media-languages': 'EN,FR',
+      'media-additional-info': 'CAPTION',
+    });
+    expect(out.media).toEqual({
+      maxItems: '10',
+      images: ['MEDIUM', 'LARGE'],
+      panoramicMedias: ['HD360'],
+      videos: ['VIDEO360'],
+      categories: [1, 2],
+      roomTypeCodes: ['A1K'],
+      languages: ['EN', 'FR'],
+      additionalInfo: [{ type: 'CAPTION', value: true }],
+    });
+  });
+
+  it('rejects invalid --media-images, --media-videos, --media-additional-info, --media-categories', () => {
+    expect(() =>
+      buildHotelContentInput({ 'hotel-code': '8315', 'media-images': 'HUGE' }),
+    ).toThrowError(CliUsageError);
+    expect(() =>
+      buildHotelContentInput({ 'hotel-code': '8315', 'media-videos': 'BOGUS' }),
+    ).toThrowError(CliUsageError);
+    expect(() =>
+      buildHotelContentInput({ 'hotel-code': '8315', 'media-additional-info': 'BOGUS' }),
+    ).toThrowError(CliUsageError);
+    expect(() =>
+      buildHotelContentInput({ 'hotel-code': '8315', 'media-categories': 'abc' }),
+    ).toThrowError(CliUsageError);
+  });
+
+  it('omits media entirely when no --with-media / --media-* flag is set', () => {
+    const out = buildHotelContentInput({ 'hotel-code': '8315' });
+    expect(out.media).toBeUndefined();
+  });
+
+  it('sets media as a bare opt-in via --with-media alone', () => {
+    const out = buildHotelContentInput({ 'hotel-code': '8315', 'with-media': true });
+    expect(out.media).toEqual({});
+  });
+
+  it('parses --body verbatim, ignoring other flags', () => {
+    const body = JSON.stringify({ hotelRef: { code: 'FROM-BODY' } });
+    const out = buildHotelContentInput({ body, 'hotel-code': 'IGNORED' });
+    expect(out.hotelRef).toEqual({ code: 'FROM-BODY' });
+  });
+});
+
+describe('contentToTableRows', () => {
+  it('summarizes a populated hotel into one row', () => {
+    const out = contentToTableRows({
+      hotel: {
+        info: { code: '100072188', codeContext: 'GLOBAL', hotelName: 'Hyatt', chainCode: 'HY' },
+        descriptiveInfo: {
+          amenities: [{ code: 15 }],
+          descriptions: [{ type: 'Dining' }],
+        },
+        mediaInfo: {
+          items: [{ id: '1', ordinal: 1, lastModifiedDate: '2024-06-28', format: 'JPG' }],
+        },
+      },
+    });
+    expect(out.headers).toEqual(['code', 'name', 'chain', 'amenities', 'descriptions', 'media']);
+    expect(out.rows).toEqual([['100072188', 'Hyatt', 'HY', '1', '1', '1']]);
+  });
+
+  it('renders an empty row set when no hotel is returned', () => {
+    const out = contentToTableRows({});
+    expect(out.rows).toEqual([]);
   });
 });
