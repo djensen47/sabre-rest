@@ -241,9 +241,20 @@ commit — Exchange Booking (step 4) is driven entirely by its own
 > out of chronological order (return dated before outbound), and ticketing then
 > fails with `AirTicketLLSRQ: FLT CHK DATE/TIME CONTINUITY OF FLTS` — the commit
 > succeeds but no ticket can be issued. Cancelling all + re-selling in date
-> order avoids this. (The lean approach only works if the PCC has the
+> order avoids this. The lean approach only works if the PCC has the
 > **Automatic Segment Arrange** TJR flag enabled, which auto-sorts segments
-> after the sell; without that entitlement, use the full rebuild.)
+> after the sell.
+>
+> **Update (2026-07-06): `H50H` now has this entitlement.** Re-ran
+> `flight-exchange-onejourney-commit-e2e.sh --commit-strategy minimal --change
+> outbound` (the exact case described above) — commit reached `Complete` with
+> **no warnings** and the reissue ticketed cleanly. The full-rebuild strategy
+> also lost its `Automatic Segment Arrange TJR flag is not enabled` warning on
+> a round-trip full-strategy commit (see
+> [`exchange-reissue-114.md`](../findings/exchange-reissue-114.md), Cause 2).
+> The full rebuild remains correct and is still the default in the e2e script;
+> `minimal` is now viable too on PCCs with this entitlement, but has not been
+> promoted to the library default.
 
 ```
 sabre-rest exchange-booking --body '{
