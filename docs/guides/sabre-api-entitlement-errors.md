@@ -316,13 +316,14 @@ list. The entitlement-relevant ones:
 
 #### 4.2 Retrieve / cancel on a CSL booking
 
-> ⚠️ **Verified in CERT** — Get Booking against a CSL-created hotel PNR can
-> return `UNAUTHORIZED_ACCESS` tied to **TJR settings** (the
+> ⚠️ **Verified in CERT** — Get Booking against a CSL-created hotel PNR
+> previously returned `UNAUTHORIZED_ACCESS` tied to **TJR settings** (the
 > `RESOURCE_RESTRICTED` variant in §3.3), the hotel sibling of the
-> [TJR request](../sabre-support-tjr-request.md). The unified REST
-> `cancelBooking`, by contrast, *was* verified to accept a CSL hotel PNR and
-> return a clean success — so the access restriction is on the read path's
-> entitlement, not the cancel path.
+> [TJR request](../sabre-support-tjr-request.md). That entitlement gap is
+> now resolved: as of 2026-07-07, Get Booking returns the `hotels[]`
+> reservation with room, rate, and payment detail on this EPR. The unified
+> REST `cancelBooking` was separately verified to accept a CSL hotel PNR and
+> return a clean success.
 
 ---
 

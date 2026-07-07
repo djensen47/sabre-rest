@@ -25,10 +25,11 @@ _† Sabre's CSL Setup & Guides page lists this step as "Get Reservation (SOAP
 only)", but Booking Management v1 (`POST /v1/trip/orders/getBooking`) is
 spec-documented for hotel PNRs (see [`booking-management.yml`](../specifications/booking-management.yml)
 at lines 1134, 2545, 2703 — the response schema includes
-`hotels[]` reservations). In practice, we have not yet exercised this
-against a CSL-segment hotel PNR: our CERT OAuth credentials currently
-return `UNAUTHORIZED_ACCESS` on this endpoint (sibling issue to
-[`docs/sabre-support-tjr-request.md`](../sabre-support-tjr-request.md))._
+`hotels[]` reservations). Verified end-to-end in CERT on 2026-07-07 against
+a CSL-segment hotel PNR: the endpoint returns the `hotels[]` reservation
+with room, rate, and payment detail. This previously returned
+`UNAUTHORIZED_ACCESS` on this EPR; that entitlement gap is now resolved.
+`scripts/hotel-e2e.sh` exercises this call as step 7._
 
 _‡ Verified end-to-end in CERT on 2026-05-07: Booking Management v1
 `cancelBooking` with `--cancel-all` accepts a PNR created by the CSL
