@@ -24,21 +24,18 @@
 #   * book-hotel              — CreatePassengerNameRecord v2.5.0, hotel
 #                               path. Consumes the bookingKey from
 #                               price-check, produces a Sabre PNR locator.
+#   * get-booking             — booking-management v1 getBooking. Verified
+#                               in CERT 2026-07-07 against a CSL-segment
+#                               hotel PNR — returns hotels[] with room,
+#                               rate, and payment detail. Previously
+#                               returned UNAUTHORIZED_ACCESS on this EPR;
+#                               that entitlement gap is now resolved (see
+#                               docs/guides/hotel-booking-flow.md).
 #   * cancel-booking          — booking-management v1 cancelBooking.
 #                               Verified in CERT 2026-05-07 against a
 #                               CSL-segment hotel PNR. Contradicts Sabre's
 #                               CSL Setup & Guides page which lists
 #                               "Get Reservation — SOAP only" at step 5.
-#
-# Missing (not yet wrapped):
-#
-#   * hotel get-booking       — spec (booking-management.yml:1134, :2545,
-#                               :2703) documents hotel reservations in the
-#                               getBooking response, but our CERT OAuth
-#                               credentials currently return
-#                               UNAUTHORIZED_ACCESS on this endpoint.
-#                               Awaiting Sabre support / EPR provisioning
-#                               (sibling to docs/sabre-support-tjr-request.md).
 #
 # ## What this script does today
 #
@@ -57,8 +54,10 @@
 #                               from step 3 (or a --rate-key override)
 #   Step 6: book-hotel        — runs against Sabre CERT using the bookingKey
 #                               from step 5.
-#   Step 7: get-booking       — SKIPPED. Blocked on CERT OAuth
-#                               entitlement (UNAUTHORIZED_ACCESS).
+#   Step 7: get-booking       — runs against Sabre CERT using the PNR
+#                               locator from step 6, surfaces the hotel
+#                               name and confirmation ID so the retrieved
+#                               reservation is visible.
 #   Step 8: cancel-booking    — runs against Sabre CERT with --cancel-all
 #                               so the script self-cleans. Also invoked
 #                               from the fail/exit trap if an earlier step
@@ -514,13 +513,33 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 7 — get-booking (SKIPPED)
+# Step 7 — get-booking
 # ---------------------------------------------------------------------------
-# booking-management v1 getBooking is spec-supported for hotels
-# (booking-management.yml:1134, :2545, :2703) but our CERT OAuth
-# credentials currently return UNAUTHORIZED_ACCESS. Awaiting Sabre
-# support / EPR provisioning — sibling to docs/sabre-support-tjr-request.md.
-skip 7 "get-booking (verify hotel)" "UNAUTHORIZED_ACCESS on this EPR; Sabre support ticket pending"
+if [[ -z "$PNR_LOCATOR" ]]; then
+  skip 7 "get-booking (verify hotel)" "no PNR locator to retrieve"
+else
+  step 7 "get-booking ($PNR_LOCATOR)"
+
+  GET_BOOKING_FILE=$(mktemp)
+  trap 'cleanup; rm -f "$TMP_ERR" "$SEARCH_FILE" "$CONTENT_FILE" "$AVAIL_FILE" "$DETAILS_FILE" "$PRICE_FILE" "$BOOK_FILE" "$GET_BOOKING_FILE"' EXIT
+
+  if ! run_cli $CLI get-booking "${BASE_URL_FLAG[@]}" \
+      --confirmation-id "$PNR_LOCATOR" \
+      --format json >"$GET_BOOKING_FILE"; then
+    cat "$TMP_ERR" >&2
+    fail "get-booking"
+  fi
+
+  GET_BOOKING_HOTEL_NAME=$(jq -r '.hotels[0].hotelName // empty' "$GET_BOOKING_FILE")
+  GET_BOOKING_CONFIRMATION=$(jq -r '.hotels[0].confirmationId // empty' "$GET_BOOKING_FILE")
+  if [[ -n "$GET_BOOKING_HOTEL_NAME" ]]; then
+    echo "hotel name:          $GET_BOOKING_HOTEL_NAME"
+    echo "hotel confirmation:  $GET_BOOKING_CONFIRMATION"
+  else
+    echo "no hotel returned in getBooking response"
+    jq '.errors // empty' "$GET_BOOKING_FILE"
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # Step 8 — cancel-booking
@@ -536,7 +555,7 @@ elif [[ "$SKIP_CANCEL" == "1" ]]; then
 else
   step 8 "cancel-booking (cancelAll)"
   CANCEL_FILE=$(mktemp)
-  trap 'cleanup; rm -f "$TMP_ERR" "$SEARCH_FILE" "$CONTENT_FILE" "$AVAIL_FILE" "$DETAILS_FILE" "$PRICE_FILE" "$BOOK_FILE" "$CANCEL_FILE"' EXIT
+  trap 'cleanup; rm -f "$TMP_ERR" "$SEARCH_FILE" "$CONTENT_FILE" "$AVAIL_FILE" "$DETAILS_FILE" "$PRICE_FILE" "$BOOK_FILE" "$GET_BOOKING_FILE" "$CANCEL_FILE"' EXIT
   # Mark cleanup as attempted so the EXIT trap doesn't double-cancel.
   CLEANUP_ATTEMPTED=1
   if ! run_cli $CLI cancel-booking "${BASE_URL_FLAG[@]}" \
@@ -560,8 +579,7 @@ echo ""
 echo "hotel-e2e complete."
 echo "Wrapped steps: 1 (hotel-search), 2 (get-hotel-content), 3 (get-hotel-avail),"
 echo "               4 (get-hotel-details), 5 (hotel-price-check), 6 (book-hotel),"
-echo "               8 (cancel-booking)."
-echo "Skipped: 7 (get-booking) — blocked on Sabre EPR entitlement."
+echo "               7 (get-booking), 8 (cancel-booking)."
 if [[ -n "$PNR_LOCATOR" && "$SKIP_CANCEL" == "1" ]]; then
   echo ""
   echo "============================================================"
