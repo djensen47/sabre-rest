@@ -407,6 +407,10 @@ export interface DetailsRateEntry {
   taxInclusive?: boolean;
   localFeesInclusive?: boolean;
   incidentalsInclusive?: boolean;
+  /** All-inclusive display rate (taxes + fees), for prepaid rates when it differs from `amountAfterTax`. */
+  approxTotalPrice?: string;
+  /** Overall highest nightly rate (excluding taxes/fees) across the stay. */
+  highestNightlyRate?: string;
   commission?: DetailsCommission;
 }
 
@@ -442,11 +446,17 @@ export interface DetailsRoomDetail {
   roomViewCode?: number;
   roomViewDescription?: string;
   nonSmoking?: boolean;
+  /** Number of bedrooms within this room (e.g., a multi-bedroom suite). */
+  numberOfBedRooms?: number;
   bedTypes?: readonly DetailsBedType[];
   roomDescription?: DetailsRoomDescription;
   additionalDetails?: readonly DetailsAdditionalDetail[];
   amenities?: readonly DetailsRoomAmenity[];
+  /** Accessibility-specific amenities for this room, separate from {@link DetailsRoomDetail.amenities}. */
+  accessibleAmenities?: readonly DetailsHotelAmenity[];
   occupancy?: DetailsOccupancy;
+  /** Photos specific to this room, separate from the hotel-level {@link DetailsHotel.mediaInfo}. */
+  roomMediaInfo?: DetailsMediaInfo;
   /** Rate plans for this room. Required. */
   ratePlans: readonly DetailsRatePlan[];
 }
@@ -842,6 +852,8 @@ export interface DetailsSustainability {
   sustainablePractices?: unknown;
   /** Certifications block (raw Sabre shape). */
   certifications?: unknown;
+  /** Structured emissions/carbon-footprint/recycling/water/energy block (raw Sabre shape). */
+  environmentalImpact?: unknown;
 }
 
 /** Free-text description entry. */
@@ -912,6 +924,12 @@ export interface DetailsImageItem {
   id?: string;
   format?: DetailsImageFormat;
   images?: readonly DetailsImageVariant[];
+  /** Date the media item was last updated. Raw Sabre shape (spec leaves the type unspecified). */
+  lastModifiedDate?: unknown;
+  /** OTA category codes for the media item. */
+  categoryCodes?: readonly number[];
+  /** Display priority (lower is higher priority). */
+  ordinal?: number;
 }
 
 // --- Translated-content block ------------------------------------------------

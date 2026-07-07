@@ -448,16 +448,20 @@ function mapAlternateHotel(a: GeneratedAlternateHotelInfoType): DetailsAlternate
 }
 
 function mapImageItem(item: components['schemas']['ImageItemType']): DetailsImageItem | undefined {
-  // The alternate-hotel `ImageItemType` references the request-side
-  // `Image` schema — which, in Sabre's spec, only carries a `Type`
-  // enum (size variant), no URL / height / width. The only useful
-  // top-level metadata here is `Id` and `Format`; the image-size
-  // variants are just labels without actual image URLs. Preserve what
-  // is concrete; anything richer would require a different endpoint
-  // (e.g., Get Hotel Media / Get Hotel Image).
+  // `ImageItemType.Image` references the request-side `Image` schema —
+  // which, in Sabre's spec, only carries a `Type` enum (size variant), no
+  // URL / height / width. The image-size variants are just labels without
+  // actual image URLs, so `images` is intentionally left unpopulated here;
+  // anything richer would require a different endpoint (e.g., Get Hotel
+  // Media / Get Hotel Image).
   const out: DetailsImageItem = {};
   if (item.Id !== undefined) out.id = item.Id;
   if (item.Format !== undefined) out.format = item.Format;
+  if (item.LastModifiedDate !== undefined) out.lastModifiedDate = item.LastModifiedDate;
+  if (item.Category !== undefined) {
+    out.categoryCodes = item.Category.map((c) => c.Code);
+  }
+  if (item.Ordinal !== undefined) out.ordinal = item.Ordinal;
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -515,6 +519,8 @@ function mapRateEntry(r: GeneratedRateEntry): DetailsRateEntry {
   if (r.TaxInclusive !== undefined) out.taxInclusive = r.TaxInclusive;
   if (r.LocalFeesInclusive !== undefined) out.localFeesInclusive = r.LocalFeesInclusive;
   if (r.IncidentalsInclusive !== undefined) out.incidentalsInclusive = r.IncidentalsInclusive;
+  if (r.ApproxTotalPrice !== undefined) out.approxTotalPrice = r.ApproxTotalPrice;
+  if (r.HighestNightlyRate !== undefined) out.highestNightlyRate = r.HighestNightlyRate;
   if (r.Commission !== undefined) out.commission = mapCommission(r.Commission);
   return out;
 }
@@ -554,6 +560,7 @@ function mapRoomDetail(r: GeneratedResponseRoom): DetailsRoomDetail {
   if (r.RoomViewCode !== undefined) out.roomViewCode = r.RoomViewCode;
   if (r.RoomViewDescription !== undefined) out.roomViewDescription = r.RoomViewDescription;
   if (r.NonSmoking !== undefined) out.nonSmoking = r.NonSmoking;
+  if (r.NumberOfBedRooms !== undefined) out.numberOfBedRooms = r.NumberOfBedRooms;
   if (r.BedTypeOptions?.BedTypes !== undefined) {
     out.bedTypes = r.BedTypeOptions.BedTypes.flatMap((bt) => (bt.BedType ?? []).map(mapBedType));
   }
@@ -564,7 +571,14 @@ function mapRoomDetail(r: GeneratedResponseRoom): DetailsRoomDetail {
   if (r.Amenities?.Amenity !== undefined) {
     out.amenities = r.Amenities.Amenity.map(mapRoomAmenity);
   }
+  if (r.AccessibleAmenities?.Amenity !== undefined) {
+    out.accessibleAmenities = r.AccessibleAmenities.Amenity.map(mapHotelAmenity);
+  }
   if (r.Occupancy !== undefined) out.occupancy = mapOccupancy(r.Occupancy);
+  if (r.RoomMediaInfo !== undefined) {
+    const roomMedia = mapMediaInfo(r.RoomMediaInfo);
+    if (roomMedia !== undefined) out.roomMediaInfo = roomMedia;
+  }
   return out;
 }
 
@@ -913,6 +927,9 @@ function mapDescriptiveInfo(
     }
     if (di.Sustainability.Certifications !== undefined) {
       sust.certifications = di.Sustainability.Certifications;
+    }
+    if (di.Sustainability.EnvironmentalImpact !== undefined) {
+      sust.environmentalImpact = di.Sustainability.EnvironmentalImpact;
     }
     if (Object.keys(sust).length > 0) out.sustainability = sust;
   }

@@ -286,6 +286,8 @@ describe('fromGetDetailsResponse', () => {
                     CurrencyCode: 'USD',
                     RateSource: '110',
                     RateKey: 'RATEKEY-CONV==',
+                    ApproxTotalPrice: '150.00',
+                    HighestNightlyRate: '80.00',
                   },
                 ],
                 RateInfo: [
@@ -294,6 +296,8 @@ describe('fromGetDetailsResponse', () => {
                     CurrencyCode: 'USD',
                     RateSource: '100',
                     RateKey: 'RATEKEY-NATIVE==',
+                    ApproxTotalPrice: '120.00',
+                    HighestNightlyRate: '65.00',
                   },
                 ],
               },
@@ -302,6 +306,15 @@ describe('fromGetDetailsResponse', () => {
                   {
                     RoomIndex: 1,
                     RoomType: 'Suite',
+                    NumberOfBedRooms: 2,
+                    AccessibleAmenities: {
+                      Amenity: [{ Code: 7, Description: 'Roll-in shower' }],
+                    },
+                    RoomMediaInfo: {
+                      MediaItems: {
+                        MediaItem: [{ Id: 'ROOM-1', Format: 'JPG' }],
+                      },
+                    },
                     RatePlans: {
                       RatePlan: [
                         {
@@ -331,6 +344,11 @@ describe('fromGetDetailsResponse', () => {
                 Contact: { Phone: '918-234-1234' },
               },
               Amenities: { Amenity: [{ Code: 15, Description: 'Car rental desk' }] },
+              Sustainability: {
+                EnvironmentalImpact: {
+                  CarbonFootprint: { RoomNight: '1', CarbonUOM: 'kgCO2' },
+                },
+              },
               Descriptions: {
                 Description: [
                   { Text: { Type: 'ShortDescription', value: 'A great hotel.' } },
@@ -391,14 +409,30 @@ describe('fromGetDetailsResponse', () => {
     });
     expect(out.hotel?.rateInfos?.shopKey).toBe('SHOP==');
     expect(out.hotel?.rateInfos?.rateInfo?.[0]?.rateKey).toBe('RATEKEY-NATIVE==');
+    expect(out.hotel?.rateInfos?.rateInfo?.[0]).toMatchObject({
+      approxTotalPrice: '120.00',
+      highestNightlyRate: '65.00',
+    });
     expect(out.hotel?.rateInfos?.convertedRateInfo?.[0]?.rateKey).toBe('RATEKEY-CONV==');
+    expect(out.hotel?.rateInfos?.convertedRateInfo?.[0]).toMatchObject({
+      approxTotalPrice: '150.00',
+      highestNightlyRate: '80.00',
+    });
     expect(out.hotel?.rooms?.[0]?.ratePlans?.[0]?.rateKey).toBe('RATEPLAN-KEY==');
+    expect(out.hotel?.rooms?.[0]).toMatchObject({
+      numberOfBedRooms: 2,
+      accessibleAmenities: [{ code: 7, description: 'Roll-in shower' }],
+      roomMediaInfo: { items: [{ id: 'ROOM-1', format: 'JPG' }] },
+    });
     expect(out.hotel?.descriptiveInfo?.propertyInfo).toEqual({ floors: '12', rooms: '118' });
     expect(out.hotel?.descriptiveInfo?.locationInfo?.latitude).toBe(36.15);
     expect(out.hotel?.descriptiveInfo?.locationInfo?.address?.postalCode).toBe('74103');
     expect(out.hotel?.descriptiveInfo?.amenities).toEqual([
       { code: 15, description: 'Car rental desk' },
     ]);
+    expect(out.hotel?.descriptiveInfo?.sustainability?.environmentalImpact).toEqual({
+      CarbonFootprint: { RoomNight: '1', CarbonUOM: 'kgCO2' },
+    });
     expect(out.hotel?.descriptiveInfo?.descriptions).toEqual([
       { type: 'ShortDescription', text: ['A great hotel.'] },
       { type: 'Dining' },
@@ -477,6 +511,15 @@ describe('fromGetDetailsResponse', () => {
                     CodeContext: 'GLOBAL',
                     ChainCode: 'MC',
                   },
+                  HotelImageInfo: {
+                    ImageItem: {
+                      Id: 'ALT-IMG-1',
+                      Format: 'JPG',
+                      LastModifiedDate: '2024-06-28',
+                      Category: [{ Code: 3 }, { Code: 5 }],
+                      Ordinal: 1,
+                    },
+                  },
                 },
               ],
             },
@@ -495,7 +538,16 @@ describe('fromGetDetailsResponse', () => {
     );
 
     expect(out.hotel?.alternateHotels).toEqual([
-      { info: { code: '100097634', codeContext: 'GLOBAL', chainCode: 'MC' } },
+      {
+        info: { code: '100097634', codeContext: 'GLOBAL', chainCode: 'MC' },
+        image: {
+          id: 'ALT-IMG-1',
+          format: 'JPG',
+          lastModifiedDate: '2024-06-28',
+          categoryCodes: [3, 5],
+          ordinal: 1,
+        },
+      },
     ]);
     expect(out.hotel?.rateUnavailability).toEqual([
       { source: '110', reason: 'timeout' },
