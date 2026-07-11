@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.20.1](https://github.com/djensen47/sabre-rest/compare/v0.20.0...v0.20.1) (2026-07-11)
+
+
+### Bug Fixes
+
+* correct malformed MediaRef in get-hotel-details-v5 ([#142](https://github.com/djensen47/sabre-rest/issues/142)) ([#143](https://github.com/djensen47/sabre-rest/issues/143)) ([baf611d](https://github.com/djensen47/sabre-rest/commit/baf611d85d22d381739360443f71400481c67b3a))
+* enable hotel-e2e get-booking step, entitlement gap resolved ([#140](https://github.com/djensen47/sabre-rest/issues/140)) ([27ca259](https://github.com/djensen47/sabre-rest/commit/27ca2596657312fc008173e358988cfd3d91a16f))
+* map remaining get-hotel-details-v5 response fields ([#137](https://github.com/djensen47/sabre-rest/issues/137)) ([95b0aa9](https://github.com/djensen47/sabre-rest/commit/95b0aa98334b2d0cda161cef5cbde86866af6556))
+
 ## [0.20.0](https://github.com/djensen47/sabre-rest/compare/v0.19.0...v0.20.0) (2026-07-06)
 
 
