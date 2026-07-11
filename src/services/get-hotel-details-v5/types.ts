@@ -266,8 +266,6 @@ export type DetailsDescriptionType =
 /** Which media blocks to include in the response. */
 export interface DetailsMediaRequest {
   maxItems?: string;
-  /** Media types to request. */
-  mediaTypes?: readonly DetailsMediaType[];
   /** Image sizes to request. */
   images?: readonly DetailsImageSize[];
   /** Panoramic-media types to request. */
