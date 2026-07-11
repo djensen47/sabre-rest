@@ -172,7 +172,6 @@ describe('toGetDetailsRequest — hotel-ref flow', () => {
           },
           media: {
             images: ['ORIGINAL', 'THUMBNAIL'],
-            mediaTypes: ['IMAGE'],
             categories: [3, 5],
             languages: ['EN'],
           },
@@ -188,10 +187,34 @@ describe('toGetDetailsRequest — hotel-ref flow', () => {
         Descriptions: { Description: [{ Type: 'ShortDescription' }, { Type: 'Dining' }] },
       },
       MediaRef: {
-        MediaTypes: { MediaType: [{ Type: 'IMAGE' }] },
-        Images: { Image: [{ Type: 'ORIGINAL' }, { Type: 'THUMBNAIL' }] },
+        MediaTypes: { Images: { Image: [{ Type: 'ORIGINAL' }, { Type: 'THUMBNAIL' }] } },
         Categories: { Category: [{ Code: 3 }, { Code: 5 }] },
-        Languages: { Language: [{ LanguageCode: 'EN' }] },
+        Languages: { Language: [{ Code: 'EN' }] },
+      },
+    });
+  });
+
+  it('nests Images, PanoramicMedias, and Videos under MediaTypes (not a MediaType selector)', () => {
+    const req = toGetDetailsRequest(
+      BASE,
+      hotelRefInput({
+        contentRef: {
+          media: {
+            maxItems: '10',
+            images: ['MEDIUM'],
+            panoramicMedias: ['HD360'],
+            videos: ['VIDEO360'],
+          },
+        },
+      }),
+    );
+    const sc = JSON.parse(req.body ?? '').GetHotelDetailsRQ.SearchCriteria;
+    expect(sc.HotelContentRef.MediaRef).toEqual({
+      MaxItems: '10',
+      MediaTypes: {
+        Images: { Image: [{ Type: 'MEDIUM' }] },
+        PanoramicMedias: { PanoramicMedia: [{ Type: 'HD360' }] },
+        Videos: { Video: [{ Type: 'VIDEO360' }] },
       },
     });
   });

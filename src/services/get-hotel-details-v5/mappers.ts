@@ -277,26 +277,31 @@ function buildHotelContentRef(c: DetailsContentRef): Record<string, unknown> {
   if (c.media !== undefined) {
     const m: Record<string, unknown> = {};
     if (c.media.maxItems !== undefined) m.MaxItems = c.media.maxItems;
-    if (c.media.mediaTypes !== undefined && c.media.mediaTypes.length > 0) {
-      m.MediaTypes = { MediaType: c.media.mediaTypes.map((t) => ({ Type: t })) };
-    }
+
+    // `Images` / `PanoramicMedias` / `Videos` nest UNDER `MediaTypes` — the
+    // media bucket is implied by which of these is populated, so there is no
+    // separate `MediaType` selector. This mirrors the sibling
+    // get-hotel-content-v4 `buildMediaRef`, which Sabre accepts.
+    const mediaTypes: Record<string, unknown> = {};
     if (c.media.images !== undefined && c.media.images.length > 0) {
-      m.Images = { Image: c.media.images.map((t) => ({ Type: t })) };
+      mediaTypes.Images = { Image: c.media.images.map((t) => ({ Type: t })) };
     }
     if (c.media.panoramicMedias !== undefined && c.media.panoramicMedias.length > 0) {
-      m.PanoramicMedias = {
+      mediaTypes.PanoramicMedias = {
         PanoramicMedia: c.media.panoramicMedias.map((t) => ({ Type: t })),
       };
     }
     if (c.media.videos !== undefined && c.media.videos.length > 0) {
-      m.Videos = { Video: c.media.videos.map((t) => ({ Type: t })) };
+      mediaTypes.Videos = { Video: c.media.videos.map((t) => ({ Type: t })) };
     }
+    if (Object.keys(mediaTypes).length > 0) m.MediaTypes = mediaTypes;
+
     if (c.media.categories !== undefined && c.media.categories.length > 0) {
       m.Categories = { Category: c.media.categories.map((code) => ({ Code: code })) };
     }
     if (c.media.languages !== undefined && c.media.languages.length > 0) {
       m.Languages = {
-        Language: c.media.languages.map((code) => ({ LanguageCode: code })),
+        Language: c.media.languages.map((code) => ({ Code: code })),
       };
     }
     if (Object.keys(m).length > 0) out.MediaRef = m;

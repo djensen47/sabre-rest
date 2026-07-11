@@ -1702,7 +1702,6 @@ function buildDetailsContentRef(
   if (needsMedia) {
     const media: NonNullable<NonNullable<GetHotelDetailsInput['contentRef']>['media']> = {};
     if (values['media-max'] !== undefined) media.maxItems = values['media-max'];
-    if (values['with-media']) media.mediaTypes = ['IMAGE'];
     if (images !== undefined) {
       media.images = images as NonNullable<typeof media.images>;
     }
@@ -3467,7 +3466,7 @@ Descriptive content (opt-in; Sabre omits these unless requested):
                                TransportationInfo,GuaranteePolicy
 
 Media (opt-in):
-  --with-media                 Include media items (IMAGE type)
+  --with-media                 Include media items (bare opt-in, no filters)
   --media-images <list>        Comma-separated sizes:
                                ORIGINAL,THUMBNAIL,SMALL,MEDIUM,LARGE
   --media-max <n>              Max media items to return
