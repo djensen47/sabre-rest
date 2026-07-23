@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/djensen47/sabre-rest/compare/v0.20.1...v0.21.0) (2026-07-23)
+
+
+### Features
+
+* **bfm:** expose DataSources request toggle + offer.source on the response ([#146](https://github.com/djensen47/sabre-rest/issues/146)) ([5eb4af6](https://github.com/djensen47/sabre-rest/commit/5eb4af669710ebca30bf3aaa4e62b6bfa75b21c7)), closes [#145](https://github.com/djensen47/sabre-rest/issues/145)
+
 ## [0.20.1](https://github.com/djensen47/sabre-rest/compare/v0.20.0...v0.20.1) (2026-07-11)
 
 
