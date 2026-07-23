@@ -14,6 +14,7 @@ import type {
   FlightSegment,
   HiddenStop,
   ItineraryLeg,
+  Offer,
   PassengerFare,
   PassengerLegFare,
   PassengerTotal,
@@ -352,7 +353,23 @@ function buildFareOffer(
   if (pricing.distributionModel !== undefined) {
     offer.distributionModel = pricing.distributionModel;
   }
+  const offerIdentity = extractOffer(pricing.offer);
+  if (offerIdentity !== undefined) {
+    offer.offer = offerIdentity;
+  }
   return offer;
+}
+
+function extractOffer(offer: components['schemas']['Offer'] | undefined): Offer | undefined {
+  if (!offer) return undefined;
+  const out: Offer = {};
+  // Offer.offerId / source / timeToLive are all spec-required, but the library
+  // treats every response field as optional and never fabricates. `source` is
+  // preserved raw (ATPCO / LCC / NDC) — not reconciled with distributionModel.
+  if (typeof offer.offerId === 'string') out.offerId = offer.offerId;
+  if (typeof offer.source === 'string') out.source = offer.source;
+  if (typeof offer.timeToLive === 'number') out.timeToLive = offer.timeToLive;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function buildAncillaryFee(fee: components['schemas']['AncillaryFeeType']): AncillaryFee {
@@ -736,6 +753,18 @@ function buildTravelPreferences(
     out.MaxStopsQuantity = 0;
   } else if (typeof prefs.maxStopsPerLeg === 'number') {
     out.MaxStopsQuantity = prefs.maxStopsPerLeg;
+  }
+
+  // Data-source toggles nest under TravelPreferences.TPA_Extensions.DataSources
+  // — a different container from the top-level TPA_Extensions.IntelliSellTransaction
+  // built in toSearchRequest. Only emit the sub-toggles the caller actually set,
+  // so a request with no data-source preference is byte-unchanged from before.
+  const dataSources: Record<string, string> = {};
+  if (prefs.dataSources?.atpco !== undefined) dataSources.ATPCO = prefs.dataSources.atpco;
+  if (prefs.dataSources?.lcc !== undefined) dataSources.LCC = prefs.dataSources.lcc;
+  if (prefs.dataSources?.ndc !== undefined) dataSources.NDC = prefs.dataSources.ndc;
+  if (Object.keys(dataSources).length > 0) {
+    out.TPA_Extensions = { DataSources: dataSources };
   }
 
   return Object.keys(out).length > 0 ? out : undefined;
