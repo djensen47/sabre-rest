@@ -225,6 +225,51 @@ describe('toSearchRequest', () => {
       .OTA_AirLowFareSearchRQ as Record<string, unknown>;
     expect('TravelPreferences' in ota).toBe(false);
   });
+
+  it('emits DataSources under TravelPreferences.TPA_Extensions when set', () => {
+    const req = toSearchRequest('https://api.cert.platform.sabre.com', {
+      ...minimalInput,
+      travelPreferences: {
+        dataSources: { atpco: 'Enable', lcc: 'Disable', ndc: 'Enable' },
+      },
+    });
+    const ota = (JSON.parse(req.body ?? '{}') as Record<string, unknown>)
+      .OTA_AirLowFareSearchRQ as Record<string, unknown>;
+    expect(ota.TravelPreferences).toEqual({
+      TPA_Extensions: {
+        DataSources: { ATPCO: 'Enable', LCC: 'Disable', NDC: 'Enable' },
+      },
+    });
+  });
+
+  it('emits only the DataSources sub-toggles the caller set', () => {
+    const req = toSearchRequest('https://api.cert.platform.sabre.com', {
+      ...minimalInput,
+      travelPreferences: { dataSources: { ndc: 'Enable' } },
+    });
+    const ota = (JSON.parse(req.body ?? '{}') as Record<string, unknown>)
+      .OTA_AirLowFareSearchRQ as Record<string, unknown>;
+    expect(ota.TravelPreferences).toEqual({
+      TPA_Extensions: { DataSources: { NDC: 'Enable' } },
+    });
+  });
+
+  it('emits no DataSources — request byte-unchanged — when no data-source preference is set', () => {
+    const withEmpty = toSearchRequest('https://api.cert.platform.sabre.com', {
+      ...minimalInput,
+      travelPreferences: { cabin: 'Business', dataSources: {} },
+    });
+    const withoutField = toSearchRequest('https://api.cert.platform.sabre.com', {
+      ...minimalInput,
+      travelPreferences: { cabin: 'Business' },
+    });
+    // An empty dataSources object must not add a TPA_Extensions container, and
+    // the two request bodies must be byte-identical.
+    expect(withEmpty.body).toBe(withoutField.body);
+    const ota = (JSON.parse(withEmpty.body ?? '{}') as Record<string, unknown>)
+      .OTA_AirLowFareSearchRQ as Record<string, unknown>;
+    expect((ota.TravelPreferences as Record<string, unknown>).TPA_Extensions).toBeUndefined();
+  });
 });
 
 describe('fromSearchResponse', () => {
@@ -765,6 +810,105 @@ describe('fareOffers', () => {
     expect(itin?.totalFare).toEqual({ totalAmount: 800, currency: 'USD' });
     expect(itin?.validatingCarrierCode).toBe('BA');
     expect(itin?.distributionModel).toBe('ATPCO');
+  });
+
+  it('surfaces offer.source (and offerId/timeToLive) raw when the wire carries an offer', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      distributionModel: 'NDC',
+                      offer: {
+                        offerId: 'do3385fr4jsvzb1i30-1',
+                        source: 'NDC',
+                        timeToLive: 1255,
+                      },
+                      fare: { passengerInfoList: [] },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const offer = out.itineraries[0]?.fareOffers[0];
+    expect(offer?.offer).toEqual({
+      offerId: 'do3385fr4jsvzb1i30-1',
+      source: 'NDC',
+      timeToLive: 1255,
+    });
+  });
+
+  it('preserves an LCC offer.source raw — not reconciled with distributionModel', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      distributionModel: 'API',
+                      offer: { offerId: 'abc-2', source: 'LCC', timeToLive: 900 },
+                      fare: { passengerInfoList: [] },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const offer = out.itineraries[0]?.fareOffers[0];
+    // distributionModel uses `API`; offer.source uses `LCC`. Both preserved raw.
+    expect(offer?.distributionModel).toBe('API');
+    expect(offer?.offer?.source).toBe('LCC');
+  });
+
+  it('omits offer when the pricingInformation entry has no offer container', () => {
+    const out = fromSearchResponse(
+      okResponse({
+        groupedItineraryResponse: {
+          version: 'V5',
+          messages: [],
+          itineraryGroups: [
+            {
+              itineraries: [
+                {
+                  id: 1,
+                  pricingInformation: [
+                    {
+                      distributionModel: 'ATPCO',
+                      fare: { passengerInfoList: [] },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const offer = out.itineraries[0]?.fareOffers[0];
+    expect(offer?.offer).toBeUndefined();
   });
 
   it('surfaces multiple passengers within a single offer with their own fare components', () => {

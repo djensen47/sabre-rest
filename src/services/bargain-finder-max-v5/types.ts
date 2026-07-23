@@ -155,6 +155,37 @@ export interface TravelPreferences {
    * `maxStopsPerLeg: 0`).
    */
   nonStopOnly?: boolean;
+  /**
+   * Explicitly enable or disable the content models BFM processes for this
+   * search. Maps to Sabre's `TravelPreferences.TPA_Extensions.DataSources`
+   * per-source toggle.
+   *
+   * Omit this field (or leave every sub-toggle unset) to keep Sabre's
+   * implicit default content selection — the request is byte-identical to
+   * one built without it, and the response stays restricted to ATPCO (and
+   * occasionally API) content, which is what the rest of the library is
+   * built around. Enabling NDC or LCC here surfaces offers whose
+   * `offerId`-based handoff the rest of this library's flow (revalidate,
+   * create-booking, seats/ancillaries) does not yet carry forward — see
+   * {@link FareOffer.offer}.
+   */
+  dataSources?: DataSources;
+}
+
+/**
+ * Per-source content toggle for a shop request.
+ *
+ * Each field maps to the same-named property under Sabre's
+ * `TravelPreferences.TPA_Extensions.DataSources`. Only the toggles you set
+ * are emitted; an unset toggle leaves that source at Sabre's default.
+ */
+export interface DataSources {
+  /** Toggle processing of ATPCO (traditional published-fare) content. */
+  atpco?: 'Enable' | 'Disable';
+  /** Toggle processing of Low Cost Carrier content. */
+  lcc?: 'Enable' | 'Disable';
+  /** Toggle processing of New Distribution Capability (NDC) content. */
+  ndc?: 'Enable' | 'Disable';
 }
 
 /**
@@ -260,11 +291,43 @@ export interface FareOffer {
   /** Content model for this offer, when populated. */
   distributionModel?: 'ATPCO' | 'NDC' | 'API';
   /**
+   * NDC/LCC offer identity, present only when Sabre returned an `offer`
+   * container on this `pricingInformation` entry. In practice this appears
+   * for NDC and LCC content; pure-ATPCO responses omit it. Absent when Sabre
+   * sent no `offer`.
+   */
+  offer?: Offer;
+  /**
    * Optional-service (ancillary) fees Sabre attached to this offer, grouped
    * by ATPCO fee category — baggage, seats, meals, in-flight entertainment,
    * etc. Absent when Sabre returned no ancillary fee data for the offer.
    */
   ancillaryFees?: readonly AncillaryFee[];
+}
+
+/**
+ * NDC/LCC offer identity attached to a {@link FareOffer}.
+ *
+ * Maps Sabre's `pricingInformation[].offer` container ("NDC Offer related
+ * data"). Sabre marks all three fields required, but per the response-type
+ * convention above every field here is optional — the library preserves
+ * whatever Sabre returned and never fabricates.
+ *
+ * {@link source} is Sabre's own raw label (`ATPCO` / `LCC` / `NDC`) and is
+ * preserved verbatim — it is *not* normalized against, or reconciled with,
+ * the sibling {@link FareOffer.distributionModel} (which uses `API` where
+ * this field uses `LCC`). The two are distinct Sabre enums.
+ */
+export interface Offer {
+  /** Sabre's unique offer id (e.g. `do3385fr4jsvzb1i30-1`), when populated. */
+  offerId?: string;
+  /**
+   * Offer source as Sabre labelled it — `ATPCO`, `LCC`, or `NDC` — preserved
+   * raw, when populated.
+   */
+  source?: string;
+  /** Time-to-live for the offer in seconds, when populated. */
+  timeToLive?: number;
 }
 
 /**
